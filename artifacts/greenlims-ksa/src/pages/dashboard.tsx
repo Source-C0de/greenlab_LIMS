@@ -1,47 +1,31 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { mockSamples, mockInvoices, mockReports } from "@/mock-data";
 import { KpiCard } from "@/components/shared/KpiCard";
-import { FlaskConical, FileText, Receipt, CheckCircle, Activity, ArrowRight } from "lucide-react";
+import { FlaskConical, FileText, Receipt, CheckCircle, Activity, ArrowRight, Calendar } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, Legend
+  BarChart, Bar, PieChart, Pie, Cell, Legend
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
-
-const areaData = [
-  { name: 'Aug', samples: 450 },
-  { name: 'Sep', samples: 520 },
-  { name: 'Oct', samples: 480 },
-  { name: 'Nov', samples: 610 },
-  { name: 'Dec', samples: 590 },
-  { name: 'Jan', samples: 680 },
-];
-
-const barData = [
-  { name: 'Water', revenue: 45000 },
-  { name: 'Food', revenue: 38000 },
-  { name: 'Pharma', revenue: 65000 },
-  { name: 'Cosmetics', revenue: 25000 },
-  { name: 'Perfume', revenue: 18000 },
-];
-
-const pieData = [
-  { name: 'Approved', value: 45 },
-  { name: 'Testing', value: 25 },
-  { name: 'Review', value: 15 },
-  { name: 'Received', value: 10 },
-  { name: 'Rejected', value: 5 },
-];
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { subDays, subMonths, isAfter, parseISO, format, startOfMonth, eachMonthOfInterval, endOfMonth, isWithinInterval } from "date-fns";
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export default function Dashboard() {
   const { currentRole, language } = useAppContext();
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState("30"); // Default 30 days
   const isRtl = language === "ar";
 
   useEffect(() => {
@@ -49,8 +33,62 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [currentRole]);
 
-  const pendingTests = mockSamples.filter(s => s.status === 'Received' || s.status === 'Testing').length;
-  const completedReports = mockReports.filter(r => r.status === 'Final').length;
+  // Derived filtered data
+  const filteredData = useMemo(() => {
+    // For demo purposes, since mock data is from Jan 2024, we use Jan 20, 2024 as "today"
+    const mockToday = parseISO("2024-01-20");
+    const startDate = subDays(mockToday, parseInt(period));
+
+    const samples = mockSamples.filter(s => isAfter(parseISO(s.receivedDate), startDate));
+    const reports = mockReports.filter(r => r.issueDate && isAfter(parseISO(r.issueDate), startDate));
+    const invoices = mockInvoices.filter(i => isAfter(parseISO(i.issueDate), startDate));
+
+    return { samples, reports, invoices, startDate };
+  }, [period]);
+
+  // Dynamic Chart Data Generation
+  const areaData = useMemo(() => {
+    const months = eachMonthOfInterval({
+      start: subMonths(parseISO("2024-01-20"), 5),
+      end: parseISO("2024-01-20")
+    });
+
+    return months.map(month => {
+      const monthStart = startOfMonth(month);
+      const monthEnd = endOfMonth(month);
+      const count = mockSamples.filter(s => {
+        const d = parseISO(s.receivedDate);
+        return isWithinInterval(d, { start: monthStart, end: monthEnd });
+      }).length;
+
+      return {
+        name: format(month, "MMM"),
+        samples: count * 15 // Scale for visualization
+      };
+    });
+  }, []);
+
+  const barData = useMemo(() => {
+    const types: Record<string, number> = {};
+    filteredData.invoices.forEach(inv => {
+      // Find sample to get type
+      const sample = mockSamples.find(s => s.id === inv.sampleId);
+      const type = sample?.sampleType || "Other";
+      types[type] = (types[type] || 0) + inv.total;
+    });
+
+    return Object.entries(types).map(([name, revenue]) => ({ name, revenue }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [filteredData.invoices]);
+
+  const pieData = useMemo(() => {
+    const statusMap: Record<string, number> = {};
+    filteredData.samples.forEach(s => {
+      statusMap[s.status] = (statusMap[s.status] || 0) + 1;
+    });
+
+    return Object.entries(statusMap).map(([name, value]) => ({ name, value }));
+  }, [filteredData.samples]);
 
   if (loading) {
     return (
@@ -69,95 +107,10 @@ export default function Dashboard() {
     );
   }
 
-  // Client Dashboard
-  if (currentRole === "client") {
-    const clientSamples = mockSamples.filter(s => s.clientId === "C001");
-    const pendingInvoices = mockInvoices.filter(i => i.clientId === "C001" && i.status !== "Paid");
-    
-    return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-end">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">{isRtl ? "لوحة القيادة للعميل" : "Client Dashboard"}</h1>
-            <p className="text-muted-foreground mt-1">Al-Marai Company Overview</p>
-          </div>
-          <Link href="/client-portal">
-            <a className="text-sm text-primary hover:underline flex items-center">
-              {isRtl ? "عرض البوابة" : "View Portal"} <ArrowRight className="h-4 w-4 ml-1 rtl:mr-1 rtl:ml-0 rtl:rotate-180" />
-            </a>
-          </Link>
-        </div>
-        
-        <div className="grid gap-4 md:grid-cols-3">
-          <KpiCard title="Active Samples" value={clientSamples.filter(s => s.status !== 'Approved' && s.status !== 'Rejected').length} icon={<FlaskConical />} />
-          <KpiCard title="Completed Reports" value="12" icon={<FileText />} />
-          <KpiCard title="Pending Invoices" value={pendingInvoices.length} icon={<Receipt />} className="border-amber-200 dark:border-amber-900" />
-        </div>
+  // Admin / Manager Dashboard View
+  const totalRevenue = filteredData.invoices.reduce((sum, i) => sum + i.total, 0);
+  const pendingTests = filteredData.samples.filter(s => s.status === 'Testing' || s.status === 'Received').length;
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Samples</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {clientSamples.slice(0, 5).map(sample => (
-                <div key={sample.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                  <div>
-                    <p className="font-medium">{sample.description}</p>
-                    <p className="text-sm text-muted-foreground">{sample.id} • {sample.receivedDate}</p>
-                  </div>
-                  <StatusBadge status={sample.status} />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Analyst Dashboard
-  if (currentRole === "analyst") {
-    const mySamples = mockSamples.filter(s => s.assignedAnalyst?.includes("Ahmad"));
-    
-    return (
-      <div className="space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">{isRtl ? "لوحة محلل" : "Analyst Dashboard"}</h1>
-        
-        <div className="grid gap-4 md:grid-cols-3">
-          <KpiCard title="Assigned Samples" value={mySamples.length} icon={<FlaskConical />} />
-          <KpiCard title="Pending Tests" value={mySamples.filter(s => s.status === 'Testing').length} icon={<Activity />} />
-          <KpiCard title="Completed Today" value="4" icon={<CheckCircle />} />
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>My Workload</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {mySamples.map(sample => (
-                <div key={sample.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                  <div>
-                    <p className="font-medium">{sample.id}</p>
-                    <p className="text-sm text-muted-foreground">{sample.clientName} • {sample.sampleType}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <StatusBadge status={sample.status} />
-                    <Link href={`/samples/${sample.id}`}>
-                      <a className="text-sm text-primary hover:underline">Process</a>
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Admin / Manager / Accountant Dashboard
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -169,38 +122,43 @@ export default function Dashboard() {
             {isRtl ? "مؤشرات الأداء الرئيسية والنشاط الأخير" : "Key performance indicators and recent activity"}
           </p>
         </div>
-        <div className="flex gap-2">
-          <span className="text-sm text-muted-foreground">Period:</span>
-          <select className="bg-transparent text-sm font-medium border-b border-border outline-none pb-1">
-            <option>Last 30 Days</option>
-            <option>Last Quarter</option>
-            <option>Year to Date</option>
-          </select>
+        <div className="flex items-center gap-3 bg-muted/30 p-1.5 rounded-lg border">
+          <Calendar className="h-4 w-4 text-muted-foreground ml-2" />
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-[140px] border-none bg-transparent shadow-none focus:ring-0">
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Last 7 Days</SelectItem>
+              <SelectItem value="30">Last 30 Days</SelectItem>
+              <SelectItem value="90">Last 90 Days</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KpiCard 
-          title={isRtl ? "إجمالي العينات" : "Total Samples"} 
-          value={mockSamples.length * 12} 
+          title={isRtl ? "إجمالي العينات" : "Filtered Samples"} 
+          value={filteredData.samples.length} 
           icon={<FlaskConical />} 
           trend={{ value: 12.5, isPositive: true }} 
         />
         <KpiCard 
-          title={isRtl ? "الاختبارات المعلقة" : "Pending Tests"} 
-          value={pendingTests * 8} 
+          title={isRtl ? "الاختبارات المعلقة" : "Active Tests"} 
+          value={pendingTests} 
           icon={<Activity />} 
           trend={{ value: 2.1, isPositive: false }} 
         />
         <KpiCard 
-          title={isRtl ? "التقارير المنجزة" : "Completed Reports"} 
-          value={completedReports * 15} 
+          title={isRtl ? "التقارير المنجزة" : "Reports Issued"} 
+          value={filteredData.reports.length} 
           icon={<CheckCircle />} 
           trend={{ value: 8.4, isPositive: true }} 
         />
         <KpiCard 
-          title={isRtl ? "الإيرادات الشهرية" : "Monthly Revenue"} 
-          value="SAR 89,500" 
+          title={isRtl ? "الإيرادات" : "Revenue"} 
+          value={`SAR ${totalRevenue.toLocaleString()}`} 
           icon={<Receipt />} 
           trend={{ value: 15.3, isPositive: true }} 
         />
@@ -210,7 +168,7 @@ export default function Dashboard() {
         <Card className="lg:col-span-4">
           <CardHeader>
             <CardTitle>{isRtl ? "اتجاه حجم العينات" : "Sample Volume Trends"}</CardTitle>
-            <CardDescription>Monthly samples received over last 6 months</CardDescription>
+            <CardDescription>Monthly samples received over development period</CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
             <div className="h-[300px] w-full">
@@ -238,8 +196,8 @@ export default function Dashboard() {
 
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>{isRtl ? "توزيع العينات" : "Sample Status Distribution"}</CardTitle>
-            <CardDescription>Current state of all active samples</CardDescription>
+            <CardTitle>{isRtl ? "توزيع العينات" : "Status Distribution"}</CardTitle>
+            <CardDescription>Current period status breakdown</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full flex items-center justify-center">
@@ -249,9 +207,9 @@ export default function Dashboard() {
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={80}
-                    outerRadius={110}
-                    paddingAngle={2}
+                    innerRadius={70}
+                    outerRadius={90}
+                    paddingAngle={3}
                     dataKey="value"
                   >
                     {pieData.map((entry, index) => (
@@ -273,22 +231,16 @@ export default function Dashboard() {
         <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest actions across the lab</CardDescription>
+            <CardDescription>Latest actions in the selected period</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
-              {[
-                { time: "10 mins ago", text: "SAM-2024-019 received from Tabuk Pharmaceuticals" },
-                { time: "1 hour ago", text: "Report RPT-2024-091 generated by Mohammad Al-Ghamdi" },
-                { time: "2 hours ago", text: "Invoice INV-2024-0093 paid by Saudi Aramco" },
-                { time: "3 hours ago", text: "Low stock alert: Salmonella Antiserum Poly" },
-                { time: "5 hours ago", text: "SAM-2024-012 approved by Lab Manager" },
-              ].map((activity, i) => (
+              {filteredData.samples.slice(0, 5).map((sample, i) => (
                 <div key={i} className="flex gap-4">
                   <div className="mt-1 h-2 w-2 rounded-full bg-primary ring-4 ring-primary/10" />
                   <div>
-                    <p className="text-sm font-medium">{activity.text}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{activity.time}</p>
+                    <p className="text-sm font-medium">{sample.id} {sample.status} from {sample.clientName}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{sample.receivedDate}</p>
                   </div>
                 </div>
               ))}
@@ -299,7 +251,7 @@ export default function Dashboard() {
         <Card className="lg:col-span-4">
           <CardHeader>
             <CardTitle>Revenue by Test Type</CardTitle>
-            <CardDescription>YTD Revenue distribution (SAR)</CardDescription>
+            <CardDescription>Distribution (SAR) for selected period</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
@@ -322,3 +274,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
