@@ -1,8 +1,8 @@
-# Workspace
+# GreenLIMS KSA Workspace
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+pnpm workspace monorepo using TypeScript. Contains the GreenLIMS KSA SaaS frontend — a production-ready Laboratory Information Management System for Saudi Arabia.
 
 ## Stack
 
@@ -10,18 +10,60 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
+- **API framework**: Express 5 (api-server, not used by frontend)
+- **Database**: PostgreSQL + Drizzle ORM (provisioned but not used by frontend)
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Frontend**: React + Vite + TypeScript + Tailwind CSS v4 + shadcn/ui
+- **Routing**: Wouter
+- **Charts**: Recharts
+- **State**: React Context (AppContext)
+- **Theme**: next-themes (dark/light)
+- **Animation**: framer-motion
+
+## Artifacts
+
+### GreenLIMS KSA (`artifacts/greenlims-ksa/`)
+- **Type**: react-vite, served at `/`
+- **Purpose**: Full SaaS LIMS frontend with mock data (no backend required)
+- **Features**:
+  - Role-based UI: Admin, Lab Manager, Analyst, Client, Accountant
+  - Arabic (RTL) + English (LTR) language toggle
+  - Dark + Light mode
+  - All Saudi lab mock data (Al-Marai, Saudi Aramco, Ajmal Perfumes, etc.)
+
+### Pages
+- `/login` — Authentication with demo role selector
+- `/register`, `/forgot-password`, `/otp-verify` — Auth flow
+- `/dashboard` — Role-based KPI cards + Recharts
+- `/samples` — Sample management table
+- `/samples/:id` — Sample detail + Chain of Custody timeline
+- `/workflow` — Kanban board (Received → Testing → Approved)
+- `/clients` — Client management
+- `/reports` + `/reports/:id` — COA (Certificate of Analysis)
+- `/inventory` — Reagent management with alerts
+- `/invoices` + `/invoices/:id` — ZATCA-ready tax invoices (SAR, 15% VAT)
+- `/analytics` — Analytics dashboard
+- `/admin` — SaaS Admin panel (Tenants, Plans, Feature Flags)
+- `/client-portal` — Client-facing portal
+- `/settings` — App settings
+
+### Mock Data
+Located in `artifacts/greenlims-ksa/src/mock-data/`:
+- `clients.ts` — Saudi companies (Al-Marai, Aramco, Ajmal, etc.)
+- `samples.ts` — 20 realistic lab samples
+- `analysts.ts` — 5 analysts with Arabic names
+- `invoices.ts` — ZATCA-ready invoices in SAR
+- `reagents.ts` — Lab reagent inventory
+- `reports.ts` — COA reports
+- `tenants.ts` — Multi-tenant SaaS data
+- `sampleTypes.ts` — Sample type + test mappings
 
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+- `pnpm --filter @workspace/greenlims-ksa run dev` — run frontend locally
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## API Server (Not Used by Frontend)
+
+The `api-server` artifact serves at `/api`. The frontend is 100% mock-data-driven and does not make API calls.

@@ -1,0 +1,170 @@
+Build a modern, production-ready SaaS frontend for a cloud-based Laboratory Information Management System (LIMS) called "GreenLIMS KSA".
+
+Tech Stack:
+- Next.js (App Router)
+- TypeScript
+- Tailwind CSS
+- shadcn/ui components
+- Zustand or React Query for state management
+- Fully responsive (desktop + tablet + mobile)
+
+Design Requirements:
+- Clean, minimal, enterprise SaaS UI (inspired by Stripe, Vercel, Linear)
+- Support Arabic (RTL) and English (LTR) with language switch
+- Dark + Light mode
+- Use consistent spacing, cards, tables, and modular layouts
+- Use charts (Recharts) for dashboards
+- Use realistic mock data everywhere
+
+Architecture:
+- Multi-tenant SaaS (each lab has its own workspace)
+- Sidebar navigation + top header
+- Role-based UI rendering (Admin, Lab Manager, Analyst, Client, Accountant)
+
+---
+
+### CORE PAGES TO GENERATE
+
+1. Authentication
+- Login / Register / Forgot Password
+- Support OTP / 2FA UI
+- Mock roles login selector
+
+2. Dashboard (Role-based)
+- KPI Cards:
+  - Total Samples
+  - Pending Tests
+  - Completed Reports
+  - Monthly Revenue
+- Charts:
+  - Sample trends
+  - Revenue analytics
+- Recent activity feed
+
+3. Sample Management
+- Table with filters:
+  - Sample ID, Client, Type, Status, Assigned Analyst, Date
+- Actions:
+  - Add sample (modal form)
+  - View details page
+- Sample details page:
+  - Timeline (chain of custody)
+  - Attached images
+  - QR code preview
+
+4. Workflow & Testing
+- Kanban-style workflow:
+  - Received → Assigned → Testing → Review → Approved
+- Drag-and-drop cards (mock)
+- Test result entry form:
+  - Fields + calculated values
+
+5. Client Portal
+- Client dashboard:
+  - Submitted samples
+  - Reports
+  - Invoices
+- Sample submission form:
+  - Upload images
+  - Auto-generate barcode
+- Report download UI (PDF preview mock)
+
+6. Reports & COA
+- List of reports
+- COA preview page:
+  - Table of results
+  - Digital signature UI
+  - QR code mock
+
+7. Inventory Management
+- Reagents table:
+  - Name, Lot, Expiry, Quantity, Status
+- Alerts:
+  - Low stock
+  - Expired items
+
+8. Financials & Invoicing (ZATCA-ready UI)
+- Invoice list page
+- Invoice detail page:
+  - VAT calculation (15%)
+  - QR code section
+  - XML/PDF indicators
+- Payment status badges
+
+9. Analytics Dashboard
+- Charts:
+  - Revenue by test type
+  - Sample volume trends
+  - Lab performance metrics
+
+10. Admin Panel (SaaS Owner)
+- Tenant list (labs)
+- Subscription plans
+- Usage metrics
+- Feature flags UI
+
+---
+
+### COMPONENTS TO INCLUDE
+
+- Reusable Data Table (sorting, filtering, pagination)
+- Modal system
+- Form builder with validation
+- Status badges (Pending, In Progress, Completed, Rejected)
+- Timeline component (for sample tracking)
+- QR code generator (mock)
+- Notification/toast system
+
+---
+
+### MOCK DATA REQUIREMENTS
+
+Generate realistic Saudi lab-related mock data:
+
+- Clients:
+  - Saudi food companies, pharma companies, perfume/oud brands
+- Sample Types:
+  - Water, Food, Cosmetics, Perfume, Microbiology
+- Status:
+  - Received, Testing, Review, Approved, Rejected
+- Currency:
+  - SAR (Saudi Riyal)
+- VAT:
+  - 15%
+- Arabic names + English names mixed
+
+---
+
+### UX DETAILS
+
+- Loading skeletons
+- Empty states (no data screens)
+- Error states
+- Tooltips for complex fields
+- Breadcrumb navigation
+- Search everywhere
+
+---
+
+### OUTPUT FORMAT
+
+- Generate full frontend code structure
+- Include pages, components, and layouts
+- Use clean folder structure:
+  /app
+  /components
+  /features
+  /lib
+  /mock-data
+
+- Provide reusable UI components
+- No backend required (mock API only)
+
+---
+
+### BONUS (IMPORTANT)
+
+- Add role switcher (Admin / Analyst / Client)
+- Add RTL toggle (Arabic mode preview)
+- Add theme toggle (dark/light)
+- Make UI feel like a real SaaS product ready for investors demo

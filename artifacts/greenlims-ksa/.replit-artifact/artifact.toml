@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "GreenLIMS KSA"
+version = "1.0.0"
+id = "artifacts/greenlims-ksa"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22429
+
+[services.development]
+run = "pnpm --filter @workspace/greenlims-ksa run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/greenlims-ksa", "run", "build" ]
+publicDir = "artifacts/greenlims-ksa/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22429"
+BASE_PATH = "/"
