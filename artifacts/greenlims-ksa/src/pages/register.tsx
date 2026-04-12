@@ -11,7 +11,7 @@ export default function Register() {
         <div className="text-center">
           <FlaskConical className="h-12 w-12 mx-auto text-primary mb-4" />
           <h2 className="text-3xl font-bold tracking-tight">Request Access</h2>
-          <p className="text-muted-foreground mt-2">Register your laboratory for GreenLIMS KSA</p>
+          <p className="text-muted-foreground mt-2">Register your laboratory for GreenLabLIMS KSA</p>
         </div>
 
         <form className="space-y-6 bg-card p-8 rounded-xl border shadow-sm" onSubmit={(e) => { e.preventDefault(); }}>

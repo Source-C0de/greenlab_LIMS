@@ -93,7 +93,7 @@ export default function ReportDetail() {
                   GL
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-emerald-900 tracking-tight">GreenLIMS <span className="font-light">KSA</span></h2>
+                  <h2 className="text-2xl font-bold text-emerald-900 tracking-tight">GreenLabLIMS <span className="font-light">KSA</span></h2>
                   <p className="text-sm text-gray-600">Central Laboratory Facility - Riyadh</p>
                   <div className="flex items-center mt-1 text-xs text-gray-500 font-medium">
                     <Award className="h-3 w-3 mr-1 text-amber-500" /> ISO/IEC 17025:2017 Accredited
@@ -188,7 +188,13 @@ export default function ReportDetail() {
             <div className="grid grid-cols-3 gap-8 mt-16 pt-8 border-t border-gray-200">
               <div>
                 <div className="h-16 flex items-end mb-2">
-                  {report.signed && <span className="font-serif italic text-2xl text-blue-800">{report.analystName}</span>}
+                  {report.signed && (
+                    report.analystSignatureUrl ? (
+                      <img src={report.analystSignatureUrl} alt="Signature" className="h-16 object-contain" />
+                    ) : (
+                      <span className="font-serif italic text-2xl text-blue-800">{report.analystName}</span>
+                    )
+                  )}
                 </div>
                 <div className="border-t border-black pt-2">
                   <p className="font-bold text-sm">Analyzed By</p>
@@ -199,7 +205,13 @@ export default function ReportDetail() {
               
               <div>
                 <div className="h-16 flex items-end mb-2">
-                  {report.signed && <span className="font-serif italic text-2xl text-blue-800">{report.reviewerName}</span>}
+                  {report.signed && (
+                    report.reviewerSignatureUrl ? (
+                      <img src={report.reviewerSignatureUrl} alt="Signature" className="h-16 object-contain" />
+                    ) : (
+                      <span className="font-serif italic text-2xl text-blue-800">{report.reviewerName}</span>
+                    )
+                  )}
                 </div>
                 <div className="border-t border-black pt-2">
                   <p className="font-bold text-sm">Reviewed & Approved By</p>
@@ -209,7 +221,7 @@ export default function ReportDetail() {
               </div>
               
               <div className="flex flex-col items-end justify-end">
-                <QrCodeMock value={`https://verify.greenlims.sa/${report.id}`} size={100} />
+                <QrCodeMock value={`https://verify.greenlablims.sa/${report.id}`} size={100} />
                 <p className="text-[10px] text-gray-500 mt-2 text-center w-[100px]">Scan to verify authenticity</p>
               </div>
             </div>

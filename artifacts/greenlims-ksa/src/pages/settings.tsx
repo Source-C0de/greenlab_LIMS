@@ -39,7 +39,7 @@ export default function Settings() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="demo@greenlims.sa" />
+                <Input id="email" type="email" defaultValue="demo@greenlablims.sa" />
               </div>
               <Button>Save Changes</Button>
             </CardContent>
@@ -55,11 +55,11 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="labName">Laboratory Name (English)</Label>
-                <Input id="labName" defaultValue="GreenLIMS Central Facility" />
+                <Input id="labName" defaultValue="GreenLabLIMS Central Facility" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="labNameAr">Laboratory Name (Arabic)</Label>
-                <Input id="labNameAr" defaultValue="جرين ليمز - المرفق المركزي" dir="rtl" />
+                <Input id="labNameAr" defaultValue="جرين لاب ليمز - المرفق المركزي" dir="rtl" />
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">

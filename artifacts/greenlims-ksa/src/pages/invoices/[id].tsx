@@ -1,136 +1,218 @@
-import { useParams } from "wouter";
-import { mockInvoices, mockSamples } from "@/mock-data";
+import { useParams, Link } from "wouter";
+import { mockInvoices, mockInvoices as allInvoices } from "@/mock-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { QrCodeMock } from "@/components/shared/QrCodeMock";
-import { Printer, Download, CreditCard } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { 
+  Printer, 
+  Download, 
+  ArrowLeft, 
+  ShieldCheck, 
+  QrCode, 
+  FileText,
+  Mail,
+  Copy,
+  AlertCircle
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { useAppContext } from "@/context/AppContext";
+import { toast } from "sonner";
+import { QrCodeMock } from "@/components/shared/QrCodeMock";
+import { ZatcaService } from "@/lib/accounting-utils";
 
 export default function InvoiceDetail() {
-  const params = useParams();
-  const invoiceId = params.id;
-  const invoice = mockInvoices.find(i => i.id === invoiceId) || mockInvoices[0];
-  const sample = mockSamples.find(s => s.id === invoice.sampleId) || mockSamples[0];
+  const { id } = useParams();
+  const { language } = useAppContext();
+  const isRtl = language === "ar";
+  
+  const invoice = allInvoices.find(inv => inv.id === id) || allInvoices[0];
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleCopyHash = () => {
+    navigator.clipboard.writeText(invoice.hash);
+    toast.success(isRtl ? "تم نسخ الهاش" : "Invoice hash copied to clipboard");
+  };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6 no-print">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Invoice Details</h1>
-          <StatusBadge status={invoice.status} />
-        </div>
-        <div className="flex gap-2">
-          {invoice.status !== 'Paid' && (
-            <Button variant="default" className="bg-emerald-600 hover:bg-emerald-700">
-              <CreditCard className="mr-2 h-4 w-4" /> Record Payment
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer className="mr-2 h-4 w-4" /> Print
+    <div className="space-y-6 max-w-4xl mx-auto pb-12">
+      <div className="flex justify-between items-center no-print">
+        <Link href="/invoices">
+          <Button variant="ghost">
+            <ArrowLeft className={`h-4 w-4 ${isRtl ? 'ml-2 rotate-180' : 'mr-2'}`} />
+            {isRtl ? "العودة للفواتير" : "Back to Invoices"}
           </Button>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" /> XML
+        </Link>
+        <div className="flex gap-2">
+           <Button variant="outline" onClick={() => toast.info(isRtl ? "جاري الإرسال للبريد..." : "Sending to client email...")}>
+            <Mail className="h-4 w-4 mr-2" /> {isRtl ? "إرسال" : "Send"}
+          </Button>
+          <Button variant="outline" onClick={handlePrint}>
+            <Printer className="h-4 w-4 mr-2" /> {isRtl ? "طباعة" : "Print"}
+          </Button>
+          <Button>
+            <Download className="h-4 w-4 mr-2" /> {isRtl ? "تحميل PDF" : "Download PDF"}
           </Button>
         </div>
       </div>
 
-      <Card className="bg-white text-black print:shadow-none print:border-none rounded-none border-t-8 border-t-emerald-800">
-        <CardContent className="p-8 sm:p-12">
-          
-          <div className="flex justify-between items-start mb-12">
-            <div className="text-center flex-1">
-              <h2 className="text-2xl font-bold uppercase tracking-wider text-emerald-900 mb-1">Tax Invoice</h2>
-              <h2 className="text-2xl font-bold text-emerald-900 mb-4" dir="rtl">فاتورة ضريبية</h2>
-              <div className="inline-block border border-gray-300 px-4 py-1 rounded bg-gray-50 text-sm font-mono">
-                {invoice.id}
+      <Card className="border-2 shadow-xl print:shadow-none print:border-none overflow-hidden">
+        {/* Invoice Header Stripe */}
+        <div className="bg-primary h-2 w-full" />
+        
+        <CardContent className="p-8 md:p-12 space-y-10">
+          {/* Header Section */}
+          <div className="flex flex-col md:flex-row justify-between gap-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-primary text-white p-2 rounded-lg font-bold text-xl">GL</div>
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tighter">GreenLabLIMS <span className="font-light">KSA</span></h1>
+                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-widest">Laboratory & Diagnostic Centers</p>
+                </div>
+              </div>
+              <div className="text-sm space-y-1">
+                <p>Kingdom of Saudi Arabia, Riyadh</p>
+                <p>Tax Number / الرقم الضريبي: <span className="font-mono font-bold">300012345600003</span></p>
+                <p>CR / رقم السجل التجاري: <span className="font-mono">1010887766</span></p>
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12 border-y border-gray-200 py-8">
-            <div className="md:col-span-2 space-y-4">
-              <div>
-                <h3 className="font-bold text-gray-500 text-xs uppercase">Supplier / المورد</h3>
-                <p className="font-bold text-lg text-emerald-900 mt-1">GreenLIMS KSA</p>
-                <p className="text-sm">Riyadh, Kingdom of Saudi Arabia</p>
-                <div className="mt-2 text-sm font-mono bg-gray-50 p-2 rounded inline-block">
-                  <span className="text-gray-500">VAT No:</span> 300000000000003
+            <div className="text-right space-y-2">
+              <h2 className="text-4xl font-black text-primary/10 uppercase tracking-tighter absolute right-12 top-10 opacity-50 select-none">
+                {invoice.invoiceType === 'Tax Invoice' ? (isRtl ? 'فاتورة ضريبية' : 'Tax Invoice') : (isRtl ? 'فاتورة مبسطة' : 'Simplified Invoice')}
+              </h2>
+              <div className="relative z-10">
+                <Badge variant="outline" className="mb-2 uppercase tracking-widest bg-muted/50 border-primary/20">
+                  {invoice.invoiceType}
+                </Badge>
+                <h3 className="text-xl font-mono font-bold">{invoice.id}</h3>
+                <p className="text-sm text-muted-foreground">{isRtl ? "تاريخ الإصدار: " : "Issue Date: "} {invoice.issueDate}</p>
+                <div className="mt-2">
+                  <StatusBadge status={invoice.status} />
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="md:col-span-2 space-y-4">
-              <div>
-                <h3 className="font-bold text-gray-500 text-xs uppercase">Customer / العميل</h3>
-                <p className="font-bold text-lg mt-1">{invoice.clientName}</p>
-                <p className="text-sm">Kingdom of Saudi Arabia</p>
-                <div className="mt-2 text-sm font-mono bg-gray-50 p-2 rounded inline-block">
-                  <span className="text-gray-500">VAT No:</span> {invoice.vatNo}
+          <div className="grid md:grid-cols-2 gap-12 pt-8 border-t border-dashed">
+             {/* Client Info */}
+             <div className="space-y-4">
+               <h4 className="text-xs font-bold uppercase tracking-widest text-primary/60 border-b pb-1">{isRtl ? "بيانات العميل" : "BILL TO"}</h4>
+               <div className="space-y-1">
+                 <p className="text-xl font-bold">{invoice.clientName}</p>
+                 <p className="text-sm">Vat No / الرقم الضريي: <span className="font-mono font-bold">{invoice.vatNo}</span></p>
+                 <p className="text-sm text-muted-foreground">Saudi Arabia, Riyadh Branch</p>
+               </div>
+             </div>
+
+             {/* ZATCA Phase 2 Metrics */}
+             <div className="p-4 bg-muted/30 rounded-lg border border-primary/10 flex items-start gap-4">
+               <ShieldCheck className="h-5 w-5 text-emerald-500 mt-1 shrink-0" />
+               <div className="space-y-2 flex-1">
+                 <p className="text-xs font-bold uppercase">{isRtl ? "الامتثال لهيئة الزكاة (الفوترة الإلكترونية)" : "ZATCA E-Invoicing Compliance"}</p>
+                 <div className="space-y-1">
+                   <p className="text-[10px] text-muted-foreground font-mono">UUID: {invoice.uuid}</p>
+                   <div className="flex items-center gap-2">
+                      <p className="text-[10px] text-muted-foreground font-mono truncate max-w-[200px]">HASH: {invoice.hash}</p>
+                      <Button variant="ghost" size="icon" className="h-4 w-4" onClick={handleCopyHash}>
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                   </div>
+                 </div>
+                 {invoice.isReported && (
+                   <Badge className="bg-emerald-500 hover:bg-emerald-600 text-[10px]"><ShieldCheck className="h-3 w-3 mr-1" /> Reported to ZATCA</Badge>
+                 )}
+               </div>
+             </div>
+          </div>
+
+          {/* Line Items */}
+          <div className="pt-8">
+            <table className="w-full text-left rtl:text-right">
+              <thead>
+                <tr className="border-b-2 border-primary/20 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  <th className="py-2">{isRtl ? "الخدمة / المنتج" : "Service / Product"}</th>
+                  <th className="py-2 text-right">{isRtl ? "الكمية" : "Qty"}</th>
+                  <th className="py-2 text-right">{isRtl ? "سعر الوحدة" : "Unit Price"}</th>
+                  <th className="py-2 text-right">{isRtl ? "الضريبة" : "Tax (15%)"}</th>
+                  <th className="py-2 text-right">{isRtl ? "الإجمالي" : "Total"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b transition-colors hover:bg-muted/30">
+                  <td className="py-4 font-medium">
+                    <p>{isRtl ? "فحوصات مختبرية شاملة" : "Comprehensive Laboratory Testing Service"}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{invoice.sampleId}</p>
+                  </td>
+                  <td className="py-4 text-right">1</td>
+                  <td className="py-4 text-right">SAR {invoice.subtotal.toLocaleString()}</td>
+                  <td className="py-4 text-right">SAR {invoice.vat.toLocaleString()}</td>
+                  <td className="py-4 text-right font-bold">SAR {invoice.total.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals Section */}
+          <div className="flex flex-col md:flex-row justify-between gap-8 pt-8">
+             <div className="flex flex-col gap-4">
+                <div className="p-4 bg-muted/50 rounded flex items-center gap-4 border border-dashed border-primary/20">
+                   <QrCodeMock value={ZatcaService.generateQR(invoice)} size={120} />
+                   <div>
+                     <p className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground mb-1">{isRtl ? "رمز الاستجابة السريع" : "ZATCA QR Code"}</p>
+                     <p className="text-[9px] text-muted-foreground max-w-[150px] leading-tight">
+                       {isRtl ? "وفقاً لمتطلبات فاتورة - المرحلة الأولى (البناء الضريبي)." : "Per Fatoora requirements - Phase 1 & 2 construction."}
+                     </p>
+                   </div>
                 </div>
-              </div>
-            </div>
+                {!invoice.isReported && (
+                  <div className="flex items-center gap-2 text-amber-600 font-bold text-xs bg-amber-50 p-2 rounded no-print">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{isRtl ? "مسودة فاتورة - لم يتم الإبلاغ للهيئة بعد" : "Draft Invoice - Not yet reported to ZATCA"}</span>
+                  </div>
+                )}
+             </div>
 
-            <div className="md:col-span-1 flex justify-end items-start">
-              <QrCodeMock value={`ZATCA_TLV_MOCK_${invoice.id}`} size={120} />
-            </div>
+             <div className="w-full md:w-64 space-y-3">
+               <div className="flex justify-between text-sm">
+                 <span className="text-muted-foreground">{isRtl ? "المجموع الفرعي" : "Subtotal"}</span>
+                 <span className="font-medium text-right font-mono">SAR {invoice.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+               </div>
+               <div className="flex justify-between text-sm">
+                 <span className="text-muted-foreground tracking-tighter">{isRtl ? "ضريبة القيمة المضافة (15%)" : "VAT TOTAL (15%)"}</span>
+                 <span className="font-medium text-right font-mono">SAR {invoice.vat.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+               </div>
+               <div className="flex justify-between text-xl font-black text-primary border-t-2 border-primary pt-3">
+                 <span>{isRtl ? "الإجمالي المستحق" : "GRAND TOTAL"}</span>
+                 <span className="font-mono">SAR {invoice.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+               </div>
+               <div className="text-[10px] text-right text-muted-foreground font-medium pt-2 italic">
+                 {isRtl ? "تم تفقيط المبلغ آلياً بالريال السعودي" : "Amount In Words: Saudi Riyals Only"}
+               </div>
+             </div>
           </div>
 
-          <div className="flex justify-between mb-8 text-sm">
-            <div>
-              <span className="text-gray-500 block mb-1">Issue Date / تاريخ الإصدار</span>
-              <span className="font-bold">{invoice.issueDate}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-gray-500 block mb-1">Due Date / تاريخ الاستحقاق</span>
-              <span className="font-bold">{invoice.dueDate}</span>
-            </div>
+          {/* Footer Branding */}
+          <div className="pt-24 text-center space-y-4">
+             <div className="flex justify-center gap-24 text-center">
+               <div className="w-48">
+                 <div className="h-1px bg-black mb-1" />
+                 <p className="text-[10px] font-bold tracking-widest">{isRtl ? "المحاسب المسؤول" : "ACCOUNTANT SIGNATURE"}</p>
+               </div>
+               <div className="w-48">
+                 <div className="h-1px bg-black mb-1" />
+                 <p className="text-[10px] font-bold tracking-widest">{isRtl ? "ختم المختبر" : "LABORATORY STAMP"}</p>
+               </div>
+             </div>
+             <p className="text-[10px] text-muted-foreground pt-12">
+               This is a ZATCA compliant electronic invoice. Generated by GreenLabLIMS ERP Integration.
+               <br />
+               هذه فاتورة ضريبية إلكترونية متوافقة مع متطلبات هيئة الزكاة والضريبة والجمارك.
+             </p>
           </div>
-
-          <Table className="mb-8 border border-gray-200">
-            <TableHeader className="bg-emerald-900">
-              <TableRow className="hover:bg-emerald-900">
-                <TableHead className="text-white font-bold py-3 w-[50%]">Description <span dir="rtl" className="block text-xs font-normal opacity-80">الوصف</span></TableHead>
-                <TableHead className="text-white font-bold py-3 text-center">Qty <span dir="rtl" className="block text-xs font-normal opacity-80">الكمية</span></TableHead>
-                <TableHead className="text-white font-bold py-3 text-right">Unit Price <span dir="rtl" className="block text-xs font-normal opacity-80">سعر الوحدة</span></TableHead>
-                <TableHead className="text-white font-bold py-3 text-right">Amount (SAR) <span dir="rtl" className="block text-xs font-normal opacity-80">المبلغ</span></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell>
-                  <p className="font-medium">Laboratory Testing Services</p>
-                  <p className="text-xs text-gray-500 mt-1">Sample ID: {invoice.sampleId} - {sample.sampleType} Analysis</p>
-                </TableCell>
-                <TableCell className="text-center">1</TableCell>
-                <TableCell className="text-right">{invoice.subtotal.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-medium">{invoice.subtotal.toLocaleString()}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-
-          <div className="flex justify-end">
-            <div className="w-full md:w-1/2 space-y-3 border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Subtotal / المجموع الفرعي</span>
-                <span className="font-mono">SAR {invoice.subtotal.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-sm border-b border-gray-200 pb-3">
-                <span className="text-gray-600">VAT (15%) / ضريبة القيمة المضافة</span>
-                <span className="font-mono">SAR {invoice.vat.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between font-bold text-lg text-emerald-900 pt-1">
-                <span>Total Amount / الإجمالي</span>
-                <span className="font-mono">SAR {invoice.total.toLocaleString()}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-16 pt-8 border-t border-gray-200 text-xs text-gray-500 text-center">
-            <p>This is a system generated document. Phase 2 ZATCA e-Invoicing compliant.</p>
-            <p>CR: 1010123456 • Riyadh, KSA • billing@greenlims.sa</p>
-          </div>
-
         </CardContent>
       </Card>
     </div>

@@ -11,7 +11,8 @@ import {
   Settings, 
   ShieldCheck,
   Building2,
-  FolderKanban
+  FolderKanban,
+  Calculator
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 
@@ -25,9 +26,12 @@ export function Sidebar({ isOpen }: SidebarProps) {
   const isRtl = language === "ar";
 
   const getNavItems = () => {
-    const items = [
-      { href: "/dashboard", labelEn: "Dashboard", labelAr: "لوحة القيادة", icon: LayoutDashboard, roles: ["admin", "lab_manager", "analyst", "client", "accountant"] },
-    ];
+    const items = [];
+
+    // Dashboard - Only for roles that need the general operational dashboard
+    if (["admin", "lab_manager", "analyst"].includes(currentRole)) {
+      items.push({ href: "/dashboard", labelEn: "Dashboard", labelAr: "لوحة القيادة", icon: LayoutDashboard, roles: ["admin", "lab_manager", "analyst"] });
+    }
 
     if (currentRole === "client") {
       items.push(
@@ -36,6 +40,15 @@ export function Sidebar({ isOpen }: SidebarProps) {
         { href: "/reports", labelEn: "My Reports", labelAr: "تقاريري", icon: FileText, roles: ["client"] },
         { href: "/invoices", labelEn: "My Invoices", labelAr: "فواتيري", icon: Receipt, roles: ["client"] }
       );
+    } else if (currentRole === "accountant") {
+      items.push(
+        { href: "/accounting/dashboard", labelEn: "Finance Dashboard", labelAr: "اللوحة المالية", icon: LayoutDashboard, roles: ["accountant"] },
+        { href: "/invoices", labelEn: "Invoice Management", labelAr: "إدارة الفواتير", icon: Receipt, roles: ["accountant"] },
+        { href: "/accounting/journals", labelEn: "General Journal", labelAr: "القيود اليومية", icon: FileText, roles: ["accountant"] },
+        { href: "/accounting/ledger", labelEn: "General Ledger", labelAr: "الأستاذ العام", icon: GitCommit, roles: ["accountant"] },
+        { href: "/accounting/reports", labelEn: "Financial Reports", labelAr: "التقارير المالية", icon: BarChart3, roles: ["accountant"] },
+        { href: "/accounting/chart-of-accounts", labelEn: "Accounts Tree", labelAr: "شجرة الحسابات", icon: Calculator, roles: ["accountant"] },
+      );
     } else {
       items.push(
         { href: "/samples", labelEn: "Samples", labelAr: "العينات", icon: FlaskConical, roles: ["admin", "lab_manager", "analyst"] },
@@ -43,9 +56,16 @@ export function Sidebar({ isOpen }: SidebarProps) {
         { href: "/clients", labelEn: "Clients", labelAr: "العملاء", icon: Users, roles: ["admin", "lab_manager"] },
         { href: "/reports", labelEn: "Reports", labelAr: "التقارير", icon: FileText, roles: ["admin", "lab_manager", "analyst"] },
         { href: "/inventory", labelEn: "Inventory", labelAr: "المخزون", icon: Package, roles: ["admin", "lab_manager"] },
-        { href: "/invoices", labelEn: "Invoices", labelAr: "الفواتير", icon: Receipt, roles: ["admin", "lab_manager", "accountant"] },
         { href: "/analytics", labelEn: "Analytics", labelAr: "التحليلات", icon: BarChart3, roles: ["admin", "lab_manager"] }
       );
+      
+      // Only Admin gets billing/accounting access in the main menu
+      if (currentRole === "admin") {
+        items.push(
+          { href: "/invoices", labelEn: "Billing", labelAr: "الفوترة", icon: Receipt, roles: ["admin"] },
+          { href: "/accounting/dashboard", labelEn: "Accounting", labelAr: "المحاسبة", icon: Calculator, roles: ["admin"] }
+        );
+      }
     }
 
     if (currentRole === "admin") {
@@ -68,7 +88,7 @@ export function Sidebar({ isOpen }: SidebarProps) {
     `}>
       <div className="h-16 flex items-center px-6 border-b border-sidebar-border bg-sidebar-primary text-sidebar-primary-foreground">
         <FlaskConical className="h-6 w-6 mr-2 rtl:ml-2 rtl:mr-0" />
-        <span className="font-bold text-lg tracking-tight">GreenLIMS <span className="font-light opacity-80">KSA</span></span>
+        <span className="font-bold text-lg tracking-tight">GreenLabLIMS <span className="font-light opacity-80">KSA</span></span>
       </div>
 
       <div className="flex-1 overflow-y-auto py-4">

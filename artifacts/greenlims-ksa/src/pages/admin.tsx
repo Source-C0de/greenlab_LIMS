@@ -20,7 +20,7 @@ export default function AdminPanel() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">SaaS Administration</h1>
-        <p className="text-muted-foreground mt-1">Super-admin view for GreenLIMS KSA platform</p>
+        <p className="text-muted-foreground mt-1">Super-admin view for GreenLabLIMS KSA platform</p>
       </div>
 
       <Tabs defaultValue="tenants" className="space-y-4">

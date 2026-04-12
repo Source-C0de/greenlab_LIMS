@@ -45,7 +45,7 @@ export default function WorkflowBoard() {
     } else if (targetStatus === 'Assigned') {
       sample.status = 'Received';
       if (!sample.assignedAnalyst) {
-        sample.assignedAnalyst = "Ahmad Al-Otaibi"; // Assign a default analyst if none
+        sample.assignedAnalyst = "Shahjahan"; // Assign a default analyst if none
       }
     } else {
       sample.status = targetStatus;

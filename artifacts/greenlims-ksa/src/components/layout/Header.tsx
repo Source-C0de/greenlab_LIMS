@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { RoleSwitcher } from "@/components/shared/RoleSwitcher";
+import { NotificationBell } from "./NotificationBell";
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -59,10 +60,7 @@ export function Header({ toggleSidebar }: HeaderProps) {
           <span className="sr-only">Toggle theme</span>
         </Button>
 
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive"></span>
-        </Button>
+        <NotificationBell />
 
         <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-medium text-sm ml-2">
           {currentRole.charAt(0).toUpperCase()}

@@ -12,11 +12,11 @@ const tatData = [
 ];
 
 const performanceData = [
-  { name: 'Ahmad Al-Otaibi', samples: 145, tat: 2.8, passRate: 98.5 },
-  { name: 'Fatima Al-Zahrani', samples: 132, tat: 2.1, passRate: 99.2 },
-  { name: 'Norah Al-Shehri', samples: 118, tat: 4.2, passRate: 97.8 },
-  { name: 'Mohammad Al-Ghamdi', samples: 95, tat: 3.5, passRate: 98.1 },
-  { name: 'Khalid Al-Rashidi', samples: 120, tat: 2.5, passRate: 96.5 },
+  { name: 'Shahjahan', samples: 145, tat: 2.8, passRate: 98.5 },
+  { name: 'Tariq masum', samples: 132, tat: 2.1, passRate: 99.2 },
+  { name: 'Nazmul Alam', samples: 118, tat: 4.2, passRate: 97.8 },
+  { name: 'Khaled', samples: 95, tat: 3.5, passRate: 98.1 },
+  { name: 'Tariq masum', samples: 120, tat: 2.5, passRate: 96.5 },
 ];
 
 export default function Analytics() {

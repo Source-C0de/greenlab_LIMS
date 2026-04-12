@@ -34,7 +34,7 @@ export default function Login() {
         
         <div className="relative z-10 max-w-md text-center">
           <FlaskConical className="h-20 w-20 mx-auto mb-8 opacity-90" />
-          <h1 className="text-4xl font-bold mb-4 tracking-tight">GreenLIMS <span className="font-light">KSA</span></h1>
+          <h1 className="text-4xl font-bold mb-4 tracking-tight">GreenLabLIMS <span className="font-light">KSA</span></h1>
           <p className="text-lg opacity-80 mb-8 leading-relaxed">
             The premier enterprise Laboratory Information Management System for Saudi Arabia. Built for precision, compliance, and scale.
           </p>
@@ -65,7 +65,7 @@ export default function Login() {
                 <Input 
                   id="email" 
                   type="text" 
-                  placeholder="admin@greenlims.sa" 
+                  placeholder="admin@greenlablims.sa" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-11"
@@ -103,19 +103,19 @@ export default function Login() {
           <div className="mt-8 border-t pt-8">
             <h3 className="text-sm font-medium text-muted-foreground mb-4 text-center">Quick Login (Demo Roles)</h3>
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("admin", "admin@greenlims.sa")}>
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("admin", "admin@greenlablims.sa")}>
                 System Admin
               </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("lab_manager", "manager@greenlims.sa")}>
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("lab_manager", "manager@greenlablims.sa")}>
                 Lab Manager
               </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("analyst", "analyst@greenlims.sa")}>
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("analyst", "analyst@greenlablims.sa")}>
                 Analyst
               </Button>
               <Button variant="outline" size="sm" onClick={() => handleDemoLogin("client", "client@company.sa")}>
                 Client
               </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("accountant", "finance@greenlims.sa")} className="col-span-2">
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("accountant", "finance@greenlablims.sa")} className="col-span-2">
                 Accountant
               </Button>
             </div>
