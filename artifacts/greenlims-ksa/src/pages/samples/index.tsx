@@ -41,6 +41,7 @@ type SampleFormValues = z.infer<typeof sampleSchema>;
 
 export default function SamplesList() {
   const { currentRole, language } = useAppContext();
+  const isRtl = language === 'ar';
   const [samples, setSamples] = useState(mockSamples);
   const [isAdding, setIsAdding] = useState(false);
   const [open, setOpen] = useState(false);
@@ -75,6 +76,7 @@ export default function SamplesList() {
         receivedDate: new Date().toISOString().split('T')[0],
         completedDate: null,
         priority: data.priority,
+        tests: [],
       };
 
       setSamples([newSample, ...samples]);
@@ -149,19 +151,25 @@ export default function SamplesList() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Samples Management</h1>
-          <p className="text-muted-foreground mt-1">Manage and track all laboratory samples</p>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {currentRole === 'client' ? (isRtl ? "عيناتي" : "My Samples") : (isRtl ? "إدارة العينات" : "Samples Management")}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {currentRole === 'client' 
+              ? (isRtl ? "تتبع عيناتك ونتائج الفحوصات الخاصة بك" : "Track your laboratory samples and test results")
+              : (isRtl ? "إدارة وتتبع جميع عينات المختبر" : "Manage and track all laboratory samples")}
+          </p>
         </div>
         
         <div className="flex gap-2 w-full sm:w-auto">
           <Button variant="outline">
-            <Filter className="mr-2 h-4 w-4" /> Filter
+            <Filter className="mr-2 h-4 w-4" /> {isRtl ? "تصفية" : "Filter"}
           </Button>
           <Button variant="outline" onClick={handleExport}>
-            <Download className="mr-2 h-4 w-4" /> Export
+            <Download className="mr-2 h-4 w-4" /> {isRtl ? "تصدير" : "Export"}
           </Button>
           
-          {(currentRole === "admin" || currentRole === "lab_manager" || currentRole === "client") && (
+          {(currentRole === "admin" || currentRole === "lab_manager") && (
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button>

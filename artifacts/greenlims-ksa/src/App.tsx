@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Context
 import { AppProvider } from "@/context/AppContext";
+import { NotificationProvider } from "@/context/NotificationContext";
 
 // Layout
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -31,6 +32,11 @@ import Analytics from "@/pages/analytics";
 import AdminPanel from "@/pages/admin";
 import ClientPortal from "@/pages/client-portal";
 import Settings from "@/pages/settings";
+import AccountingDashboard from "@/pages/accounting/dashboard";
+import AccountingJournals from "@/pages/accounting/journals";
+import AccountingLedger from "@/pages/accounting/ledger";
+import AccountingReports from "@/pages/accounting/reports";
+import ChartOfAccounts from "@/pages/accounting/chart-of-accounts";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -69,6 +75,13 @@ function Router() {
       <Route path="/admin"><LayoutWrapper component={AdminPanel} /></Route>
       <Route path="/client-portal"><LayoutWrapper component={ClientPortal} /></Route>
       <Route path="/settings"><LayoutWrapper component={Settings} /></Route>
+      
+      {/* Accounting Routes */}
+      <Route path="/accounting/dashboard"><LayoutWrapper component={AccountingDashboard} /></Route>
+      <Route path="/accounting/journals"><LayoutWrapper component={AccountingJournals} /></Route>
+      <Route path="/accounting/ledger"><LayoutWrapper component={AccountingLedger} /></Route>
+      <Route path="/accounting/reports"><LayoutWrapper component={AccountingReports} /></Route>
+      <Route path="/accounting/chart-of-accounts"><LayoutWrapper component={ChartOfAccounts} /></Route>
 
       {/* 404 */}
       <Route component={NotFound} />
@@ -81,12 +94,14 @@ function App() {
     <ThemeProvider defaultTheme="light" attribute="class">
       <QueryClientProvider client={queryClient}>
         <AppProvider>
-          <TooltipProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-            <Toaster />
-          </TooltipProvider>
+          <NotificationProvider>
+            <TooltipProvider>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <Router />
+              </WouterRouter>
+              <Toaster />
+            </TooltipProvider>
+          </NotificationProvider>
         </AppProvider>
       </QueryClientProvider>
     </ThemeProvider>

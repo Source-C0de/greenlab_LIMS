@@ -11,11 +11,12 @@ interface KpiCardProps {
     isPositive: boolean;
   };
   description?: string;
+  className?: string;
 }
 
-export function KpiCard({ title, value, icon, trend, description }: KpiCardProps) {
+export function KpiCard({ title, value, icon, trend, description, className }: KpiCardProps) {
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}

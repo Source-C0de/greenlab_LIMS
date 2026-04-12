@@ -1,22 +1,144 @@
 export const mockSamples = [
-  { id: "SAM-2024-001", clientId: "C001", clientName: "Al-Marai Company", sampleType: "Food", description: "Full Cream Milk Batch #FM-2024-089", status: "Approved", assignedAnalyst: "Ahmad Al-Otaibi", receivedDate: "2024-01-15", completedDate: "2024-01-18", priority: "Normal" },
-  { id: "SAM-2024-002", clientId: "C007", clientName: "SWCC - Saline Water", sampleType: "Water", description: "Desalinated Water Sample - Plant #3", status: "Testing", assignedAnalyst: "Fatima Al-Zahrani", receivedDate: "2024-01-16", completedDate: null, priority: "High" },
-  { id: "SAM-2024-003", clientId: "C003", clientName: "Ajmal Perfumes", sampleType: "Perfume/Oud", description: "Oud Al-Layl Fragrance Batch #OL-089", status: "Review", assignedAnalyst: "Mohammad Al-Ghamdi", receivedDate: "2024-01-16", completedDate: null, priority: "Normal" },
-  { id: "SAM-2024-004", clientId: "C005", clientName: "Tabuk Pharmaceuticals", sampleType: "Pharmaceutical", description: "Amoxicillin 500mg Capsules", status: "Received", assignedAnalyst: null, receivedDate: "2024-01-17", completedDate: null, priority: "Urgent" },
-  { id: "SAM-2024-005", clientId: "C002", clientName: "Saudi Aramco", sampleType: "Water", description: "Process Water - Ras Tanura Refinery", status: "Approved", assignedAnalyst: "Norah Al-Shehri", receivedDate: "2024-01-14", completedDate: "2024-01-17", priority: "High" },
-  { id: "SAM-2024-006", clientId: "C008", clientName: "Savola Group", sampleType: "Food", description: "Afia Sunflower Oil Batch #SF-2024-142", status: "Testing", assignedAnalyst: "Ahmad Al-Otaibi", receivedDate: "2024-01-17", completedDate: null, priority: "Normal" },
-  { id: "SAM-2024-007", clientId: "C006", clientName: "Arabian Oud", sampleType: "Cosmetics", description: "Rose Body Cream - Winter Collection", status: "Rejected", assignedAnalyst: "Fatima Al-Zahrani", receivedDate: "2024-01-13", completedDate: "2024-01-16", priority: "Normal" },
-  { id: "SAM-2024-008", clientId: "C004", clientName: "Nadec Foods", sampleType: "Microbiology", description: "Laban Drink Environmental Swabs", status: "Approved", assignedAnalyst: "Khalid Al-Rashidi", receivedDate: "2024-01-15", completedDate: "2024-01-18", priority: "High" },
-  { id: "SAM-2024-009", clientId: "C001", clientName: "Al-Marai Company", sampleType: "Food", description: "Labneh Batch #LB-2024-034", status: "Received", assignedAnalyst: null, receivedDate: "2024-01-18", completedDate: null, priority: "Normal" },
-  { id: "SAM-2024-010", clientId: "C003", clientName: "Ajmal Perfumes", sampleType: "Cosmetics", description: "Moisturizing Hand Cream SPF30", status: "Testing", assignedAnalyst: "Mohammad Al-Ghamdi", receivedDate: "2024-01-18", completedDate: null, priority: "Normal" },
-  { id: "SAM-2024-011", clientId: "C005", clientName: "Tabuk Pharmaceuticals", sampleType: "Pharmaceutical", description: "Metformin 850mg Tablets", status: "Review", assignedAnalyst: "Norah Al-Shehri", receivedDate: "2024-01-16", completedDate: null, priority: "High" },
-  { id: "SAM-2024-012", clientId: "C007", clientName: "SWCC - Saline Water", sampleType: "Water", description: "Brine Concentrate Sample - Plant #7", status: "Approved", assignedAnalyst: "Ahmad Al-Otaibi", receivedDate: "2024-01-12", completedDate: "2024-01-15", priority: "Normal" },
-  { id: "SAM-2024-013", clientId: "C002", clientName: "Saudi Aramco", sampleType: "Microbiology", description: "Cooling Tower Water - Microbial Screen", status: "Testing", assignedAnalyst: "Fatima Al-Zahrani", receivedDate: "2024-01-17", completedDate: null, priority: "Urgent" },
-  { id: "SAM-2024-014", clientId: "C008", clientName: "Savola Group", sampleType: "Food", description: "Panda White Bread - Shelf Life Study", status: "Received", assignedAnalyst: null, receivedDate: "2024-01-18", completedDate: null, priority: "Normal" },
-  { id: "SAM-2024-015", clientId: "C006", clientName: "Arabian Oud", sampleType: "Perfume/Oud", description: "Mukhallat Al-Ward Oud Blend", status: "Review", assignedAnalyst: "Khalid Al-Rashidi", receivedDate: "2024-01-16", completedDate: null, priority: "Normal" },
-  { id: "SAM-2024-016", clientId: "C004", clientName: "Nadec Foods", sampleType: "Food", description: "Camembert Cheese Import Batch", status: "Approved", assignedAnalyst: "Ahmad Al-Otaibi", receivedDate: "2024-01-11", completedDate: "2024-01-14", priority: "High" },
-  { id: "SAM-2024-017", clientId: "C001", clientName: "Al-Marai Company", sampleType: "Water", description: "Plant Cleaning Water Validation", status: "Testing", assignedAnalyst: "Norah Al-Shehri", receivedDate: "2024-01-17", completedDate: null, priority: "Normal" },
-  { id: "SAM-2024-018", clientId: "C003", clientName: "Ajmal Perfumes", sampleType: "Cosmetics", description: "Natural Argan Shampoo Formula #3", status: "Approved", assignedAnalyst: "Fatima Al-Zahrani", receivedDate: "2024-01-10", completedDate: "2024-01-13", priority: "Normal" },
-  { id: "SAM-2024-019", clientId: "C005", clientName: "Tabuk Pharmaceuticals", sampleType: "Pharmaceutical", description: "Ceftriaxone Injection Raw Material", status: "Received", assignedAnalyst: null, receivedDate: "2024-01-18", completedDate: null, priority: "Urgent" },
-  { id: "SAM-2024-020", clientId: "C002", clientName: "Saudi Aramco", sampleType: "Water", description: "Groundwater Monitoring - Site AL-09", status: "Approved", assignedAnalyst: "Khalid Al-Rashidi", receivedDate: "2024-01-09", completedDate: "2024-01-12", priority: "High" },
+  { 
+    id: "SAM-2024-001", 
+    clientId: "C001", 
+    clientName: "Al-Marai Company", 
+    sampleType: "Food", 
+    description: "Full Cream Milk Batch #FM-2024-089", 
+    status: "Approved", 
+    assignedAnalyst: "Shahjahan", 
+    receivedDate: "2024-01-15", 
+    completedDate: "2024-01-18", 
+    priority: "Normal",
+    tests: [
+      {
+        id: "T-001",
+        name: "Chemical Analysis",
+        category: "Chemical",
+        method: "AOAC 989.05",
+        assignedTo: "Shahjahan",
+        status: "Completed",
+        parameters: [
+          { id: "P-01", name: "pH", value: "6.7", unit: "", min: 6.5, max: 6.8, status: "Pass" },
+          { id: "P-02", name: "Fat Content", value: "3.2", unit: "%", min: 3.0, max: 3.5, status: "Pass" },
+          { id: "P-03", name: "Solid Non-Fat", value: "8.6", unit: "%", min: 8.5, max: 9.0, status: "Pass" }
+        ]
+      },
+      {
+        id: "T-002",
+        name: "Microbial Screening",
+        category: "Microbiology",
+        method: "ISO 4833-1",
+        assignedTo: "Tariq masum",
+        status: "Completed",
+        parameters: [
+          { id: "P-04", name: "Total Plate Count", value: "500", unit: "CFU/ml", min: null, max: 10000, status: "Pass" },
+          { id: "P-05", name: "Coliforms", value: "Negative", unit: "", min: null, max: null, status: "Pass" }
+        ]
+      }
+    ]
+  },
+  { 
+    id: "SAM-2024-002", 
+    clientId: "C007", 
+    clientName: "SWCC - Saline Water", 
+    sampleType: "Water", 
+    description: "Desalinated Water Sample - Plant #3", 
+    status: "Testing", 
+    assignedAnalyst: "Tariq masum", 
+    receivedDate: "2024-01-16", 
+    completedDate: null, 
+    priority: "High",
+    tests: [
+      {
+        id: "T-003",
+        name: "Physico-Chemical Water Test",
+        category: "Chemical",
+        method: "APHA 2320 B",
+        assignedTo: "Tariq masum",
+        status: "In Progress",
+        parameters: [
+          { id: "P-06", name: "Turbidity", value: "0.2", unit: "NTU", min: 0, max: 1.0, status: "Pass" },
+          { id: "P-07", name: "TDS", value: "120", unit: "mg/L", min: 0, max: 500, status: "Pass" },
+          { id: "P-08", name: "Chloride", value: "", unit: "mg/L", min: 0, max: 250, status: "Pending" }
+        ]
+      }
+    ]
+  },
+  { 
+    id: "SAM-2024-003", 
+    clientId: "C003", 
+    clientName: "Ajmal Perfumes", 
+    sampleType: "Perfume/Oud", 
+    description: "Oud Al-Layl Fragrance Batch #OL-089", 
+    status: "Review", 
+    assignedAnalyst: "Khaled", 
+    receivedDate: "2024-01-16", 
+    completedDate: null, 
+    priority: "Normal",
+    tests: [
+      {
+        id: "T-004",
+        name: "Purity & Composition",
+        category: "Instrumentation",
+        method: "GC-MS Internal",
+        assignedTo: "Khaled",
+        status: "Completed",
+        parameters: [
+          { id: "P-09", name: "Ethanol %", value: "85", unit: "%", min: 80, max: 90, status: "Pass" },
+          { id: "P-10", name: "Water Content", value: "2.5", unit: "%", min: 0, max: 5.0, status: "Pass" }
+        ]
+      }
+    ]
+  },
+  { 
+    id: "SAM-2024-004", 
+    clientId: "C005", 
+    clientName: "Tabuk Pharmaceuticals", 
+    sampleType: "Pharmaceutical", 
+    description: "Amoxicillin 500mg Capsules", 
+    status: "Received", 
+    assignedAnalyst: null, 
+    receivedDate: "2024-01-17", 
+    completedDate: null, 
+    priority: "Urgent",
+    tests: [
+      {
+        id: "T-005",
+        name: "Assay of Amoxicillin",
+        category: "Pharmaceutical",
+        method: "USP 42",
+        assignedTo: null,
+        status: "Pending",
+        parameters: [
+          { id: "P-11", name: "Active Ingredient", value: "", unit: "mg", min: 475, max: 525, status: "Pending" }
+        ]
+      }
+    ]
+  },
+  { 
+    id: "SAM-2024-005", 
+    clientId: "C002", 
+    clientName: "Saudi Aramco", 
+    sampleType: "Water", 
+    description: "Process Water - Ras Tanura Refinery", 
+    status: "Approved", 
+    assignedAnalyst: "Nazmul Alam", 
+    receivedDate: "2024-01-14", 
+    completedDate: "2024-01-17", 
+    priority: "High",
+    tests: [
+      {
+        id: "T-006",
+        name: "Chemical Oxygen Demand",
+        category: "Chemical",
+        method: "EPA 410.4",
+        assignedTo: "Nazmul Alam",
+        status: "Completed",
+        parameters: [
+          { id: "P-12", name: "COD", value: "45", unit: "mg/L", min: 0, max: 50, status: "Pass" }
+        ]
+      }
+    ]
+  }
 ];
