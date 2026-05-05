@@ -37,6 +37,11 @@ import AccountingJournals from "@/pages/accounting/journals";
 import AccountingLedger from "@/pages/accounting/ledger";
 import AccountingReports from "@/pages/accounting/reports";
 import ChartOfAccounts from "@/pages/accounting/chart-of-accounts";
+import SpecificationList from "@/pages/specifications/index";
+import NewSpecification from "@/pages/specifications/new";
+import ParameterLibrary from "@/pages/specifications/library";
+import ApprovalQueue from "@/pages/specifications/approval";
+import VersionHistory from "@/pages/specifications/history";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -82,6 +87,13 @@ function Router() {
       <Route path="/accounting/ledger"><LayoutWrapper component={AccountingLedger} /></Route>
       <Route path="/accounting/reports"><LayoutWrapper component={AccountingReports} /></Route>
       <Route path="/accounting/chart-of-accounts"><LayoutWrapper component={ChartOfAccounts} /></Route>
+
+      {/* Specification Routes */}
+      <Route path="/specifications"><LayoutWrapper component={SpecificationList} /></Route>
+      <Route path="/specifications/new"><LayoutWrapper component={NewSpecification} /></Route>
+      <Route path="/specifications/library"><LayoutWrapper component={ParameterLibrary} /></Route>
+      <Route path="/specifications/approval"><LayoutWrapper component={ApprovalQueue} /></Route>
+      <Route path="/specifications/history"><LayoutWrapper component={VersionHistory} /></Route>
 
       {/* 404 */}
       <Route component={NotFound} />

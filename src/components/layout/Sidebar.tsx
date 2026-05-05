@@ -72,6 +72,24 @@ export function Sidebar({ isOpen }: SidebarProps) {
       items.push({ href: "/admin", labelEn: "SaaS Admin", labelAr: "إدارة النظام", icon: ShieldCheck, roles: ["admin"] });
     }
 
+    // Add Specifications for Admin and Lab Manager
+    if (["admin", "lab_manager"].includes(currentRole)) {
+      items.push({
+        href: "/specifications",
+        labelEn: "Specifications",
+        labelAr: "المواصفات",
+        icon: GitCommit,
+        roles: ["admin", "lab_manager"],
+        children: [
+          { href: "/specifications", labelEn: "Specification List", labelAr: "قائمة المواصفات" },
+          { href: "/specifications/new", labelEn: "Add New Specification", labelAr: "إضافة مواصفة جديدة" },
+          { href: "/specifications/library", labelEn: "Parameter Library", labelAr: "مكتبة المعلمات" },
+          { href: "/specifications/approval", labelEn: "Approval Queue", labelAr: "قائمة الاعتماد" },
+          { href: "/specifications/history", labelEn: "Version History", labelAr: "سجل الإصدارات" },
+        ]
+      });
+    }
+
     items.push({ href: "/settings", labelEn: "Settings", labelAr: "الإعدادات", icon: Settings, roles: ["admin", "lab_manager", "analyst", "client", "accountant"] });
 
     return items.filter(item => item.roles.includes(currentRole));
@@ -98,20 +116,41 @@ export function Sidebar({ isOpen }: SidebarProps) {
             const Icon = item.icon;
             
             return (
-              <Link 
-                key={item.href} 
-                href={item.href}
-                className={`
-                  flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors
-                  ${isActive 
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground' 
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground'
-                  }
-                `}
-              >
-                <Icon className={`h-5 w-5 ${isRtl ? 'ml-3' : 'mr-3'} ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
-                {isRtl ? item.labelAr : item.labelEn}
-              </Link>
+              <div key={item.href} className="space-y-1">
+                <Link 
+                  href={item.href}
+                  className={`
+                    flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors
+                    ${isActive 
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground' 
+                      : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground'
+                    }
+                  `}
+                >
+                  <Icon className={`h-5 w-5 ${isRtl ? 'ml-3' : 'mr-3'} ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                  {isRtl ? item.labelAr : item.labelEn}
+                </Link>
+                
+                {item.children && (isActive || location.startsWith(item.href)) && (
+                  <div className={`${isRtl ? 'mr-8' : 'ml-8'} space-y-1 mt-1 border-l border-sidebar-border pl-2 rtl:pr-2 rtl:border-r rtl:border-l-0`}>
+                    {item.children.map((child: any) => (
+                      <Link 
+                        key={child.href}
+                        href={child.href}
+                        className={`
+                          block px-3 py-2 text-xs font-medium rounded-md transition-colors
+                          ${location === child.href 
+                            ? 'bg-primary/10 text-primary' 
+                            : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                          }
+                        `}
+                      >
+                        {isRtl ? child.labelAr : child.labelEn}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>

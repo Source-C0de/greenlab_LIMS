@@ -30,19 +30,59 @@ export function ParameterTable({ parameters, onUpdate }: ParameterTableProps) {
   }, [parameters]);
 
   const handleValueChange = (id: string, newValue: string) => {
-    const updated = localParams.map((p) => {
+    const updated = localParams.map((p: any) => {
       if (p.id === id) {
         let status = "Pending";
         if (newValue !== "") {
           const numValue = parseFloat(newValue);
-          if (!isNaN(numValue)) {
-            const isMinOk = p.min === null || numValue >= p.min;
-            const isMaxOk = p.max === null || numValue <= p.max;
-            status = isMinOk && isMaxOk ? "Pass" : "Fail";
-          } else if (newValue.toLowerCase() === "negative" || newValue.toLowerCase() === "not detected") {
-            status = "Pass";
-          } else if (newValue.toLowerCase() === "positive" || newValue.toLowerCase() === "detected") {
-            status = "Fail";
+          const limitType = p.limitType || "Range";
+
+          switch (limitType) {
+            case "Range":
+              if (!isNaN(numValue)) {
+                const isMinOk = p.min === null || p.min === "" || numValue >= parseFloat(p.min);
+                const isMaxOk = p.max === null || p.max === "" || numValue <= parseFloat(p.max);
+                status = isMinOk && isMaxOk ? "Pass" : "Fail";
+              }
+              break;
+            case "Max Only":
+              if (!isNaN(numValue)) {
+                status = p.max === null || p.max === "" || numValue <= parseFloat(p.max) ? "Pass" : "Fail";
+              }
+              break;
+            case "Min Only":
+              if (!isNaN(numValue)) {
+                status = p.min === null || p.min === "" || numValue >= parseFloat(p.min) ? "Pass" : "Fail";
+              }
+              break;
+            case "Exact Value":
+              status = newValue === p.target ? "Pass" : "Fail";
+              break;
+            case "Pass / Fail":
+              const lowerVal = newValue.toLowerCase();
+              if (["pass", "absent", "negative", "ok", "yes", "clear"].includes(lowerVal)) {
+                status = "Pass";
+              } else if (["fail", "present", "positive", "not ok", "no", "turbid"].includes(lowerVal)) {
+                status = "Fail";
+              }
+              break;
+            case "Not Detected":
+              if (newValue.toLowerCase().includes("not detected") || newValue.toLowerCase() === "nd" || newValue.toLowerCase() === "absent") {
+                status = "Pass";
+              } else {
+                status = "Fail";
+              }
+              break;
+            case "Text":
+              status = newValue.length > 0 ? "Pass" : "Pending";
+              break;
+            default:
+              // Fallback to original logic
+              if (!isNaN(numValue)) {
+                const isMinOk = p.min === null || numValue >= p.min;
+                const isMaxOk = p.max === null || numValue <= p.max;
+                status = isMinOk && isMaxOk ? "Pass" : "Fail";
+              }
           }
         }
         return { ...p, value: newValue, status };
@@ -91,10 +131,12 @@ export function ParameterTable({ parameters, onUpdate }: ParameterTableProps) {
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">{param.unit || "-"}</TableCell>
               <TableCell className="text-muted-foreground text-xs">
-                {param.min !== null || param.max !== null ? (
+                {param.limitType === 'Pass / Fail' || param.limitType === 'Not Detected' || param.limitType === 'Text' || param.limitType === 'Exact Value' ? (
+                  <span className="font-medium text-primary">{param.target || param.limitType}</span>
+                ) : (param.min !== null && param.min !== "") || (param.max !== null && param.max !== "") ? (
                   <span>
-                    {param.min !== null && param.max !== null ? `${param.min} - ${param.max}` : 
-                     param.min !== null ? `≥ ${param.min}` : `≤ ${param.max}`}
+                    {param.min !== null && param.min !== "" && param.max !== null && param.max !== "" ? `${param.min} - ${param.max}` : 
+                     param.min !== null && param.min !== "" ? `≥ ${param.min}` : `≤ ${param.max}`}
                   </span>
                 ) : "-"}
               </TableCell>
