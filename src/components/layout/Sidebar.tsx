@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   Building2,
   FolderKanban,
-  Calculator
+  Calculator,
+  LogOut
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 
@@ -21,9 +22,14 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen }: SidebarProps) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { currentRole, language } = useAppContext();
   const isRtl = language === "ar";
+
+  const handleLogout = () => {
+    // Clear any session/state if needed
+    setLocation("/login");
+  };
 
   const getNavItems = () => {
     const items = [];
@@ -157,14 +163,23 @@ export function Sidebar({ isOpen }: SidebarProps) {
       </div>
 
       <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-            {currentRole.charAt(0).toUpperCase()}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+              {currentRole.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-sidebar-foreground">{currentRole.replace("_", " ").toUpperCase()}</span>
+              <span className="text-xs text-muted-foreground">Demo User</span>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-sidebar-foreground">{currentRole.replace("_", " ").toUpperCase()}</span>
-            <span className="text-xs text-muted-foreground">Demo User</span>
-          </div>
+          <button 
+            onClick={handleLogout}
+            className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+            title={isRtl ? "تسجيل الخروج" : "Logout"}
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
         </div>
       </div>
     </aside>

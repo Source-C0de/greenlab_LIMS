@@ -9,14 +9,18 @@ import { useAppContext, Role } from "@/context/AppContext";
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { setCurrentRole } = useAppContext();
+  const { currentRole, setCurrentRole } = useAppContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     // Normally authenticate here
-    setLocation("/dashboard");
+    if (currentRole === "client") {
+      setLocation("/otp-verify");
+    } else {
+      setLocation("/dashboard");
+    }
   };
 
   const handleDemoLogin = (role: Role, roleEmail: string) => {
