@@ -90,6 +90,7 @@ export function Sidebar({ isOpen }: SidebarProps) {
           { href: "/specifications", labelEn: "Specification List", labelAr: "قائمة المواصفات" },
           { href: "/specifications/new", labelEn: "Add New Specification", labelAr: "إضافة مواصفة جديدة" },
           { href: "/specifications/library", labelEn: "Test Parameters", labelAr: "معلمات الاختبار" },
+          { href: "/specifications/test-master", labelEn: "Test Master", labelAr: "سجل الاختبارات" },
           { href: "/specifications/approval", labelEn: "Approval Queue", labelAr: "قائمة الاعتماد" },
           { href: "/specifications/history", labelEn: "Version History", labelAr: "سجل الإصدارات" },
         ]

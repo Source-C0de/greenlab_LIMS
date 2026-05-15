@@ -7,6 +7,23 @@ export interface ParameterMaster {
   category: string;
 }
 
+export interface TestMaster {
+  id: string;
+  specification: string;
+  testName: string;
+  sopCode: string;
+  tests: string;
+  unit: string;
+  mu: string;
+  limit: string;
+  methodReference: string;
+  sampleType: string;
+  referenceNo: string;
+  incubationTemp: string;
+  incubationPeriod: string;
+  warehouseItems: string;
+}
+
 export interface SpecParameter {
   parameterId: string;
   name: string;
@@ -85,5 +102,40 @@ export const mockSpecifications: Specification[] = [
       { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
       { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
     ]
+  }
+];
+
+export const testMasterData: TestMaster[] = [
+  {
+    id: "TM-001",
+    specification: "Food Safety",
+    testName: "Salmonella Detection",
+    sopCode: "SOP-MB-001",
+    tests: "Salmonella spp",
+    unit: "P/A",
+    mu: "N/A",
+    limit: "Absent/25g",
+    methodReference: "ISO 6579-1",
+    sampleType: "Raw Meat",
+    referenceNo: "REF-2024-001",
+    incubationTemp: "37°C",
+    incubationPeriod: "24-48h",
+    warehouseItems: "Peptone Water, XLD Agar"
+  },
+  {
+    id: "TM-002",
+    specification: "Water Quality",
+    testName: "Total Coliforms",
+    sopCode: "SOP-MB-002",
+    tests: "Total Coliforms",
+    unit: "CFU/100ml",
+    mu: "0.12",
+    limit: "<1",
+    methodReference: "Standard Methods 9222B",
+    sampleType: "Drinking Water",
+    referenceNo: "REF-2024-002",
+    incubationTemp: "35°C",
+    incubationPeriod: "24h",
+    warehouseItems: "m-Endo Agar"
   }
 ];
