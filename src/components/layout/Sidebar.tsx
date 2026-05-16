@@ -1,14 +1,14 @@
 import { Link, useLocation } from "wouter";
-import { 
-  LayoutDashboard, 
-  FlaskConical, 
-  GitCommit, 
-  Users, 
-  FileText, 
-  Package, 
-  Receipt, 
-  BarChart3, 
-  Settings, 
+import {
+  LayoutDashboard,
+  FlaskConical,
+  GitCommit,
+  Users,
+  FileText,
+  Package,
+  Receipt,
+  BarChart3,
+  Settings,
   ShieldCheck,
   Building2,
   FolderKanban,
@@ -35,8 +35,8 @@ export function Sidebar({ isOpen }: SidebarProps) {
     const items = [];
 
     // Dashboard - Only for roles that need the general operational dashboard
-    if (["admin", "lab_manager", "analyst"].includes(currentRole)) {
-      items.push({ href: "/dashboard", labelEn: "Dashboard", labelAr: "لوحة القيادة", icon: LayoutDashboard, roles: ["admin", "lab_manager", "analyst"] });
+    if (["admin", "lab_manager", "analyst", "receptionist"].includes(currentRole)) {
+      items.push({ href: "/dashboard", labelEn: "Dashboard", labelAr: "لوحة القيادة", icon: LayoutDashboard, roles: ["admin", "lab_manager", "analyst", "receptionist"] });
     }
 
     if (currentRole === "client") {
@@ -57,14 +57,24 @@ export function Sidebar({ isOpen }: SidebarProps) {
       );
     } else {
       items.push(
-        { href: "/samples", labelEn: "Samples", labelAr: "العينات", icon: FlaskConical, roles: ["admin", "lab_manager", "analyst"] },
-        { href: "/workflow", labelEn: "Workflow", labelAr: "سير العمل", icon: FolderKanban, roles: ["admin", "lab_manager", "analyst"] },
-        { href: "/clients", labelEn: "Clients", labelAr: "العملاء", icon: Users, roles: ["admin", "lab_manager"] },
-        { href: "/reports", labelEn: "Reports", labelAr: "التقارير", icon: FileText, roles: ["admin", "lab_manager", "analyst"] },
-        { href: "/inventory", labelEn: "Inventory", labelAr: "المخزون", icon: Package, roles: ["admin", "lab_manager"] },
+        { 
+          href: "/samples", 
+          labelEn: "Samples", 
+          labelAr: "العينات", 
+          icon: FlaskConical, 
+          roles: ["admin", "lab_manager", "analyst", "receptionist"],
+          children: [
+            { href: "/samples", labelEn: "Samples List", labelAr: "قائمة العينات" },
+            { href: "/samples/receiving", labelEn: "Sample Receiving", labelAr: "استلام العينات" },
+          ]
+        },
+        { href: "/workflow", labelEn: "Workflow", labelAr: "سير العمل", icon: FolderKanban, roles: ["admin", "lab_manager", "analyst", "receptionist"] },
+        { href: "/clients", labelEn: "Clients", labelAr: "العملاء", icon: Users, roles: ["admin", "lab_manager", "receptionist"] },
+        { href: "/reports", labelEn: "Reports", labelAr: "التقارير", icon: FileText, roles: ["admin", "lab_manager", "analyst", "receptionist"] },
+        { href: "/inventory", labelEn: "Inventory", labelAr: "المخزون", icon: Package, roles: ["admin", "lab_manager", "receptionist"] },
         { href: "/analytics", labelEn: "Analytics", labelAr: "التحليلات", icon: BarChart3, roles: ["admin", "lab_manager"] }
       );
-      
+
       // Only Admin gets billing/accounting access in the main menu
       if (currentRole === "admin") {
         items.push(
@@ -121,15 +131,15 @@ export function Sidebar({ isOpen }: SidebarProps) {
           {navItems.map((item) => {
             const isActive = location === item.href || location.startsWith(`${item.href}/`);
             const Icon = item.icon;
-            
+
             return (
               <div key={item.href} className="space-y-1">
-                <Link 
+                <Link
                   href={item.href}
                   className={`
                     flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-colors
-                    ${isActive 
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground' 
+                    ${isActive
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                       : 'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground'
                     }
                   `}
@@ -137,17 +147,17 @@ export function Sidebar({ isOpen }: SidebarProps) {
                   <Icon className={`h-5 w-5 ${isRtl ? 'ml-3' : 'mr-3'} ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
                   {isRtl ? item.labelAr : item.labelEn}
                 </Link>
-                
+
                 {item.children && (isActive || location.startsWith(item.href)) && (
                   <div className={`${isRtl ? 'mr-8' : 'ml-8'} space-y-1 mt-1 border-l border-sidebar-border pl-2 rtl:pr-2 rtl:border-r rtl:border-l-0`}>
                     {item.children.map((child: any) => (
-                      <Link 
+                      <Link
                         key={child.href}
                         href={child.href}
                         className={`
                           block px-3 py-2 text-xs font-medium rounded-md transition-colors
-                          ${location === child.href 
-                            ? 'bg-primary/10 text-primary' 
+                          ${location === child.href
+                            ? 'bg-primary/10 text-primary'
                             : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                           }
                         `}
@@ -174,7 +184,7 @@ export function Sidebar({ isOpen }: SidebarProps) {
               <span className="text-xs text-muted-foreground">Demo User</span>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleLogout}
             className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
             title={isRtl ? "تسجيل الخروج" : "Logout"}

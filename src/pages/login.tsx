@@ -116,10 +116,13 @@ export default function Login() {
               <Button variant="outline" size="sm" onClick={() => handleDemoLogin("analyst", "analyst@greenlablims.sa")}>
                 Analyst
               </Button>
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("receptionist", "reception@greenlablims.sa")}>
+                Receptionist
+              </Button>
               <Button variant="outline" size="sm" onClick={() => handleDemoLogin("client", "client@company.sa")}>
                 Client
               </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("accountant", "finance@greenlablims.sa")} className="col-span-2">
+              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("accountant", "finance@greenlablims.sa")}>
                 Accountant
               </Button>
             </div>

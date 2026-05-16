@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-export type Role = "admin" | "lab_manager" | "analyst" | "client" | "accountant";
+export type Role = "admin" | "lab_manager" | "analyst" | "client" | "accountant" | "receptionist";
 export type Language = "en" | "ar";
 export type Theme = "light" | "dark";
 

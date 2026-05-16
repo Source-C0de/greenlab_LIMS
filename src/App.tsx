@@ -43,6 +43,7 @@ import ParameterLibrary from "@/pages/specifications/library";
 import ApprovalQueue from "@/pages/specifications/approval";
 import VersionHistory from "@/pages/specifications/history";
 import TestMasterPage from "@/pages/specifications/test-master";
+import SampleReceiving from "@/pages/samples/receiving";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -69,6 +70,7 @@ function Router() {
       {/* App routes wrapped in layout */}
       <Route path="/dashboard"><LayoutWrapper component={Dashboard} /></Route>
       <Route path="/samples"><LayoutWrapper component={SamplesList} /></Route>
+      <Route path="/samples/receiving"><LayoutWrapper component={SampleReceiving} /></Route>
       <Route path="/samples/:id"><LayoutWrapper component={SampleDetail} /></Route>
       <Route path="/workflow"><LayoutWrapper component={WorkflowBoard} /></Route>
       <Route path="/clients"><LayoutWrapper component={ClientsList} /></Route>
@@ -81,7 +83,7 @@ function Router() {
       <Route path="/admin"><LayoutWrapper component={AdminPanel} /></Route>
       <Route path="/client-portal"><LayoutWrapper component={ClientPortal} /></Route>
       <Route path="/settings"><LayoutWrapper component={Settings} /></Route>
-      
+
       {/* Accounting Routes */}
       <Route path="/accounting/dashboard"><LayoutWrapper component={AccountingDashboard} /></Route>
       <Route path="/accounting/journals"><LayoutWrapper component={AccountingJournals} /></Route>
