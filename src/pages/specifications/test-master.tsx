@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { testMasterData, TestMaster } from "@/mock-data/specifications";
+import { testMasterData, TestMaster, mockSpecifications } from "@/mock-data/specifications";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
-import { 
-  Plus, 
-  Download, 
+import {
+  Plus,
+  Download,
   Loader2,
   TestTube2,
   Search,
@@ -33,7 +33,8 @@ export default function TestMasterPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedTest, setSelectedTest] = useState<TestMaster | null>(null);
-  
+  const [specDialogOpen, setSpecDialogOpen] = useState(false);
+
   const [formData, setFormData] = useState({
     specification: "",
     testName: "",
@@ -58,7 +59,7 @@ export default function TestMasterPage() {
     }
 
     setIsSubmitting(true);
-    
+
     // Simulate API call
     setTimeout(() => {
       const newTest: TestMaster = {
@@ -94,8 +95,8 @@ export default function TestMasterPage() {
   };
 
   const columns = [
-    { 
-      key: "testName", 
+    {
+      key: "testName",
       header: isRtl ? "اسم الاختبار" : "Test Name",
       render: (item: any) => <span className="font-medium text-primary">{item.testName}</span>
     },
@@ -104,8 +105,8 @@ export default function TestMasterPage() {
     { key: "unit", header: isRtl ? "الوحدة" : "Unit" },
     { key: "limit", header: isRtl ? "الحد" : "Limit" },
     { key: "sampleType", header: isRtl ? "نوع العينة" : "Sample Type" },
-    { 
-      key: "actions", 
+    {
+      key: "actions",
       header: "",
       render: (item: any) => (
         <div className="flex gap-2 justify-end">
@@ -118,19 +119,47 @@ export default function TestMasterPage() {
     },
   ];
 
+  const specColumns = [
+    { key: "code", header: isRtl ? "كود المواصفة" : "Spec Code" },
+    { 
+      key: "name", 
+      header: isRtl ? "اسم المواصفة" : "Spec Name", 
+      render: (item: any) => <span className="font-medium text-primary">{item.name}</span> 
+    },
+    { key: "productName", header: isRtl ? "المنتج" : "Product" },
+    {
+      key: "actions",
+      header: "",
+      render: (item: any) => (
+        <div className="flex justify-end">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              setFormData({ ...formData, specification: item.name });
+              setSpecDialogOpen(false);
+            }}
+          >
+            {isRtl ? "اختيار" : "Select"}
+          </Button>
+        </div>
+      )
+    }
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <TestTube2 className="h-8 w-8 text-primary" />
-            {isRtl ? "سجل الاختبارات الرئيسي" : "Test Master Register"}
+            {isRtl ? "قائمة الاختبارات" : "Test List"}
           </h1>
           <p className="text-muted-foreground mt-1">
             {isRtl ? "إدارة وتكوين طرق ومعايير الاختبار التفصيلية" : "Manage and configure detailed test methods and standards"}
           </p>
         </div>
-        
+
         <div className="flex gap-2">
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -145,22 +174,34 @@ export default function TestMasterPage() {
                   {isRtl ? "أدخل التفاصيل الكاملة للاختبار الجديد." : "Enter the full details of the new test."}
                 </DialogDescription>
               </DialogHeader>
-              
+
               <ScrollArea className="max-h-[70vh] px-1">
                 <form id="test-form" onSubmit={handleSubmit} className="space-y-4 py-4 pr-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="specification">{isRtl ? "المواصفة" : "Specification"}</Label>
-                      <Input 
-                        id="specification" 
-                        value={formData.specification}
-                        onChange={(e) => setFormData({ ...formData, specification: e.target.value })}
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          id="specification"
+                          value={formData.specification}
+                          onChange={(e) => setFormData({ ...formData, specification: e.target.value })}
+                          placeholder={isRtl ? "اختر أو اكتب..." : "Select or type..."}
+                          className="flex-1"
+                        />
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="icon"
+                          onClick={() => setSpecDialogOpen(true)}
+                        >
+                          <Search className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="testName">{isRtl ? "اسم الاختبار" : "Test Name"} <span className="text-destructive">*</span></Label>
-                      <Input 
-                        id="testName" 
+                      <Input
+                        id="testName"
                         value={formData.testName}
                         onChange={(e) => setFormData({ ...formData, testName: e.target.value })}
                       />
@@ -170,16 +211,16 @@ export default function TestMasterPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="sopCode">{isRtl ? "كود SOP" : "SOP CODE"} <span className="text-destructive">*</span></Label>
-                      <Input 
-                        id="sopCode" 
+                      <Input
+                        id="sopCode"
                         value={formData.sopCode}
                         onChange={(e) => setFormData({ ...formData, sopCode: e.target.value })}
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="tests">{isRtl ? "الاختبارات" : "Tests"}</Label>
-                      <Input 
-                        id="tests" 
+                      <Input
+                        id="tests"
                         value={formData.tests}
                         onChange={(e) => setFormData({ ...formData, tests: e.target.value })}
                       />
@@ -189,24 +230,24 @@ export default function TestMasterPage() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="unit">{isRtl ? "الوحدة" : "Unit"}</Label>
-                      <Input 
-                        id="unit" 
+                      <Input
+                        id="unit"
                         value={formData.unit}
                         onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="mu">{isRtl ? "MU" : "MU"}</Label>
-                      <Input 
-                        id="mu" 
+                      <Input
+                        id="mu"
                         value={formData.mu}
                         onChange={(e) => setFormData({ ...formData, mu: e.target.value })}
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="limit">{isRtl ? "الحد" : "Limit"}</Label>
-                      <Input 
-                        id="limit" 
+                      <Input
+                        id="limit"
                         value={formData.limit}
                         onChange={(e) => setFormData({ ...formData, limit: e.target.value })}
                       />
@@ -216,16 +257,16 @@ export default function TestMasterPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="methodReference">{isRtl ? "مرجع الطريقة" : "Method Reference"}</Label>
-                      <Input 
-                        id="methodReference" 
+                      <Input
+                        id="methodReference"
                         value={formData.methodReference}
                         onChange={(e) => setFormData({ ...formData, methodReference: e.target.value })}
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="sampleType">{isRtl ? "نوع العينة" : "Sample Type"}</Label>
-                      <Input 
-                        id="sampleType" 
+                      <Input
+                        id="sampleType"
                         value={formData.sampleType}
                         onChange={(e) => setFormData({ ...formData, sampleType: e.target.value })}
                       />
@@ -235,24 +276,24 @@ export default function TestMasterPage() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="referenceNo">{isRtl ? "الرقم المرجعي" : "Reference No"}</Label>
-                      <Input 
-                        id="referenceNo" 
+                      <Input
+                        id="referenceNo"
                         value={formData.referenceNo}
                         onChange={(e) => setFormData({ ...formData, referenceNo: e.target.value })}
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="incubationTemp">{isRtl ? "درجة حرارة التحضين" : "Incubation Temp"}</Label>
-                      <Input 
-                        id="incubationTemp" 
+                      <Input
+                        id="incubationTemp"
                         value={formData.incubationTemp}
                         onChange={(e) => setFormData({ ...formData, incubationTemp: e.target.value })}
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="incubationPeriod">{isRtl ? "مدة التحضين" : "Incubation Period"}</Label>
-                      <Input 
-                        id="incubationPeriod" 
+                      <Input
+                        id="incubationPeriod"
                         value={formData.incubationPeriod}
                         onChange={(e) => setFormData({ ...formData, incubationPeriod: e.target.value })}
                       />
@@ -261,8 +302,8 @@ export default function TestMasterPage() {
 
                   <div className="grid gap-2">
                     <Label htmlFor="warehouseItems">{isRtl ? "عناصر المستودع" : "Warehouse Items"}</Label>
-                    <Input 
-                      id="warehouseItems" 
+                    <Input
+                      id="warehouseItems"
                       placeholder="e.g. Media, Reagents, Kits..."
                       value={formData.warehouseItems}
                       onChange={(e) => setFormData({ ...formData, warehouseItems: e.target.value })}
@@ -288,17 +329,17 @@ export default function TestMasterPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          
+
           <Button variant="outline">
             <Download className="mr-2 h-4 w-4" /> {isRtl ? "تصدير" : "Export"}
           </Button>
         </div>
       </div>
 
-      <DataTable 
-        data={tests} 
-        columns={columns} 
-        searchKey="testName" 
+      <DataTable
+        data={tests}
+        columns={columns}
+        searchKey="testName"
         searchPlaceholder={isRtl ? "البحث في الاختبارات..." : "Search tests..."}
       />
 
@@ -308,7 +349,7 @@ export default function TestMasterPage() {
           <DialogHeader>
             <DialogTitle>{isRtl ? "تفاصيل الاختبار" : "Test Details"}</DialogTitle>
           </DialogHeader>
-          
+
           {selectedTest && (
             <div className="grid grid-cols-2 gap-y-4 py-4 text-sm">
               <div className="space-y-1">
@@ -357,9 +398,31 @@ export default function TestMasterPage() {
               </div>
             </div>
           )}
-          
+
           <DialogFooter>
             <Button onClick={() => setViewOpen(false)}>{isRtl ? "إغلاق" : "Close"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Specification Selection Dialog */}
+      <Dialog open={specDialogOpen} onOpenChange={setSpecDialogOpen}>
+        <DialogContent className="sm:max-w-[800px]">
+          <DialogHeader>
+            <DialogTitle>{isRtl ? "اختيار مواصفة" : "Select Specification"}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <DataTable
+              data={mockSpecifications}
+              columns={specColumns}
+              searchKey="name"
+              searchPlaceholder={isRtl ? "البحث في المواصفات..." : "Search specifications..."}
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSpecDialogOpen(false)} variant="outline">
+              {isRtl ? "إغلاق" : "Close"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -57,11 +57,11 @@ export function Sidebar({ isOpen }: SidebarProps) {
       );
     } else {
       items.push(
-        { 
-          href: "/samples", 
-          labelEn: "Samples", 
-          labelAr: "العينات", 
-          icon: FlaskConical, 
+        {
+          href: "/samples",
+          labelEn: "Samples",
+          labelAr: "العينات",
+          icon: FlaskConical,
           roles: ["admin", "lab_manager", "analyst", "receptionist"],
           children: [
             { href: "/samples", labelEn: "Samples List", labelAr: "قائمة العينات" },
@@ -98,9 +98,9 @@ export function Sidebar({ isOpen }: SidebarProps) {
         roles: ["admin", "lab_manager"],
         children: [
           { href: "/specifications", labelEn: "Specification List", labelAr: "قائمة المواصفات" },
-          { href: "/specifications/new", labelEn: "Add New Specification", labelAr: "إضافة مواصفة جديدة" },
+          // { href: "/specifications/new", labelEn: "Add New Specification", labelAr: "إضافة مواصفة جديدة" },
           { href: "/specifications/library", labelEn: "Test Parameters", labelAr: "معلمات الاختبار" },
-          { href: "/specifications/test-master", labelEn: "Test Master", labelAr: "سجل الاختبارات" },
+          { href: "/specifications/test-master", labelEn: "Test List", labelAr: "سجل الاختبارات" },
           { href: "/specifications/approval", labelEn: "Approval Queue", labelAr: "قائمة الاعتماد" },
           { href: "/specifications/history", labelEn: "Version History", labelAr: "سجل الإصدارات" },
         ]

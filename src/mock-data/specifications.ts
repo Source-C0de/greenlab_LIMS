@@ -102,6 +102,24 @@ export const mockSpecifications: Specification[] = [
       { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
       { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
     ]
+  },
+  {
+    id: "SPEC-003",
+    code: "SPEC-W-003",
+    name: "Industrial Waste Water 2",
+    productName: "Waste Water",
+    category: "Water",
+    department: "Environmental",
+    status: "Pending",
+    effectiveDate: "2024-05-01",
+    reviewDate: "2026-05-01",
+    version: "1.1",
+    createdBy: "Jane Smith",
+    createdAt: "2024-04-10",
+    parameters: [
+      { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
+      { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
+    ]
   }
 ];
 
