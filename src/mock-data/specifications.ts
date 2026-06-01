@@ -9,19 +9,21 @@ export interface ParameterMaster {
 
 export interface TestMaster {
   id: string;
-  specification: string;
+  testCode: string;
   testName: string;
-  sopCode: string;
-  tests: string;
-  unit: string;
-  mu: string;
-  limit: string;
+  testParameter: string;
+  methodType: string;
   methodReference: string;
   sampleType: string;
   referenceNo: string;
-  incubationTemp: string;
-  incubationPeriod: string;
+  sopCode: string;
   warehouseItems: string;
+}
+
+export interface MethodTypeMaster {
+  id: string;
+  name: string;
+  category: 'Chemical' | 'Physical' | 'Microbiology' | 'Radiological' | 'Other';
 }
 
 export interface SpecParameter {
@@ -29,6 +31,10 @@ export interface SpecParameter {
   name: string;
   method: string;
   unit: string;
+  sopCode?: string;
+  tests?: string;
+  referenceNo?: string;
+  limitRange?: string;
   min: string | number | null;
   max: string | number | null;
   target: string | number | null;
@@ -79,10 +85,10 @@ export const mockSpecifications: Specification[] = [
     createdBy: 'John Doe',
     createdAt: '2023-12-15',
     parameters: [
-      { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', min: 6.5, max: 8.5, target: 7.5, limitType: 'Range', mandatory: true },
-      { parameterId: 'PM-003', name: 'Chloride', method: 'Titration', unit: 'mg/L', min: null, max: 250, target: null, limitType: 'Max Only', mandatory: true },
-      { parameterId: 'PM-005', name: 'E.coli', method: 'Membrane Filtration', unit: 'CFU/100ml', min: null, max: null, target: 'Absent', limitType: 'Pass / Fail', mandatory: true },
-      { parameterId: 'PM-009', name: 'Color', method: 'Visual', unit: 'Platinum-Cobalt', min: null, max: null, target: 'Clear', limitType: 'Text', mandatory: false },
+      { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '6.5 - 8.5', min: 6.5, max: 8.5, target: 7.5, limitType: 'Range', mandatory: true },
+      { parameterId: 'PM-003', name: 'Chloride', method: 'Titration', unit: 'mg/L', sopCode: 'SOP-PM-003', tests: 'Chloride', referenceNo: 'REF-CH-PM-003', limitRange: '0 - 250', min: null, max: 250, target: null, limitType: 'Max Only', mandatory: true },
+      { parameterId: 'PM-005', name: 'E.coli', method: 'Membrane Filtration', unit: 'CFU/100ml', sopCode: 'SOP-PM-005', tests: 'E.coli', referenceNo: 'REF-MI-PM-005', limitRange: 'Absent', min: null, max: null, target: 'Absent', limitType: 'Pass / Fail', mandatory: true },
+      { parameterId: 'PM-009', name: 'Color', method: 'Visual', unit: 'Platinum-Cobalt', sopCode: 'SOP-PM-009', tests: 'Color', referenceNo: 'REF-PH-PM-009', limitRange: 'Clear', min: null, max: null, target: 'Clear', limitType: 'Text', mandatory: false },
     ]
   },
   {
@@ -99,8 +105,8 @@ export const mockSpecifications: Specification[] = [
     createdBy: 'Jane Smith',
     createdAt: '2024-04-10',
     parameters: [
-      { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
-      { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
+      { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '5.5 - 9.5', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
+      { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', sopCode: 'SOP-PM-002', tests: 'TDS', referenceNo: 'REF-PH-PM-002', limitRange: '0 - 2000', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
     ]
   },
   {
@@ -117,8 +123,8 @@ export const mockSpecifications: Specification[] = [
     createdBy: "Jane Smith",
     createdAt: "2024-04-10",
     parameters: [
-      { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
-      { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
+      { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '5.5 - 9.5', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
+      { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', sopCode: 'SOP-PM-002', tests: 'TDS', referenceNo: 'REF-PH-PM-002', limitRange: '0 - 2000', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
     ]
   }
 ];
@@ -126,34 +132,44 @@ export const mockSpecifications: Specification[] = [
 export const testMasterData: TestMaster[] = [
   {
     id: "TM-001",
-    specification: "Food Safety",
+    testCode: "TC-MB-001",
     testName: "Salmonella Detection",
-    sopCode: "SOP-MB-001",
-    tests: "Salmonella spp",
-    unit: "P/A",
-    mu: "N/A",
-    limit: "Absent/25g",
+    testParameter: "Salmonella spp",
+    methodType: "Membrane Filtration",
     methodReference: "ISO 6579-1",
     sampleType: "Raw Meat",
     referenceNo: "REF-2024-001",
-    incubationTemp: "37°C",
-    incubationPeriod: "24-48h",
+    sopCode: "SOP-MB-001",
     warehouseItems: "Peptone Water, XLD Agar"
   },
   {
     id: "TM-002",
-    specification: "Water Quality",
+    testCode: "TC-MB-002",
     testName: "Total Coliforms",
-    sopCode: "SOP-MB-002",
-    tests: "Total Coliforms",
-    unit: "CFU/100ml",
-    mu: "0.12",
-    limit: "<1",
+    testParameter: "E.coli",
+    methodType: "Membrane Filtration",
     methodReference: "Standard Methods 9222B",
     sampleType: "Drinking Water",
     referenceNo: "REF-2024-002",
-    incubationTemp: "35°C",
-    incubationPeriod: "24h",
+    sopCode: "SOP-MB-002",
     warehouseItems: "m-Endo Agar"
   }
+];
+
+export const methodTypeLibrary: MethodTypeMaster[] = [
+  { id: 'MT-001', name: 'Electrometric', category: 'Chemical' },
+  { id: 'MT-002', name: 'Gravimetric', category: 'Physical' },
+  { id: 'MT-003', name: 'Titration', category: 'Chemical' },
+  { id: 'MT-004', name: 'EDTA Titration', category: 'Chemical' },
+  { id: 'MT-005', name: 'Membrane Filtration', category: 'Microbiology' },
+  { id: 'MT-006', name: 'Conductometry', category: 'Physical' },
+  { id: 'MT-007', name: 'Loss on Drying', category: 'Physical' },
+  { id: 'MT-008', name: 'Brookfield', category: 'Physical' },
+  { id: 'MT-009', name: 'Visual', category: 'Physical' },
+  { id: 'MT-010', name: 'Spectrophotometry', category: 'Chemical' },
+  { id: 'MT-011', name: 'pH Meter', category: 'Chemical' },
+  { id: 'MT-012', name: 'HPLC', category: 'Chemical' },
+  { id: 'MT-013', name: 'GC-MS', category: 'Chemical' },
+  { id: 'MT-014', name: 'PCR', category: 'Microbiology' },
+  { id: 'MT-015', name: 'Plate Count', category: 'Microbiology' },
 ];

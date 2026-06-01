@@ -15,26 +15,60 @@ export default function SpecificationList() {
   const [specs] = useState(mockSpecifications);
 
   const columns = [
-    { 
-      key: "code", 
+    {
+      key: "code",
       header: isRtl ? "كود المواصفة" : "Spec Code",
       render: (item: any) => <span className="font-mono font-medium">{item.code}</span>
     },
     { key: "name", header: isRtl ? "اسم المواصفة" : "Specification Name" },
     { key: "productName", header: isRtl ? "المنتج / المادة" : "Product / Material" },
-    { 
-      key: "version", 
+    {
+      key: "sopCode",
+      header: isRtl ? "كود SOP" : "SOP CODE",
+      render: (item: any) => {
+        const codes = Array.from(new Set((item.parameters || []).map((p: any) => p.sopCode).filter((v: unknown): v is string => !!v))) as string[];
+        return <span className="font-mono text-xs">{codes[0] || "—"}</span>;
+      }
+    },
+    {
+      key: "tests",
+      header: isRtl ? "الاختبارات" : "Tests",
+      render: (item: any) => {
+        const names = (item.parameters || []).map((p: any) => p.name).filter((v: unknown): v is string => !!v) as string[];
+        return <span className="text-xs">{names.slice(0, 2).join(", ")}{names.length > 2 ? "…" : ""}</span>;
+      }
+    },
+    {
+      key: "referenceNo",
+      header: isRtl ? "رقم المرجع GL" : "GL Reference No",
+      render: (item: any) => {
+        const refs = Array.from(new Set((item.parameters || []).map((p: any) => p.referenceNo).filter((v: unknown): v is string => !!v))) as string[];
+        return <span className="font-mono text-xs">{refs[0] || "—"}</span>;
+      }
+    },
+    {
+      key: "limitRange",
+      header: isRtl ? "الحد (أدنى-أقصى)" : "Limit (Min–Max)",
+      render: (item: any) => {
+        const first = (item.parameters || [])[0];
+        if (!first) return <span className="text-muted-foreground">—</span>;
+        const range = first.limitRange || `${first.min ?? ""}${first.min || first.max ? " - " : ""}${first.max ?? ""}`.trim();
+        return <span className="text-xs font-mono">{range || "—"}</span>;
+      }
+    },
+    {
+      key: "version",
       header: isRtl ? "الإصدار" : "Version",
       render: (item: any) => <Badge variant="secondary">v{item.version}</Badge>
     },
-    { 
-      key: "status", 
+    {
+      key: "status",
       header: isRtl ? "الحالة" : "Status",
       render: (item: any) => <StatusBadge status={item.status} />
     },
     { key: "effectiveDate", header: isRtl ? "تاريخ التفعيل" : "Effective Date" },
-    { 
-      key: "actions", 
+    {
+      key: "actions",
       header: "",
       render: (item: any) => (
         <div className="flex gap-2">
