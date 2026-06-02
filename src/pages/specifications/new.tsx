@@ -1,7 +1,7 @@
 
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { parameterLibrary, mockSpecifications, testMasterData, TestMaster } from "@/mock-data/specifications";
+import { parameterLibrary, mockSpecifications } from "@/mock-data/specifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,40 +73,68 @@ export default function NewSpecification() {
   const [searchQuery, setSearchQuery] = useState("");
   const [openSuggFor, setOpenSuggFor] = useState<{ [id: string]: "tests" | "sopCode" | "referenceNo" | null }>({});
 
-  const [testDialogOpen, setTestDialogOpen] = useState(false);
-  const [testSearch, setTestSearch] = useState("");
-  const [selectedTestIds, setSelectedTestIds] = useState<string[]>([]);
-  const [tests, setTests] = useState<TestMaster[]>([]);
+  // Multi-select dialog for adding test parameters from the parameter library
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerSelectedIds, setPickerSelectedIds] = useState<string[]>([]);
 
-  const filteredTestLibrary = useMemo(() => {
-    const q = testSearch.toLowerCase().trim();
-    if (!q) return testMasterData;
-    return testMasterData.filter(t =>
-      t.testName.toLowerCase().includes(q) ||
-      t.sopCode.toLowerCase().includes(q) ||
-      t.tests.toLowerCase().includes(q) ||
-      t.referenceNo.toLowerCase().includes(q)
+  const filteredPickerLibrary = useMemo(() => {
+    const q = pickerSearch.toLowerCase().trim();
+    if (!q) return parameterLibrary;
+    return parameterLibrary.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.method.toLowerCase().includes(q) ||
+      p.unit.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
     );
-  }, [testSearch]);
+  }, [pickerSearch]);
 
-  const toggleTestSelection = (id: string) => {
-    setSelectedTestIds(prev =>
+  const togglePickerSelection = (id: string) => {
+    setPickerSelectedIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
 
-  const applyTestSelection = () => {
-    const picks = testMasterData.filter(t => selectedTestIds.includes(t.id));
-    setTests(prev => {
-      const existing = new Set(prev.map(t => t.id));
-      return [...prev, ...picks.filter(p => !existing.has(p.id))];
+  const applyPickerSelection = () => {
+    const picks = parameterLibrary.filter(p => pickerSelectedIds.includes(p.id));
+    setParameters(prev => {
+      const existing = new Set(prev.map(p => p.parameterId));
+      const toAdd = picks
+        .filter(p => !existing.has(p.id))
+        .map(paramMaster => ({
+          parameterId: paramMaster.id,
+          name: paramMaster.name,
+          method: paramMaster.method,
+          unit: paramMaster.unit,
+          sopCode: `SOP-${paramMaster.id}`,
+          tests: paramMaster.name,
+          referenceNo: `REF-${paramMaster.category?.slice(0, 2).toUpperCase() || "GL"}-${paramMaster.id}`,
+          limitRange: "",
+          min: "",
+          max: "",
+          target: "",
+          limitType: "Range",
+          mandatory: true,
+        }));
+      return [...prev, ...toAdd];
     });
-    setTestDialogOpen(false);
-    setTestSearch("");
+    setPickerOpen(false);
+    setPickerSearch("");
+    setPickerSelectedIds([]);
+    if (picks.length > 0) {
+      toast.success(
+        isRtl
+          ? `تم إضافة ${picks.length} معلمة بنجاح`
+          : `${picks.length} parameter${picks.length > 1 ? "s" : ""} added`
+      );
+    }
   };
 
-  const removeTest = (id: string) => {
-    setTests(tests.filter(t => t.id !== id));
+  const openPickerDialog = () => {
+    // Pre-select parameters that are already added so user can adjust
+    setPickerSelectedIds(parameters.map(p => p.parameterId));
+    setPickerSearch("");
+    setPickerOpen(true);
   };
 
   const handleAddParameter = (paramMaster: any) => {
@@ -383,10 +411,7 @@ export default function NewSpecification() {
             <div className="flex items-center gap-2">
               <Button
                 variant="secondary"
-                onClick={() => {
-                  setSelectedTestIds(tests.map(t => t.id));
-                  setTestDialogOpen(true);
-                }}
+                onClick={openPickerDialog}
               >
                 <TestTube2 className="mr-2 h-4 w-4" />
                 {isRtl ? "إضافة معلمة اختبار" : "Add Test Parameter"}
@@ -517,109 +542,42 @@ export default function NewSpecification() {
             </Table>
           </CardContent>
         </Card>
-
-        {/* Tests Section */}
-        <Card className="lg:col-span-3 border-primary/10 shadow-sm">
-          <CardHeader className="border-b py-4 flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <TestTube2 className="h-5 w-5 text-primary" />
-                {isRtl ? "معلمات الاختبار" : "Test Parameters"}
-              </CardTitle>
-              <CardDescription>
-                {isRtl ? "اختر معلمات الاختبار من القائمة الرئيسية وأضفها إلى هذه المواصفة" : "Select test parameters from the master list to attach to this specification"}
-              </CardDescription>
-            </div>
-            <Button
-              onClick={() => {
-                setSelectedTestIds(tests.map(t => t.id));
-                setTestDialogOpen(true);
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {isRtl ? "إضافة معلمة اختبار" : "Add Test Parameter"}
-            </Button>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="w-[180px]">{isRtl ? "اسم معلمة الاختبار" : "Test Parameter Name"}</TableHead>
-                  <TableHead className="w-[140px]">{isRtl ? "كود SOP" : "SOP CODE"}</TableHead>
-                  <TableHead className="w-[150px]">{isRtl ? "قائمة معلمات الاختبار" : "Test Parameter List"}</TableHead>
-                  <TableHead className="w-[140px]">{isRtl ? "الوحدة" : "Unit"}</TableHead>
-                  <TableHead className="w-[140px]">{isRtl ? "الحد" : "Limit"}</TableHead>
-                  <TableHead>{isRtl ? "نوع العينة" : "Sample Type"}</TableHead>
-                  <TableHead className="w-[140px]">{isRtl ? "رقم المرجع" : "Reference No"}</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tests.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground italic">
-                      {isRtl ? "لم يتم إضافة معلمات اختبار بعد." : "No test parameters added yet. Use “Add Test Parameter” to choose from the master list."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  tests.map(t => (
-                    <TableRow key={t.id}>
-                      <TableCell className="font-medium text-primary">{t.testName}</TableCell>
-                      <TableCell className="font-mono text-xs">{t.sopCode}</TableCell>
-                      <TableCell className="text-xs">{t.tests}</TableCell>
-                      <TableCell className="text-xs">{t.unit}</TableCell>
-                      <TableCell className="text-xs font-mono">{t.limit}</TableCell>
-                      <TableCell className="text-xs">{t.sampleType}</TableCell>
-                      <TableCell className="font-mono text-xs">{t.referenceNo}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                          onClick={() => removeTest(t.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* Test selection dialog */}
-      <Dialog open={testDialogOpen} onOpenChange={setTestDialogOpen}>
-        <DialogContent className="sm:max-w-[700px]">
+      {/* Multi-select picker for adding parameters from the parameter library */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="sm:max-w-[720px]">
           <DialogHeader>
-            <DialogTitle>{isRtl ? "اختر معلمات الاختبار" : "Select Test Parameters"}</DialogTitle>
+            <DialogTitle>
+              {isRtl ? "اختر معلمات الاختبار من المكتبة" : "Pick Test Parameters from Library"}
+            </DialogTitle>
             <DialogDescription>
-              {isRtl ? "اختر معلمة اختبار واحدة أو أكثر من القائمة الرئيسية للمواصفات." : "Pick one or more test parameters from the master list to attach to this specification."}
+              {isRtl
+                ? "اختر معلمة أو أكثر من مكتبة المعلمات. ستظهر جميعها في الجدول ويمكنك تعديل الوحدة، الحد، الهدف، نوع الحد، والإلزامية لكل صف."
+                : "Select one or more parameters from the parameter library. They will appear in the table below where you can edit unit, limit, target, limit type, and mandatory for each row."}
             </DialogDescription>
           </DialogHeader>
           <div className="relative">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder={isRtl ? "بحث في معلمات الاختبار..." : "Search test parameters..."}
+              placeholder={isRtl ? "بحث في مكتبة المعلمات..." : "Search parameter library..."}
               className="pl-8"
-              value={testSearch}
-              onChange={(e) => setTestSearch(e.target.value)}
+              value={pickerSearch}
+              onChange={(e) => setPickerSearch(e.target.value)}
             />
           </div>
           <ScrollArea className="max-h-[55vh] border rounded-md">
             <div className="divide-y">
-              {filteredTestLibrary.length === 0 && (
+              {filteredPickerLibrary.length === 0 && (
                 <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  {isRtl ? "لا توجد معلمات اختبار" : "No test parameters found"}
+                  {isRtl ? "لا توجد معلمات" : "No parameters found"}
                 </div>
               )}
-              {filteredTestLibrary.map(t => {
-                const checked = selectedTestIds.includes(t.id);
+              {filteredPickerLibrary.map(p => {
+                const checked = pickerSelectedIds.includes(p.id);
                 return (
                   <label
-                    key={t.id}
+                    key={p.id}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-accent/50",
                       checked && "bg-accent/30"
@@ -627,27 +585,26 @@ export default function NewSpecification() {
                   >
                     <Checkbox
                       checked={checked}
-                      onCheckedChange={() => toggleTestSelection(t.id)}
+                      onCheckedChange={() => togglePickerSelection(p.id)}
                     />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-primary">{t.testName}</p>
+                      <p className="text-sm font-medium text-primary">{p.name}</p>
                       <p className="text-[11px] text-muted-foreground font-mono">
-                        {t.sopCode} · {t.tests} · {t.limit} · {t.sampleType}
+                        {p.id} · {p.method} · {p.unit} · {p.category}
                       </p>
                     </div>
-                    <span className="text-[11px] text-muted-foreground font-mono">{t.referenceNo}</span>
                   </label>
                 );
               })}
             </div>
           </ScrollArea>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTestDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setPickerOpen(false)}>
               {isRtl ? "إلغاء" : "Cancel"}
             </Button>
-            <Button onClick={applyTestSelection} disabled={selectedTestIds.length === 0}>
+            <Button onClick={applyPickerSelection}>
               {isRtl ? "إضافة" : "Add"}{" "}
-              {selectedTestIds.length > 0 && `(${selectedTestIds.length})`}
+              {pickerSelectedIds.length > 0 && `(${pickerSelectedIds.length})`}
             </Button>
           </DialogFooter>
         </DialogContent>
