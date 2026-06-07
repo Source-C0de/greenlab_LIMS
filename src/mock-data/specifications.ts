@@ -46,16 +46,29 @@ export interface Specification {
   id: string;
   code: string;
   name: string;
-  productName: string;
   category: string;
-  department: string;
-  status: 'Draft' | 'Pending' | 'Approved' | 'Active';
-  effectiveDate: string;
-  reviewDate: string;
+  issuanceDate: string;
   parameters: SpecParameter[];
-  version: string;
-  createdBy: string;
-  createdAt: string;
+  tests?: SpecTest[];
+}
+
+export interface SpecTest {
+  testId: string;
+  testCode: string;
+  testName: string;
+  testParameter: string;
+  methodType: string;
+  methodReference: string;
+  sampleType: string;
+  referenceNo: string;
+  sopCode: string;
+  unit: string;
+  limitRange: string;
+  min: string | number | null;
+  max: string | number | null;
+  target: string | number | null;
+  limitType: 'Range' | 'Max Only' | 'Min Only' | 'Exact Value' | 'Pass / Fail' | 'Text' | 'Not Detected';
+  mandatory: boolean;
 }
 
 export const parameterLibrary: ParameterMaster[] = [
@@ -75,15 +88,8 @@ export const mockSpecifications: Specification[] = [
     id: 'SPEC-001',
     code: 'SPEC-DW-001',
     name: 'Drinking Water Standard',
-    productName: 'Drinking Water',
     category: 'Water',
-    department: 'Environmental',
-    status: 'Active',
-    effectiveDate: '2024-01-01',
-    reviewDate: '2025-01-01',
-    version: '1.0',
-    createdBy: 'John Doe',
-    createdAt: '2023-12-15',
+    issuanceDate: '2024-01-01',
     parameters: [
       { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '6.5 - 8.5', min: 6.5, max: 8.5, target: 7.5, limitType: 'Range', mandatory: true },
       { parameterId: 'PM-003', name: 'Chloride', method: 'Titration', unit: 'mg/L', sopCode: 'SOP-PM-003', tests: 'Chloride', referenceNo: 'REF-CH-PM-003', limitRange: '0 - 250', min: null, max: 250, target: null, limitType: 'Max Only', mandatory: true },
@@ -95,15 +101,8 @@ export const mockSpecifications: Specification[] = [
     id: 'SPEC-002',
     code: 'SPEC-W-002',
     name: 'Industrial Waste Water',
-    productName: 'Waste Water',
     category: 'Water',
-    department: 'Environmental',
-    status: 'Pending',
-    effectiveDate: '2024-05-01',
-    reviewDate: '2026-05-01',
-    version: '1.1',
-    createdBy: 'Jane Smith',
-    createdAt: '2024-04-10',
+    issuanceDate: '2024-05-01',
     parameters: [
       { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '5.5 - 9.5', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
       { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', sopCode: 'SOP-PM-002', tests: 'TDS', referenceNo: 'REF-PH-PM-002', limitRange: '0 - 2000', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
@@ -113,15 +112,8 @@ export const mockSpecifications: Specification[] = [
     id: "SPEC-003",
     code: "SPEC-W-003",
     name: "Industrial Waste Water 2",
-    productName: "Waste Water",
     category: "Water",
-    department: "Environmental",
-    status: "Pending",
-    effectiveDate: "2024-05-01",
-    reviewDate: "2026-05-01",
-    version: "1.1",
-    createdBy: "Jane Smith",
-    createdAt: "2024-04-10",
+    issuanceDate: "2024-05-01",
     parameters: [
       { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '5.5 - 9.5', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
       { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', sopCode: 'SOP-PM-002', tests: 'TDS', referenceNo: 'REF-PH-PM-002', limitRange: '0 - 2000', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },

@@ -1,5 +1,5 @@
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { parameterLibrary, mockSpecifications, testMasterData } from "@/mock-data/specifications";
 import { Button } from "@/components/ui/button";
@@ -56,16 +56,39 @@ export default function NewSpecification() {
   const [, setLocation] = useLocation();
   const { language } = useAppContext();
   const isRtl = language === 'ar';
-  
-  const [formData, setFormData] = useState({
-    code: `SPEC-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
-    name: "",
-    category: "",
-    issuanceDate: new Date().toISOString().split('T')[0],
-  });
 
-  const [parameters, setParameters] = useState<any[]>([]);
-  const [tests, setTests] = useState<any[]>([]);
+  // Edit-mode support: read optional `?id=...` query param
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const editId = useMemo(() => {
+    const params = new URLSearchParams(search);
+    return params.get("id");
+  }, [search]);
+  const editingSpec = useMemo(
+    () => (editId ? mockSpecifications.find((s) => s.id === editId) : undefined),
+    [editId]
+  );
+
+  const [formData, setFormData] = useState(() =>
+    editingSpec
+      ? {
+          code: editingSpec.code,
+          name: editingSpec.name,
+          category: editingSpec.category || "",
+          issuanceDate:
+            editingSpec.issuanceDate || new Date().toISOString().split("T")[0],
+        }
+      : {
+          code: `SPEC-${Math.floor(Math.random() * 10000)
+            .toString()
+            .padStart(4, "0")}`,
+          name: "",
+          category: "",
+          issuanceDate: new Date().toISOString().split("T")[0],
+        }
+  );
+
+  const [parameters, setParameters] = useState<any[]>(editingSpec?.parameters || []);
+  const [tests, setTests] = useState<any[]>(editingSpec?.tests || []);
   const [searchQuery, setSearchQuery] = useState("");
   const [testSearchQuery, setTestSearchQuery] = useState("");
   const [openSuggFor, setOpenSuggFor] = useState<{ [id: string]: "tests" | "sopCode" | "referenceNo" | null }>({});
@@ -408,7 +431,45 @@ export default function NewSpecification() {
       return;
     }
 
-    toast.success(isRtl ? "تم حفظ المواصفة بنجاح" : "Specification saved successfully");
+    if (editingSpec) {
+      // Update in place
+      const idx = mockSpecifications.findIndex((s) => s.id === editingSpec.id);
+      if (idx >= 0) {
+        mockSpecifications[idx] = {
+          ...mockSpecifications[idx],
+          code: formData.code,
+          name: formData.name,
+          category: formData.category,
+          issuanceDate: formData.issuanceDate,
+          parameters,
+          tests,
+        };
+      }
+      toast.success(
+        isRtl
+          ? `تم تحديث المواصفة ${formData.code} بنجاح`
+          : `Specification ${formData.code} updated successfully`
+      );
+    } else {
+      // Create new
+      const newSpec = {
+        id: `SPEC-${Math.floor(Math.random() * 10000)
+          .toString()
+          .padStart(4, "0")}`,
+        code: formData.code,
+        name: formData.name,
+        category: formData.category,
+        issuanceDate: formData.issuanceDate,
+        parameters,
+        tests,
+      };
+      mockSpecifications.unshift(newSpec);
+      toast.success(
+        isRtl
+          ? `تم حفظ المواصفة ${formData.code} بنجاح`
+          : `Specification ${formData.code} saved successfully`
+      );
+    }
     setLocation("/specifications");
   };
 
@@ -429,10 +490,22 @@ export default function NewSpecification() {
         </Button>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            {isRtl ? "إضافة مواصفة جديدة" : "Add New Specification"}
+            {editingSpec
+              ? isRtl
+                ? `تعديل المواصفة: ${formData.code}`
+                : `Edit Specification: ${formData.code}`
+              : isRtl
+              ? "إضافة مواصفة جديدة"
+              : "Add New Specification"}
           </h1>
           <p className="text-muted-foreground">
-            {isRtl ? "إنشاء معايير جودة جديدة للمنتجات والمواد" : "Create new quality standards for products and materials"}
+            {editingSpec
+              ? isRtl
+                ? "تحديث معايير الجودة والاختبارات لهذه المواصفة"
+                : "Update quality standards and tests for this specification"
+              : isRtl
+              ? "إنشاء معايير جودة جديدة للمنتجات والمواد"
+              : "Create new quality standards for products and materials"}
           </p>
         </div>
       </div>
@@ -462,7 +535,10 @@ export default function NewSpecification() {
               </div>
               <div className="space-y-2">
                 <Label>{isRtl ? "الفئة" : "Category"}</Label>
-                <Select onValueChange={(val) => setFormData({ ...formData, category: val })}>
+                <Select
+                  value={formData.category}
+                  onValueChange={(val) => setFormData({ ...formData, category: val })}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder={isRtl ? "اختر الفئة" : "Select category"} />
                   </SelectTrigger>
