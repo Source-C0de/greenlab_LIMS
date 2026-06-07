@@ -1,7 +1,7 @@
 
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { parameterLibrary, mockSpecifications } from "@/mock-data/specifications";
+import { parameterLibrary, mockSpecifications, testMasterData } from "@/mock-data/specifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,7 +40,6 @@ import {
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
@@ -61,22 +60,25 @@ export default function NewSpecification() {
   const [formData, setFormData] = useState({
     code: `SPEC-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
     name: "",
-    productName: "",
     category: "",
-    department: "",
-    status: "Draft",
-    effectiveDate: new Date().toISOString().split('T')[0],
-    reviewDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
+    issuanceDate: new Date().toISOString().split('T')[0],
   });
 
   const [parameters, setParameters] = useState<any[]>([]);
+  const [tests, setTests] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [testSearchQuery, setTestSearchQuery] = useState("");
   const [openSuggFor, setOpenSuggFor] = useState<{ [id: string]: "tests" | "sopCode" | "referenceNo" | null }>({});
 
   // Multi-select dialog for adding test parameters from the parameter library
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerSelectedIds, setPickerSelectedIds] = useState<string[]>([]);
+
+  // Multi-select dialog for adding tests from the test master list
+  const [testPickerOpen, setTestPickerOpen] = useState(false);
+  const [testPickerSearch, setTestPickerSearch] = useState("");
+  const [testPickerSelectedIds, setTestPickerSelectedIds] = useState<string[]>([]);
 
   const filteredPickerLibrary = useMemo(() => {
     const q = pickerSearch.toLowerCase().trim();
@@ -136,6 +138,128 @@ export default function NewSpecification() {
     setPickerSearch("");
     setPickerOpen(true);
   };
+
+  // ----- Tests segment (search from testMasterData) -----
+  const filteredTestPickerLibrary = useMemo(() => {
+    const q = testPickerSearch.toLowerCase().trim();
+    if (!q) return testMasterData;
+    return testMasterData.filter(t =>
+      t.testName.toLowerCase().includes(q) ||
+      t.testCode.toLowerCase().includes(q) ||
+      t.testParameter.toLowerCase().includes(q) ||
+      t.methodType.toLowerCase().includes(q) ||
+      t.sampleType.toLowerCase().includes(q)
+    );
+  }, [testPickerSearch]);
+
+  const toggleTestPickerSelection = (id: string) => {
+    setTestPickerSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const applyTestPickerSelection = () => {
+    const picks = testMasterData.filter(t => testPickerSelectedIds.includes(t.id));
+    setTests(prev => {
+      const existing = new Set(prev.map(t => t.testId));
+      const toAdd = picks
+        .filter(t => !existing.has(t.id))
+        .map(testMaster => ({
+          testId: testMaster.id,
+          testCode: testMaster.testCode,
+          testName: testMaster.testName,
+          testParameter: testMaster.testParameter,
+          methodType: testMaster.methodType,
+          methodReference: testMaster.methodReference,
+          sampleType: testMaster.sampleType,
+          referenceNo: testMaster.referenceNo,
+          sopCode: testMaster.sopCode,
+          unit: "",
+          limitRange: "",
+          min: "",
+          max: "",
+          target: "",
+          limitType: "Range",
+          mandatory: true,
+        }));
+      return [...prev, ...toAdd];
+    });
+    setTestPickerOpen(false);
+    setTestPickerSearch("");
+    setTestPickerSelectedIds([]);
+    if (picks.length > 0) {
+      toast.success(
+        isRtl
+          ? `تم إضافة ${picks.length} اختبار بنجاح`
+          : `${picks.length} test${picks.length > 1 ? "s" : ""} added`
+      );
+    }
+  };
+
+  const openTestPickerDialog = () => {
+    setTestPickerSelectedIds(tests.map(t => t.testId));
+    setTestPickerSearch("");
+    setTestPickerOpen(true);
+  };
+
+  const handleAddTest = (testMaster: any) => {
+    const exists = tests.find(t => t.testId === testMaster.id);
+    if (exists) {
+      toast.error(isRtl ? "الاختبار موجود بالفعل" : "Test already added");
+      return;
+    }
+
+    const newTest = {
+      testId: testMaster.id,
+      testCode: testMaster.testCode,
+      testName: testMaster.testName,
+      testParameter: testMaster.testParameter,
+      methodType: testMaster.methodType,
+      methodReference: testMaster.methodReference,
+      sampleType: testMaster.sampleType,
+      referenceNo: testMaster.referenceNo,
+      sopCode: testMaster.sopCode,
+      unit: "",
+      limitRange: "",
+      min: "",
+      max: "",
+      target: "",
+      limitType: "Range",
+      mandatory: true,
+    };
+
+    setTests([...tests, newTest]);
+    setTestSearchQuery("");
+  };
+
+  const handleRemoveTest = (id: string) => {
+    setTests(tests.filter(t => t.testId !== id));
+  };
+
+  const handleTestChange = (id: string, field: string, value: any) => {
+    setTests(tests.map(t =>
+      t.testId === id ? { ...t, [field]: value } : t
+    ));
+  };
+
+  const applyTestLimitRange = (id: string, range: string) => {
+    const match = range.match(/^(-?\d*\.?\d+)\s*[-–to]+\s*(-?\d*\.?\d+)$/i);
+    if (match) {
+      setTests(tests.map(t =>
+        t.testId === id
+          ? { ...t, limitRange: range, min: match[1], max: match[2] }
+          : t
+      ));
+    } else {
+      handleTestChange(id, "limitRange", range);
+    }
+  };
+
+  const filteredTestLibrary = testMasterData.filter(t =>
+    t.testName.toLowerCase().includes(testSearchQuery.toLowerCase()) ||
+    t.testCode.toLowerCase().includes(testSearchQuery.toLowerCase()) ||
+    t.testParameter.toLowerCase().includes(testSearchQuery.toLowerCase())
+  );
 
   const handleAddParameter = (paramMaster: any) => {
     const exists = parameters.find(p => p.parameterId === paramMaster.id);
@@ -274,7 +398,7 @@ export default function NewSpecification() {
   };
 
   const handleSave = () => {
-    if (!formData.name || !formData.productName) {
+    if (!formData.name || !formData.issuanceDate) {
       toast.error(isRtl ? "يرجى ملء جميع الحقول المطلوبة" : "Please fill in all required fields");
       return;
     }
@@ -323,25 +447,17 @@ export default function NewSpecification() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label>{isRtl ? "كود المواصفة" : "Specification Code"}</Label>
                 <Input value={formData.code} disabled className="bg-muted font-mono" />
               </div>
               <div className="space-y-2">
                 <Label>{isRtl ? "اسم المواصفة" : "Specification Name"} <span className="text-destructive">*</span></Label>
-                <Input 
-                  placeholder={isRtl ? "مثال: معيار مياه الشرب" : "e.g. Drinking Water Standard"} 
+                <Input
+                  placeholder={isRtl ? "مثال: معيار مياه الشرب" : "e.g. Drinking Water Standard"}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{isRtl ? "المنتج / المادة" : "Product / Material Name"} <span className="text-destructive">*</span></Label>
-                <Input 
-                  placeholder={isRtl ? "مثال: مياه معبأة" : "e.g. Bottled Water"} 
-                  value={formData.productName}
-                  onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -359,36 +475,11 @@ export default function NewSpecification() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>{isRtl ? "القسم" : "Department"}</Label>
-                <Select onValueChange={(val) => setFormData({ ...formData, department: val })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={isRtl ? "اختر القسم" : "Select department"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Chemical Lab">Chemical Lab</SelectItem>
-                    <SelectItem value="Micro Lab">Micro Lab</SelectItem>
-                    <SelectItem value="Physical Lab">Physical Lab</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>{isRtl ? "الحالة" : "Status"}</Label>
-                <Badge variant="outline" className="h-10 px-4 w-full justify-center">Draft</Badge>
-              </div>
-              <div className="space-y-2">
-                <Label>{isRtl ? "تاريخ التفعيل" : "Effective Date"}</Label>
-                <Input 
-                  type="date" 
-                  value={formData.effectiveDate}
-                  onChange={(e) => setFormData({ ...formData, effectiveDate: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{isRtl ? "تاريخ المراجعة" : "Review Date"}</Label>
-                <Input 
-                  type="date" 
-                  value={formData.reviewDate}
-                  onChange={(e) => setFormData({ ...formData, reviewDate: e.target.value })}
+                <Label>{isRtl ? "تاريخ الإصدار" : "Issuance Date"} <span className="text-destructive">*</span></Label>
+                <Input
+                  type="date"
+                  value={formData.issuanceDate}
+                  onChange={(e) => setFormData({ ...formData, issuanceDate: e.target.value })}
                 />
               </div>
             </div>
@@ -542,6 +633,181 @@ export default function NewSpecification() {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Tests Section - search from testMasterData (not parameter library) */}
+        <Card className="lg:col-span-3 border-primary/10 shadow-sm">
+          <CardHeader className="border-b py-4 flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <TestTube2 className="h-5 w-5 text-primary" />
+                {isRtl ? "الاختبارات" : "Tests"}
+              </CardTitle>
+              <CardDescription>
+                {isRtl ? "أضف الاختبارات المرتبطة بهذه المواصفة" : "Add tests linked to this specification"}
+              </CardDescription>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={openTestPickerDialog}
+              >
+                <TestTube2 className="mr-2 h-4 w-4" />
+                {isRtl ? "إضافة اختبار" : "Add Test"}
+              </Button>
+              <div className="relative w-72">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={isRtl ? "البحث في قائمة الاختبارات..." : "Search test list..."}
+                  className="pl-8"
+                  value={testSearchQuery}
+                  onChange={(e) => setTestSearchQuery(e.target.value)}
+                />
+                {testSearchQuery && (
+                  <div className="absolute top-full left-0 w-full mt-1 bg-popover border rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                    {filteredTestLibrary.map(t => (
+                      <div
+                        key={t.id}
+                        className="px-3 py-2 hover:bg-accent cursor-pointer border-b last:border-0 flex justify-between items-center"
+                        onClick={() => handleAddTest(t)}
+                      >
+                        <div>
+                          <p className="text-sm font-medium">{t.testName}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">
+                            {t.testCode} · {t.testParameter} · {t.methodType}
+                          </p>
+                        </div>
+                        <Plus className="h-3 w-3 text-primary" />
+                      </div>
+                    ))}
+                    {filteredTestLibrary.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                        {isRtl ? "لا توجد اختبارات" : "No tests found"}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="w-[180px]">{isRtl ? "الاختبار" : "Test"}</TableHead>
+                  <TableHead className="w-[140px]">{isRtl ? "كود SOP" : "SOP CODE"}</TableHead>
+                  <TableHead className="w-[160px]">{isRtl ? "قائمة معلمات الاختبار" : "Test Parameter List"}</TableHead>
+                  <TableHead className="w-[150px]">{isRtl ? "رقم المرجع GL" : "GL Reference No"}</TableHead>
+                  <TableHead>{isRtl ? "الطريقة" : "Method"}</TableHead>
+                  <TableHead className="w-[100px]">{isRtl ? "الوحدة" : "Unit"}</TableHead>
+                  <TableHead className="w-[150px]">{isRtl ? "الحد (أدنى-أقصى)" : "Limit (Min–Max)"}</TableHead>
+                  <TableHead className="w-[120px]">{isRtl ? "الهدف" : "Target"}</TableHead>
+                  <TableHead className="w-[180px]">{isRtl ? "نوع الحد" : "Limit Type"}</TableHead>
+                  <TableHead className="w-[100px] text-center">{isRtl ? "إلزامي" : "Mandatory"}</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tests.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="h-32 text-center text-muted-foreground italic">
+                      {isRtl ? "لم يتم إضافة اختبارات بعد. استخدم البحث أعلاه للإضافة." : "No tests added yet. Use the search above to add."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  tests.map((t) => (
+                    <TableRow key={t.testId}>
+                      <TableCell className="font-medium">
+                        <div>{t.testName}</div>
+                        <div className="text-[10px] font-mono text-muted-foreground">{t.testCode}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-8"
+                          value={t.sopCode}
+                          onChange={(e) => handleTestChange(t.testId, 'sopCode', e.target.value)}
+                          placeholder="SOP-..."
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-8"
+                          value={t.testParameter}
+                          onChange={(e) => handleTestChange(t.testId, 'testParameter', e.target.value)}
+                          placeholder={isRtl ? "معلمة..." : "Parameter..."}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-8"
+                          value={t.referenceNo}
+                          onChange={(e) => handleTestChange(t.testId, 'referenceNo', e.target.value)}
+                          placeholder="REF-..."
+                        />
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{t.methodType}</TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-8"
+                          value={t.unit}
+                          onChange={(e) => handleTestChange(t.testId, 'unit', e.target.value)}
+                          placeholder={isRtl ? "الوحدة" : "Unit"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-8"
+                          value={t.limitRange ?? `${t.min ?? ""}${t.min || t.max ? " - " : ""}${t.max ?? ""}`.trim()}
+                          onChange={(e) => applyTestLimitRange(t.testId, e.target.value)}
+                          placeholder={isRtl ? "مثال: 0.5 - 1.5" : "e.g. 0.5 - 1.5"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-8"
+                          value={t.target}
+                          onChange={(e) => handleTestChange(t.testId, 'target', e.target.value)}
+                          placeholder="Target"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={t.limitType}
+                          onValueChange={(val) => handleTestChange(t.testId, 'limitType', val)}
+                        >
+                          <SelectTrigger className="h-8 py-0">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {limitTypes.map(lt => (
+                              <SelectItem key={lt} value={lt}>{lt}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox
+                          checked={t.mandatory}
+                          onCheckedChange={(val) => handleTestChange(t.testId, 'mandatory', val)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRemoveTest(t.testId)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Multi-select picker for adding parameters from the parameter library */}
@@ -605,6 +871,72 @@ export default function NewSpecification() {
             <Button onClick={applyPickerSelection}>
               {isRtl ? "إضافة" : "Add"}{" "}
               {pickerSelectedIds.length > 0 && `(${pickerSelectedIds.length})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Multi-select picker for adding tests from the test master list */}
+      <Dialog open={testPickerOpen} onOpenChange={setTestPickerOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>
+              {isRtl ? "اختر الاختبارات من القائمة" : "Pick Tests from Test List"}
+            </DialogTitle>
+            <DialogDescription>
+              {isRtl
+                ? "اختر اختبارًا أو أكثر من قائمة الاختبارات الرئيسية. ستظهر جميعها في الجدول ويمكنك تعديل SOP، الوحدة، الحد، الهدف، نوع الحد، والإلزامية لكل صف."
+                : "Select one or more tests from the test master list. They will appear in the table below where you can edit SOP, unit, limit, target, limit type, and mandatory for each row."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={isRtl ? "البحث في قائمة الاختبارات..." : "Search test list..."}
+              className="pl-8"
+              value={testPickerSearch}
+              onChange={(e) => setTestPickerSearch(e.target.value)}
+            />
+          </div>
+          <ScrollArea className="max-h-[55vh] border rounded-md">
+            <div className="divide-y">
+              {filteredTestPickerLibrary.length === 0 && (
+                <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  {isRtl ? "لا توجد اختبارات" : "No tests found"}
+                </div>
+              )}
+              {filteredTestPickerLibrary.map(t => {
+                const checked = testPickerSelectedIds.includes(t.id);
+                return (
+                  <label
+                    key={t.id}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-accent/50",
+                      checked && "bg-accent/30"
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleTestPickerSelection(t.id)}
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-primary">{t.testName}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">
+                        {t.testCode} · {t.testParameter} · {t.methodType} · {t.sampleType}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestPickerOpen(false)}>
+              {isRtl ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button onClick={applyTestPickerSelection}>
+              {isRtl ? "إضافة" : "Add"}{" "}
+              {testPickerSelectedIds.length > 0 && `(${testPickerSelectedIds.length})`}
             </Button>
           </DialogFooter>
         </DialogContent>
