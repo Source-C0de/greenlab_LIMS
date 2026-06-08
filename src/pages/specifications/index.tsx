@@ -139,7 +139,7 @@ export default function SpecificationList() {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-primary hover:bg-primary/10"
-            onClick={() => setLocation(`/specifications/edit/${item.id}`)}
+            onClick={() => setLocation(`/specifications/new?id=${item.id}`)}
             title={isRtl ? "تعديل" : "Edit"}
           >
             <Pencil className="h-4 w-4" />
@@ -336,7 +336,7 @@ export default function SpecificationList() {
                 if (!viewTarget) return;
                 const id = viewTarget.id;
                 setViewTarget(null);
-                setLocation(`/specifications/edit/${id}`);
+                setLocation(`/specifications/new?id=${id}`);
               }}
             >
               <Pencil className="mr-2 h-4 w-4" />

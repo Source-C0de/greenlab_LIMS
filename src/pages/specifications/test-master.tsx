@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
   testMasterData,
   TestMaster,
-  methodTypeLibrary,
   parameterLibrary,
 } from "@/mock-data/specifications";
 import { DataTable } from "@/components/shared/DataTable";
@@ -12,10 +11,11 @@ import {
   Download,
   Loader2,
   TestTube2,
-  Search,
   Eye,
+  Pencil,
+  Trash2,
+  X,
   Check,
-  ChevronsUpDown,
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import {
@@ -36,10 +36,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from "@/lib/utils";
 
 type FormState = {
-  testCode: string;
   testName: string;
-  testParameter: string;
-  methodType: string;
+  testParameters: string[]; // multiple parameter names from parameterLibrary
   methodReference: string;
   sampleType: string;
   referenceNo: string;
@@ -48,10 +46,8 @@ type FormState = {
 };
 
 const emptyForm: FormState = {
-  testCode: "",
   testName: "",
-  testParameter: "",
-  methodType: "",
+  testParameters: [],
   methodReference: "",
   sampleType: "",
   referenceNo: "",
@@ -59,67 +55,162 @@ const emptyForm: FormState = {
   warehouseItems: "",
 };
 
+// Generate the next sequential GL-TM-N test code based on existing tests.
+function generateNextTestCode(existing: TestMaster[]): string {
+  const max = existing.reduce((acc, t) => {
+    const m = /GL-TM-(\d+)/i.exec(t.testCode);
+    return m ? Math.max(acc, parseInt(m[1], 10)) : acc;
+  }, 0);
+  return `GL-TM-${max + 1}`;
+}
+
 export default function TestMasterPage() {
   const { language } = useAppContext();
   const isRtl = language === 'ar';
   const [tests, setTests] = useState<TestMaster[]>(testMasterData);
-  const [methods, setMethods] = useState(methodTypeLibrary);
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedTest, setSelectedTest] = useState<TestMaster | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<FormState>(emptyForm);
 
-  // Pickers
+  // Multi-select picker for test parameters (sourced from parameterLibrary)
   const [paramOpen, setParamOpen] = useState(false);
-  const [methodOpen, setMethodOpen] = useState(false);
-  const [methodMode, setMethodMode] = useState<"select" | "manual">("select");
-  const [paramMode, setParamMode] = useState<"select" | "manual">("select");
+  const [paramSearch, setParamSearch] = useState("");
+
+  const filteredLibrary = useMemo(() => {
+    const q = paramSearch.toLowerCase().trim();
+    if (!q) return parameterLibrary;
+    return parameterLibrary.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.method.toLowerCase().includes(q) ||
+      p.unit.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q)
+    );
+  }, [paramSearch]);
+
+  const toggleParameter = (name: string) => {
+    setFormData(prev => {
+      const exists = prev.testParameters.includes(name);
+      return {
+        ...prev,
+        testParameters: exists
+          ? prev.testParameters.filter(p => p !== name)
+          : [...prev.testParameters, name],
+      };
+    });
+  };
+
+  const removeParameter = (name: string) => {
+    setFormData(prev => ({
+      ...prev,
+      testParameters: prev.testParameters.filter(p => p !== name),
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.testName || !formData.testCode) {
+    if (!formData.testName) {
       toast.error(isRtl ? "يرجى ملء الحقول المطلوبة" : "Please fill in required fields");
+      return;
+    }
+    if (formData.testParameters.length === 0) {
+      toast.error(
+        isRtl
+          ? "يرجى إضافة معلمة اختبار واحدة على الأقل"
+          : "Please add at least one test parameter"
+      );
       return;
     }
 
     setIsSubmitting(true);
 
     setTimeout(() => {
-      const newTest: TestMaster = {
-        id: `TM-${String(tests.length + 1).padStart(3, '0')}`,
-        ...formData,
-      };
-
-      // If user typed a new method type manually, register it in the master list
-      if (
-        formData.methodType &&
-        !methods.some(m => m.name.toLowerCase() === formData.methodType.toLowerCase())
-      ) {
-        setMethods(prev => [
-          {
-            id: `MT-${String(prev.length + 1).padStart(3, '0')}`,
-            name: formData.methodType,
-            category: 'Other',
-          },
-          ...prev,
-        ]);
+      if (editingId) {
+        // Update existing test
+        setTests(prev =>
+          prev.map(t =>
+            t.id === editingId
+              ? {
+                  ...t,
+                  testName: formData.testName,
+                  // Persist the multiple parameters as a single comma-separated
+                  // string in the existing `testParameter` field.
+                  testParameter: formData.testParameters.join(", "),
+                  methodType: "",
+                  methodReference: formData.methodReference,
+                  sampleType: formData.sampleType,
+                  referenceNo: formData.referenceNo,
+                  sopCode: formData.sopCode,
+                  warehouseItems: formData.warehouseItems,
+                }
+              : t
+          )
+        );
+        toast.success(isRtl ? "تم تحديث الاختبار بنجاح" : "Test updated successfully");
+      } else {
+        const newTest: TestMaster = {
+          id: `TM-${String(tests.length + 1).padStart(3, '0')}`,
+          testCode: generateNextTestCode(tests),
+          testName: formData.testName,
+          // Persist the multiple parameters as a single comma-separated string
+          // in the existing `testParameter` field for backward compatibility.
+          testParameter: formData.testParameters.join(", "),
+          methodType: "",
+          methodReference: formData.methodReference,
+          sampleType: formData.sampleType,
+          referenceNo: formData.referenceNo,
+          sopCode: formData.sopCode,
+          warehouseItems: formData.warehouseItems,
+        };
+        setTests([newTest, ...tests]);
+        toast.success(isRtl ? "تم إضافة الاختبار بنجاح" : "Test added successfully");
       }
-
-      setTests([newTest, ...tests]);
       setIsSubmitting(false);
       setOpen(false);
+      setEditingId(null);
       setFormData(emptyForm);
-      setParamMode("select");
-      setMethodMode("select");
-      toast.success(isRtl ? "تم إضافة الاختبار بنجاح" : "Test added successfully");
+      setParamSearch("");
     }, 600);
   };
 
   const handleView = (test: TestMaster) => {
     setSelectedTest(test);
     setViewOpen(true);
+  };
+
+  const handleEdit = (test: TestMaster) => {
+    setEditingId(test.id);
+    setFormData({
+      testName: test.testName,
+      testParameters: test.testParameter
+        ? test.testParameter.split(",").map(s => s.trim()).filter(Boolean)
+        : [],
+      methodReference: test.methodReference,
+      sampleType: test.sampleType,
+      referenceNo: test.referenceNo,
+      sopCode: test.sopCode,
+      warehouseItems: test.warehouseItems,
+    });
+    setParamSearch("");
+    setOpen(true);
+  };
+
+  const handleAddNew = () => {
+    setEditingId(null);
+    setFormData(emptyForm);
+    setParamSearch("");
+    setOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (!deleteId) return;
+    setTests(prev => prev.filter(t => t.id !== deleteId));
+    toast.success(isRtl ? "تم حذف الاختبار بنجاح" : "Test deleted successfully");
+    setDeleteId(null);
   };
 
   const columns = useMemo(
@@ -140,16 +231,24 @@ export default function TestMasterPage() {
       },
       {
         key: "testParameter",
-        header: isRtl ? "معلمة الاختبار" : "Test Parameter",
+        header: isRtl ? "معلمات الاختبار" : "Test Parameters",
         render: (item: TestMaster) => (
-          <span className="text-xs">{item.testParameter || "—"}</span>
-        ),
-      },
-      {
-        key: "methodType",
-        header: isRtl ? "نوع الطريقة" : "Method Type",
-        render: (item: TestMaster) => (
-          <BadgeLike label={item.methodType} />
+          <div className="flex flex-wrap gap-1 max-w-[260px]">
+            {item.testParameter
+              ? item.testParameter
+                  .split(",")
+                  .map(s => s.trim())
+                  .filter(Boolean)
+                  .map(p => (
+                    <span
+                      key={p}
+                      className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium"
+                    >
+                      {p}
+                    </span>
+                  ))
+              : <span className="text-muted-foreground text-xs">—</span>}
+          </div>
         ),
       },
       {
@@ -157,10 +256,33 @@ export default function TestMasterPage() {
         header: "",
         render: (item: TestMaster) => (
           <div className="flex gap-2 justify-end">
-            <Button variant="ghost" size="icon" onClick={() => handleView(item)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-primary hover:bg-primary/10"
+              onClick={() => handleView(item)}
+              title={isRtl ? "عرض" : "View"}
+            >
               <Eye className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm">{isRtl ? "تعديل" : "Edit"}</Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-primary hover:bg-primary/10"
+              onClick={() => handleEdit(item)}
+              title={isRtl ? "تعديل" : "Edit"}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:bg-destructive/10"
+              onClick={() => setDeleteId(item.id)}
+              title={isRtl ? "حذف" : "Delete"}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         ),
       },
@@ -174,7 +296,7 @@ export default function TestMasterPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
             <TestTube2 className="h-8 w-8 text-primary" />
-            {isRtl ? "معلمات الاختبار" : "Test Parameters"}
+            {isRtl ? "معلمات الاختبار" : "Test Methods"}
           </h1>
           <p className="text-muted-foreground mt-1">
             {isRtl
@@ -184,36 +306,59 @@ export default function TestMasterPage() {
         </div>
 
         <div className="flex gap-2">
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={(v) => {
+            setOpen(v);
+            if (!v) {
+              setEditingId(null);
+              setFormData(emptyForm);
+              setParamSearch("");
+            }
+          }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button onClick={handleAddNew}>
                 <Plus className="mr-2 h-4 w-4" /> {isRtl ? "إضافة معلمة اختبار" : "Add Test Parameter"}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[720px]">
               <DialogHeader>
                 <DialogTitle>
-                  {isRtl ? "إضافة معلمة اختبار جديدة" : "Add New Test Parameter"}
+                  {editingId
+                    ? isRtl
+                      ? "تعديل الاختبار"
+                      : "Edit Test"
+                    : isRtl
+                    ? "إضافة اختبار جديد"
+                    : "Add New Test"}
                 </DialogTitle>
                 <DialogDescription>
-                  {isRtl
-                    ? "اختر معلمة اختبار من المكتبة أو أضف واحدة جديدة، ثم حدد نوع الطريقة."
-                    : "Pick a test parameter from the library or add a new one, then choose a method type."}
+                  {editingId
+                    ? isRtl
+                      ? "قم بتحديث تفاصيل الاختبار ومعلماته."
+                      : "Update the test details and parameters."
+                    : isRtl
+                    ? "سيتم إنشاء كود الاختبار تلقائيًا. اختر معلمة اختبار واحدة أو أكثر من المكتبة، ثم أكمل التفاصيل."
+                    : "The test code is generated automatically. Pick one or more test parameters from the library, then fill in the details."}
                 </DialogDescription>
               </DialogHeader>
 
               <ScrollArea className="max-h-[70vh] px-1">
                 <form id="test-form" onSubmit={handleSubmit} className="space-y-4 py-4 pr-3">
+                  {/* Test Code (auto-generated, read-only) */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="testCode">
-                        {isRtl ? "كود الاختبار" : "Test Code"} <span className="text-destructive">*</span>
+                        {isRtl ? "كود الاختبار" : "Test Code"}
                       </Label>
                       <Input
                         id="testCode"
-                        value={formData.testCode}
-                        onChange={(e) => setFormData({ ...formData, testCode: e.target.value })}
-                        placeholder="e.g. TC-MB-001"
+                        value={
+                          editingId
+                            ? tests.find(t => t.id === editingId)?.testCode ||
+                              generateNextTestCode(tests)
+                            : generateNextTestCode(tests)
+                        }
+                        readOnly
+                        className="bg-muted font-mono cursor-not-allowed"
                       />
                     </div>
                     <div className="grid gap-2">
@@ -229,193 +374,90 @@ export default function TestMasterPage() {
                     </div>
                   </div>
 
-                  {/* Test Parameter (select or manual) */}
+                  {/* Test Parameters (multi-select chips from parameterLibrary) */}
                   <div className="grid gap-2">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="testParameter">
-                        {isRtl ? "معلمة الاختبار" : "Test Parameter"}
+                      <Label>
+                        {isRtl ? "معلمات الاختبار" : "Test Parameters"}{" "}
+                        <span className="text-destructive">*</span>
                       </Label>
-                      <div className="flex items-center gap-1 text-xs">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={paramMode === "select" ? "default" : "outline"}
-                          className="h-6 px-2 text-[11px]"
-                          onClick={() => {
-                            setParamMode("select");
-                            setFormData({ ...formData, testParameter: "" });
-                          }}
-                        >
-                          {isRtl ? "قائمة" : "From list"}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={paramMode === "manual" ? "default" : "outline"}
-                          className="h-6 px-2 text-[11px]"
-                          onClick={() => {
-                            setParamMode("manual");
-                            setFormData({ ...formData, testParameter: "" });
-                          }}
-                        >
-                          {isRtl ? "إدخال يدوي" : "Manual"}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {paramMode === "select" ? (
                       <Popover open={paramOpen} onOpenChange={setParamOpen}>
                         <PopoverTrigger asChild>
                           <Button
                             type="button"
+                            size="sm"
                             variant="outline"
-                            role="combobox"
-                            className={cn(
-                              "w-full justify-between",
-                              !formData.testParameter && "text-muted-foreground"
-                            )}
+                            className="h-7 px-2 text-xs"
                           >
-                            {formData.testParameter || (isRtl ? "اختر معلمة..." : "Select a parameter...")}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            <Plus className="mr-1 h-3 w-3" />
+                            {isRtl ? "إضافة معلمة" : "Add Parameter"}
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="end">
                           <Command>
-                            <CommandInput placeholder={isRtl ? "بحث في المكتبة..." : "Search library..."} />
+                            <CommandInput
+                              placeholder={isRtl ? "بحث في المكتبة..." : "Search library..."}
+                              value={paramSearch}
+                              onValueChange={setParamSearch}
+                            />
                             <CommandList>
                               <CommandEmpty>{isRtl ? "لا توجد نتائج" : "No results."}</CommandEmpty>
                               <CommandGroup>
-                                {parameterLibrary.map(p => (
-                                  <CommandItem
-                                    key={p.id}
-                                    value={`${p.name} ${p.method} ${p.unit}`}
-                                    onSelect={() => {
-                                      setFormData({
-                                        ...formData,
-                                        testParameter: p.name,
-                                        sopCode: formData.sopCode || `SOP-${p.id}`,
-                                      });
-                                      setParamOpen(false);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        formData.testParameter === p.name ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    <div className="flex flex-col">
-                                      <span className="text-sm">{p.name}</span>
-                                      <span className="text-[10px] text-muted-foreground">
-                                        {p.method} · {p.unit} · {p.category}
-                                      </span>
-                                    </div>
-                                  </CommandItem>
-                                ))}
+                                {filteredLibrary.map(p => {
+                                  const selected = formData.testParameters.includes(p.name);
+                                  return (
+                                    <CommandItem
+                                      key={p.id}
+                                      value={`${p.name} ${p.method} ${p.unit}`}
+                                      onSelect={() => toggleParameter(p.name)}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          selected ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      <div className="flex flex-col">
+                                        <span className="text-sm">{p.name}</span>
+                                        <span className="text-[10px] text-muted-foreground">
+                                          {p.method} · {p.unit} · {p.category}
+                                        </span>
+                                      </div>
+                                    </CommandItem>
+                                  );
+                                })}
                               </CommandGroup>
                             </CommandList>
                           </Command>
                         </PopoverContent>
                       </Popover>
-                    ) : (
-                      <Input
-                        id="testParameter"
-                        value={formData.testParameter}
-                        onChange={(e) => setFormData({ ...formData, testParameter: e.target.value })}
-                        placeholder={isRtl ? "اكتب اسم المعلمة..." : "Type parameter name..."}
-                      />
-                    )}
-                  </div>
-
-                  {/* Method Type (select or manual) */}
-                  <div className="grid gap-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="methodType">
-                        {isRtl ? "نوع الطريقة" : "Method Type"}
-                      </Label>
-                      <div className="flex items-center gap-1 text-xs">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={methodMode === "select" ? "default" : "outline"}
-                          className="h-6 px-2 text-[11px]"
-                          onClick={() => {
-                            setMethodMode("select");
-                            setFormData({ ...formData, methodType: "" });
-                          }}
-                        >
-                          {isRtl ? "قائمة" : "From list"}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={methodMode === "manual" ? "default" : "outline"}
-                          className="h-6 px-2 text-[11px]"
-                          onClick={() => {
-                            setMethodMode("manual");
-                            setFormData({ ...formData, methodType: "" });
-                          }}
-                        >
-                          {isRtl ? "إدخال يدوي" : "Manual"}
-                        </Button>
-                      </div>
                     </div>
 
-                    {methodMode === "select" ? (
-                      <Popover open={methodOpen} onOpenChange={setMethodOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            role="combobox"
-                            className={cn(
-                              "w-full justify-between",
-                              !formData.methodType && "text-muted-foreground"
-                            )}
-                          >
-                            {formData.methodType || (isRtl ? "اختر نوع الطريقة..." : "Select a method type...")}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder={isRtl ? "بحث في الأنواع..." : "Search method types..."} />
-                            <CommandList>
-                              <CommandEmpty>{isRtl ? "لا توجد نتائج" : "No results."}</CommandEmpty>
-                              <CommandGroup>
-                                {methods.map(m => (
-                                  <CommandItem
-                                    key={m.id}
-                                    value={`${m.name} ${m.category}`}
-                                    onSelect={() => {
-                                      setFormData({ ...formData, methodType: m.name });
-                                      setMethodOpen(false);
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        formData.methodType === m.name ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    <div className="flex flex-col">
-                                      <span className="text-sm">{m.name}</span>
-                                      <span className="text-[10px] text-muted-foreground">{m.category}</span>
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                    {formData.testParameters.length === 0 ? (
+                      <div className="min-h-[40px] border border-dashed rounded-md flex items-center justify-center text-xs text-muted-foreground px-3 py-2">
+                        {isRtl
+                          ? "لم تتم إضافة معلمات. انقر \"إضافة معلمة\" للاختيار من المكتبة."
+                          : "No parameters added yet. Click \"Add Parameter\" to pick from the library."}
+                      </div>
                     ) : (
-                      <Input
-                        id="methodType"
-                        value={formData.methodType}
-                        onChange={(e) => setFormData({ ...formData, methodType: e.target.value })}
-                        placeholder={isRtl ? "اكتب نوع طريقة جديد..." : "Type a new method type..."}
-                      />
+                      <div className="flex flex-wrap gap-2 border rounded-md p-2 min-h-[40px]">
+                        {formData.testParameters.map(name => (
+                          <span
+                            key={name}
+                            className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium"
+                          >
+                            {name}
+                            <button
+                              type="button"
+                              onClick={() => removeParameter(name)}
+                              className="hover:text-destructive transition-colors"
+                              aria-label={`Remove ${name}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
 
@@ -485,8 +527,16 @@ export default function TestMasterPage() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {isRtl ? "جاري الإضافة..." : "Adding..."}
+                      {editingId
+                        ? isRtl
+                          ? "جاري التحديث..."
+                          : "Updating..."
+                        : isRtl
+                        ? "جاري الإضافة..."
+                        : "Adding..."}
                     </>
+                  ) : editingId ? (
+                    isRtl ? "حفظ التغييرات" : "Save Changes"
                   ) : (
                     isRtl ? "إضافة معلمة اختبار" : "Add Test Parameter"
                   )}
@@ -531,17 +581,28 @@ export default function TestMasterPage() {
                 </p>
                 <p className="font-semibold text-lg text-primary">{selectedTest.testName}</p>
               </div>
-              <div className="space-y-1">
+              <div className="col-span-2 space-y-2">
                 <p className="text-muted-foreground font-medium">
-                  {isRtl ? "معلمة الاختبار" : "Test Parameter"}
+                  {isRtl ? "معلمات الاختبار" : "Test Parameters"}
                 </p>
-                <p>{selectedTest.testParameter || "—"}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground font-medium">
-                  {isRtl ? "نوع الطريقة" : "Method Type"}
-                </p>
-                <p>{selectedTest.methodType || "—"}</p>
+                {selectedTest.testParameter ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedTest.testParameter
+                      .split(",")
+                      .map(s => s.trim())
+                      .filter(Boolean)
+                      .map(p => (
+                        <span
+                          key={p}
+                          className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
+                        >
+                          {p}
+                        </span>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-xs">—</p>
+                )}
               </div>
               <div className="space-y-1">
                 <p className="text-muted-foreground font-medium">
@@ -576,20 +637,56 @@ export default function TestMasterPage() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (selectedTest) setDeleteId(selectedTest.id);
+                setViewOpen(false);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {isRtl ? "حذف" : "Delete"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (selectedTest) handleEdit(selectedTest);
+                setViewOpen(false);
+              }}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              {isRtl ? "تعديل" : "Edit"}
+            </Button>
             <Button onClick={() => setViewOpen(false)}>{isRtl ? "إغلاق" : "Close"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
 
-function BadgeLike({ label }: { label?: string }) {
-  if (!label) return <span className="text-muted-foreground">—</span>;
-  return (
-    <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">
-      {label}
-    </span>
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteId} onOpenChange={(v) => { if (!v) setDeleteId(null); }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>
+              {isRtl ? "تأكيد الحذف" : "Confirm Deletion"}
+            </DialogTitle>
+            <DialogDescription>
+              {isRtl
+                ? "هل أنت متأكد من حذف هذا الاختبار؟ لا يمكن التراجع عن هذا الإجراء."
+                : "Are you sure you want to delete this test? This action cannot be undone."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteId(null)}>
+              {isRtl ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              {isRtl ? "حذف" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

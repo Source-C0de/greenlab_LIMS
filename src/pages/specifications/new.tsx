@@ -523,7 +523,12 @@ export default function NewSpecification() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <Label>{isRtl ? "كود المواصفة" : "Specification Code"}</Label>
-                <Input value={formData.code} disabled className="bg-muted font-mono" />
+                <Input
+                value={formData.code}
+                disabled={!editingSpec}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                className={!editingSpec ? "bg-muted font-mono" : "font-mono"}
+              />
               </div>
               <div className="space-y-2">
                 <Label>{isRtl ? "اسم المواصفة" : "Specification Name"} <span className="text-destructive">*</span></Label>
@@ -1028,7 +1033,13 @@ export default function NewSpecification() {
         </Button>
         <Button onClick={handleSave} className="bg-primary">
           <Save className="mr-2 h-4 w-4" />
-          {isRtl ? "حفظ وإرسال للاعتماد" : "Save & Submit for Approval"}
+          {editingSpec
+            ? isRtl
+              ? "حفظ التغييرات"
+              : "Save Changes"
+            : isRtl
+            ? "حفظ وإرسال للاعتماد"
+            : "Save & Submit for Approval"}
         </Button>
       </div>
     </div>
