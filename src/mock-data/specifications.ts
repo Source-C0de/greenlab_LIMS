@@ -18,6 +18,35 @@ export interface TestMaster {
   referenceNo: string;
   sopCode: string;
   warehouseItems: string;
+  // Per-parameter details serialized as a JSON string. Each entry has
+  // { id, name, methodReference, limitRange, limitType, method?, unit?, category? }.
+  // Older records without this field fall back gracefully.
+  parameterDetails?: string;
+}
+
+// A single parameter row attached to a test. Mirrors the shape used in
+// SpecParameter so the dashboards stay consistent.
+export type TestLimitType =
+  | 'Range'
+  | 'Max Only'
+  | 'Min Only'
+  | 'Exact Value'
+  | 'Pass / Fail'
+  | 'Text'
+  | 'Not Detected';
+
+export interface TestParameterRow {
+  id: string;
+  name: string;
+  methodReference: string;
+  limitRange: string;
+  limitType: TestLimitType;
+  // Optional metadata inherited from the library entry, if any.
+  method?: string;
+  unit?: string;
+  category?: string;
+  // True if this row was created inline (not picked from the library).
+  isCustom?: boolean;
 }
 
 export interface MethodTypeMaster {
@@ -132,7 +161,16 @@ export const testMasterData: TestMaster[] = [
     sampleType: "Raw Meat",
     referenceNo: "REF-2024-001",
     sopCode: "SOP-MB-001",
-    warehouseItems: "Peptone Water, XLD Agar"
+    warehouseItems: "Peptone Water, XLD Agar",
+    parameterDetails: JSON.stringify([
+      {
+        id: "TPR-1",
+        name: "Salmonella spp",
+        methodReference: "ISO 6579-1",
+        limitRange: "Absent",
+        limitType: "Pass / Fail",
+      },
+    ]),
   },
   {
     id: "TM-002",
@@ -144,8 +182,17 @@ export const testMasterData: TestMaster[] = [
     sampleType: "Drinking Water",
     referenceNo: "REF-2024-002",
     sopCode: "SOP-MB-002",
-    warehouseItems: "m-Endo Agar"
-  }
+    warehouseItems: "m-Endo Agar",
+    parameterDetails: JSON.stringify([
+      {
+        id: "TPR-2",
+        name: "E.coli",
+        methodReference: "Standard Methods 9222B",
+        limitRange: "0",
+        limitType: "Max Only",
+      },
+    ]),
+  },
 ];
 
 export const methodTypeLibrary: MethodTypeMaster[] = [

@@ -1,8 +1,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Beaker, 
-  Info, 
-  Paperclip, 
+import {
+  Beaker,
+  Info,
+  Paperclip,
   History,
   Activity
 } from "lucide-react";
@@ -11,13 +11,16 @@ import { TestTable } from "@/components/tests/TestTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppContext } from "@/context/AppContext";
 import { SampleTimeline } from "@/components/shared/SampleTimeline";
+import { SpecificationCard } from "@/components/samples/SpecificationCard";
+import { Specification } from "@/mock-data/specifications";
 
 interface SampleTabsProps {
   sample: any;
   onViewTest: (id: string) => void;
+  specification?: Specification | null;
 }
 
-export function SampleTabs({ sample, onViewTest }: SampleTabsProps) {
+export function SampleTabs({ sample, onViewTest, specification }: SampleTabsProps) {
   const { language } = useAppContext();
   const isRtl = language === "ar";
 
@@ -51,8 +54,23 @@ export function SampleTabs({ sample, onViewTest }: SampleTabsProps) {
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="tests" className="space-y-4 animate-in fade-in-50 duration-300">
-        <TestTable tests={sample.tests || []} onViewTest={onViewTest} />
+      <TabsContent value="tests" className="space-y-6 animate-in fade-in-50 duration-300">
+        <SpecificationCard
+          specification={specification ?? null}
+          testCount={sample.tests?.length ?? 0}
+        />
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+              <Beaker className="w-4 h-4" />
+              {isRtl ? "قائمة الاختبارات" : "Test List"}
+              <span className="text-[10px] font-mono text-muted-foreground/70">
+                ({sample.tests?.length ?? 0})
+              </span>
+            </h3>
+          </div>
+          <TestTable tests={sample.tests || []} onViewTest={onViewTest} />
+        </div>
       </TabsContent>
 
       <TabsContent value="info" className="space-y-6 animate-in fade-in-50 duration-300">

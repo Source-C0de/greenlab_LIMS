@@ -3,6 +3,8 @@ import {
   testMasterData,
   TestMaster,
   parameterLibrary,
+  TestParameterRow,
+  TestLimitType,
 } from "@/mock-data/specifications";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -33,11 +35,13 @@ import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type FormState = {
   testName: string;
-  testParameters: string[]; // multiple parameter names from parameterLibrary
+  testParameters: string[]; // joined display names (kept for backward compat with table render)
+  parameterRows: TestParameterRow[]; // rich per-parameter rows
   methodReference: string;
   sampleType: string;
   referenceNo: string;
@@ -48,12 +52,51 @@ type FormState = {
 const emptyForm: FormState = {
   testName: "",
   testParameters: [],
+  parameterRows: [],
   methodReference: "",
   sampleType: "",
   referenceNo: "",
   sopCode: "",
   warehouseItems: "",
 };
+
+const limitTypeOptions: TestLimitType[] = [
+  'Range',
+  'Max Only',
+  'Min Only',
+  'Exact Value',
+  'Pass / Fail',
+  'Text',
+  'Not Detected',
+];
+
+const newRowId = () =>
+  `TPR-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000).toString(36)}`;
+
+function safeParseRows(raw?: string | null): TestParameterRow[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((r) => r && typeof r === 'object' && typeof r.name === 'string')
+        .map((r) => ({
+          id: r.id || newRowId(),
+          name: r.name,
+          methodReference: r.methodReference || '',
+          limitRange: r.limitRange || '',
+          limitType: (r.limitType as TestLimitType) || 'Range',
+          method: r.method,
+          unit: r.unit,
+          category: r.category,
+          isCustom: !!r.isCustom,
+        }));
+    }
+  } catch {
+    /* ignore malformed */
+  }
+  return [];
+}
 
 // Generate the next sequential GL-TM-N test code based on existing tests.
 function generateNextTestCode(existing: TestMaster[]): string {
@@ -92,23 +135,73 @@ export default function TestMasterPage() {
     );
   }, [paramSearch]);
 
-  const toggleParameter = (name: string) => {
+  const addLibraryParameter = (name: string) => {
     setFormData(prev => {
-      const exists = prev.testParameters.includes(name);
+      if (prev.testParameters.includes(name)) return prev;
+      const lib = parameterLibrary.find(p => p.name === name);
+      const row: TestParameterRow = {
+        id: newRowId(),
+        name,
+        methodReference: '',
+        limitRange: '',
+        limitType: 'Range',
+        method: lib?.method,
+        unit: lib?.unit,
+        category: lib?.category,
+      };
       return {
         ...prev,
-        testParameters: exists
-          ? prev.testParameters.filter(p => p !== name)
-          : [...prev.testParameters, name],
+        testParameters: [...prev.testParameters, name],
+        parameterRows: [...prev.parameterRows, row],
       };
     });
   };
 
-  const removeParameter = (name: string) => {
-    setFormData(prev => ({
-      ...prev,
-      testParameters: prev.testParameters.filter(p => p !== name),
-    }));
+  const addCustomParameter = () => {
+    setFormData(prev => {
+      const baseName = `Custom Parameter ${prev.parameterRows.length + 1}`;
+      const row: TestParameterRow = {
+        id: newRowId(),
+        name: baseName,
+        methodReference: '',
+        limitRange: '',
+        limitType: 'Range',
+        isCustom: true,
+      };
+      return {
+        ...prev,
+        testParameters: [...prev.testParameters, baseName],
+        parameterRows: [...prev.parameterRows, row],
+      };
+    });
+  };
+
+  const updateParameterRow = (id: string, patch: Partial<TestParameterRow>) => {
+    setFormData(prev => {
+      const rows = prev.parameterRows.map(r =>
+        r.id === id
+          ? {
+              ...r,
+              ...patch,
+              // Keep the joined display name in sync when the row's `name` changes.
+              name: patch.name ?? r.name,
+            }
+          : r
+      );
+      const names = rows.map(r => r.name);
+      return { ...prev, parameterRows: rows, testParameters: names };
+    });
+  };
+
+  const removeParameter = (id: string) => {
+    setFormData(prev => {
+      const rows = prev.parameterRows.filter(r => r.id !== id);
+      return {
+        ...prev,
+        parameterRows: rows,
+        testParameters: rows.map(r => r.name),
+      };
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -117,7 +210,7 @@ export default function TestMasterPage() {
       toast.error(isRtl ? "يرجى ملء الحقول المطلوبة" : "Please fill in required fields");
       return;
     }
-    if (formData.testParameters.length === 0) {
+    if (formData.parameterRows.length === 0) {
       toast.error(
         isRtl
           ? "يرجى إضافة معلمة اختبار واحدة على الأقل"
@@ -129,6 +222,9 @@ export default function TestMasterPage() {
     setIsSubmitting(true);
 
     setTimeout(() => {
+      const joinedNames = formData.parameterRows.map(r => r.name).join(", ");
+      const parameterDetails = JSON.stringify(formData.parameterRows);
+
       if (editingId) {
         // Update existing test
         setTests(prev =>
@@ -137,15 +233,14 @@ export default function TestMasterPage() {
               ? {
                   ...t,
                   testName: formData.testName,
-                  // Persist the multiple parameters as a single comma-separated
-                  // string in the existing `testParameter` field.
-                  testParameter: formData.testParameters.join(", "),
+                  testParameter: joinedNames,
                   methodType: "",
                   methodReference: formData.methodReference,
                   sampleType: formData.sampleType,
                   referenceNo: formData.referenceNo,
                   sopCode: formData.sopCode,
                   warehouseItems: formData.warehouseItems,
+                  parameterDetails,
                 }
               : t
           )
@@ -156,15 +251,14 @@ export default function TestMasterPage() {
           id: `TM-${String(tests.length + 1).padStart(3, '0')}`,
           testCode: generateNextTestCode(tests),
           testName: formData.testName,
-          // Persist the multiple parameters as a single comma-separated string
-          // in the existing `testParameter` field for backward compatibility.
-          testParameter: formData.testParameters.join(", "),
+          testParameter: joinedNames,
           methodType: "",
           methodReference: formData.methodReference,
           sampleType: formData.sampleType,
           referenceNo: formData.referenceNo,
           sopCode: formData.sopCode,
           warehouseItems: formData.warehouseItems,
+          parameterDetails,
         };
         setTests([newTest, ...tests]);
         toast.success(isRtl ? "تم إضافة الاختبار بنجاح" : "Test added successfully");
@@ -183,12 +277,30 @@ export default function TestMasterPage() {
   };
 
   const handleEdit = (test: TestMaster) => {
+    const rows = safeParseRows(test.parameterDetails);
+    // If we don't have rich rows stored, synthesize them from the joined names
+    // so the user still gets an editable list in the form.
+    const fallbackRows: TestParameterRow[] = rows.length
+      ? rows
+      : test.testParameter
+      ? test.testParameter
+          .split(",")
+          .map(s => s.trim())
+          .filter(Boolean)
+          .map(name => ({
+            id: newRowId(),
+            name,
+            methodReference: '',
+            limitRange: '',
+            limitType: 'Range' as TestLimitType,
+          }))
+      : [];
+
     setEditingId(test.id);
     setFormData({
       testName: test.testName,
-      testParameters: test.testParameter
-        ? test.testParameter.split(",").map(s => s.trim()).filter(Boolean)
-        : [],
+      testParameters: fallbackRows.map(r => r.name),
+      parameterRows: fallbackRows,
       methodReference: test.methodReference,
       sampleType: test.sampleType,
       referenceNo: test.referenceNo,
@@ -374,88 +486,202 @@ export default function TestMasterPage() {
                     </div>
                   </div>
 
-                  {/* Test Parameters (multi-select chips from parameterLibrary) */}
+                  {/* Test Parameters (multi-select with rich per-row details) */}
                   <div className="grid gap-2">
                     <div className="flex items-center justify-between">
                       <Label>
                         {isRtl ? "معلمات الاختبار" : "Test Parameters"}{" "}
                         <span className="text-destructive">*</span>
                       </Label>
-                      <Popover open={paramOpen} onOpenChange={setParamOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-xs"
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={addCustomParameter}
+                        >
+                          <Plus className="mr-1 h-3 w-3" />
+                          {isRtl ? "جديد" : "New"}
+                        </Button>
+                        <Popover open={paramOpen} onOpenChange={setParamOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Plus className="mr-1 h-3 w-3" />
+                              {isRtl ? "إضافة من المكتبة" : "Add from Library"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-[--radix-popover-trigger-width] p-0"
+                            align="end"
                           >
-                            <Plus className="mr-1 h-3 w-3" />
-                            {isRtl ? "إضافة معلمة" : "Add Parameter"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="end">
-                          <Command>
-                            <CommandInput
-                              placeholder={isRtl ? "بحث في المكتبة..." : "Search library..."}
-                              value={paramSearch}
-                              onValueChange={setParamSearch}
-                            />
-                            <CommandList>
-                              <CommandEmpty>{isRtl ? "لا توجد نتائج" : "No results."}</CommandEmpty>
-                              <CommandGroup>
-                                {filteredLibrary.map(p => {
-                                  const selected = formData.testParameters.includes(p.name);
-                                  return (
-                                    <CommandItem
-                                      key={p.id}
-                                      value={`${p.name} ${p.method} ${p.unit}`}
-                                      onSelect={() => toggleParameter(p.name)}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          selected ? "opacity-100" : "opacity-0"
-                                        )}
-                                      />
-                                      <div className="flex flex-col">
-                                        <span className="text-sm">{p.name}</span>
-                                        <span className="text-[10px] text-muted-foreground">
-                                          {p.method} · {p.unit} · {p.category}
-                                        </span>
-                                      </div>
-                                    </CommandItem>
-                                  );
-                                })}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                            <Command>
+                              <CommandInput
+                                placeholder={isRtl ? "بحث في المكتبة..." : "Search library..."}
+                                value={paramSearch}
+                                onValueChange={setParamSearch}
+                              />
+                              <CommandList>
+                                <CommandEmpty>
+                                  {isRtl ? "لا توجد نتائج" : "No results."}
+                                </CommandEmpty>
+                                <CommandGroup
+                                  heading={isRtl ? "مكتبة المعلمات" : "Parameter Library"}
+                                >
+                                  {filteredLibrary.map(p => {
+                                    const selected = formData.testParameters.includes(p.name);
+                                    return (
+                                      <CommandItem
+                                        key={p.id}
+                                        value={`${p.name} ${p.method} ${p.unit}`}
+                                        onSelect={() => {
+                                          if (!selected) {
+                                            addLibraryParameter(p.name);
+                                            setParamOpen(false);
+                                            setParamSearch("");
+                                          }
+                                        }}
+                                        disabled={selected}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            selected ? "opacity-100" : "opacity-0"
+                                          )}
+                                        />
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-medium">{p.name}</span>
+                                          <span className="text-[10px] text-muted-foreground">
+                                            {isRtl ? "الطريقة:" : "Method:"} {p.method} ·{" "}
+                                            {isRtl ? "الوحدة:" : "Unit:"} {p.unit}
+                                          </span>
+                                        </div>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </div>
 
-                    {formData.testParameters.length === 0 ? (
+                    {formData.parameterRows.length === 0 ? (
                       <div className="min-h-[40px] border border-dashed rounded-md flex items-center justify-center text-xs text-muted-foreground px-3 py-2">
                         {isRtl
-                          ? "لم تتم إضافة معلمات. انقر \"إضافة معلمة\" للاختيار من المكتبة."
-                          : "No parameters added yet. Click \"Add Parameter\" to pick from the library."}
+                          ? "لم تتم إضافة معلمات. انقر \"إضافة من المكتبة\" للاختيار أو \"جديد\" لإضافة معلمة مخصصة."
+                          : "No parameters added yet. Click \"Add from Library\" to pick one, or \"New\" to add a custom parameter."}
                       </div>
                     ) : (
-                      <div className="flex flex-wrap gap-2 border rounded-md p-2 min-h-[40px]">
-                        {formData.testParameters.map(name => (
-                          <span
-                            key={name}
-                            className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-1 text-xs font-medium"
+                      <div className="border rounded-md divide-y">
+                        {formData.parameterRows.map((row) => (
+                          <div
+                            key={row.id}
+                            className="grid grid-cols-12 gap-2 items-start p-2"
                           >
-                            {name}
-                            <button
-                              type="button"
-                              onClick={() => removeParameter(name)}
-                              className="hover:text-destructive transition-colors"
-                              aria-label={`Remove ${name}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
+                            <div className="col-span-12 sm:col-span-3 grid gap-1">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                {isRtl ? "الاسم" : "Name"}
+                              </Label>
+                              <Input
+                                value={row.name}
+                                onChange={(e) =>
+                                  updateParameterRow(row.id, { name: e.target.value })
+                                }
+                                placeholder={
+                                  isRtl ? "اسم المعلمة" : "Parameter name"
+                                }
+                                className="h-8"
+                              />
+                            </div>
+                            <div className="col-span-12 sm:col-span-4 grid gap-1">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                {isRtl ? "مرجع الطريقة" : "Method Reference"}
+                              </Label>
+                              <Input
+                                value={row.methodReference}
+                                onChange={(e) =>
+                                  updateParameterRow(row.id, {
+                                    methodReference: e.target.value,
+                                  })
+                                }
+                                placeholder={isRtl ? "مثال: ISO 6579-1" : "e.g. ISO 6579-1"}
+                                className="h-8"
+                              />
+                            </div>
+                            <div className="col-span-6 sm:col-span-2 grid gap-1">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                {isRtl ? "نوع الحد" : "Limit Type"}
+                              </Label>
+                              <Select
+                                value={row.limitType}
+                                onValueChange={(v) =>
+                                  updateParameterRow(row.id, {
+                                    limitType: v as TestLimitType,
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {limitTypeOptions.map((t) => (
+                                    <SelectItem key={t} value={t}>
+                                      {t}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="col-span-5 sm:col-span-2 grid gap-1">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                {isRtl ? "الحد" : "Limit"}
+                              </Label>
+                              <Input
+                                value={row.limitRange}
+                                onChange={(e) =>
+                                  updateParameterRow(row.id, {
+                                    limitRange: e.target.value,
+                                  })
+                                }
+                                placeholder={
+                                  row.limitType === 'Range'
+                                    ? '0 - 100'
+                                    : row.limitType === 'Pass / Fail' ||
+                                      row.limitType === 'Text' ||
+                                      row.limitType === 'Not Detected'
+                                    ? 'Absent / Clear...'
+                                    : '0'
+                                }
+                                className="h-8"
+                              />
+                            </div>
+                            <div className="col-span-1 flex items-end justify-end pb-0.5">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                onClick={() => removeParameter(row.id)}
+                                title={isRtl ? "إزالة" : "Remove"}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            {row.isCustom && (
+                              <div className="col-span-12 -mt-1">
+                                <span className="text-[10px] text-amber-600 font-medium">
+                                  {isRtl ? "معلمة مخصصة" : "Custom parameter"}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}
@@ -585,24 +811,59 @@ export default function TestMasterPage() {
                 <p className="text-muted-foreground font-medium">
                   {isRtl ? "معلمات الاختبار" : "Test Parameters"}
                 </p>
-                {selectedTest.testParameter ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedTest.testParameter
-                      .split(",")
-                      .map(s => s.trim())
-                      .filter(Boolean)
-                      .map(p => (
-                        <span
-                          key={p}
-                          className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
+                {(() => {
+                  const viewRows = safeParseRows(selectedTest.parameterDetails);
+                  const finalRows =
+                    viewRows.length > 0
+                      ? viewRows
+                      : selectedTest.testParameter
+                        .split(",")
+                        .map(s => s.trim())
+                        .filter(Boolean)
+                        .map(name => ({
+                          id: `view-${name}`,
+                          name,
+                          methodReference: "",
+                          limitRange: "",
+                          limitType: "Range" as TestLimitType,
+                        }));
+                  if (finalRows.length === 0) {
+                    return <p className="text-muted-foreground text-xs">—</p>;
+                  }
+                  return (
+                    <div className="border rounded-md overflow-hidden">
+                      <div className="grid grid-cols-12 gap-2 px-2 py-1.5 bg-muted/50 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        <div className="col-span-4">
+                          {isRtl ? "الاسم" : "Name"}
+                        </div>
+                        <div className="col-span-4">
+                          {isRtl ? "مرجع الطريقة" : "Method Reference"}
+                        </div>
+                        <div className="col-span-2">
+                          {isRtl ? "نوع الحد" : "Limit Type"}
+                        </div>
+                        <div className="col-span-2">
+                          {isRtl ? "الحد" : "Limit"}
+                        </div>
+                      </div>
+                      {finalRows.map((row) => (
+                        <div
+                          key={row.id}
+                          className="grid grid-cols-12 gap-2 px-2 py-1.5 text-xs border-t first:border-t-0"
                         >
-                          {p}
-                        </span>
+                          <div className="col-span-4 font-medium">{row.name}</div>
+                          <div className="col-span-4 font-mono text-muted-foreground">
+                            {row.methodReference || "—"}
+                          </div>
+                          <div className="col-span-2 text-muted-foreground">
+                            {row.limitType}
+                          </div>
+                          <div className="col-span-2 font-mono">{row.limitRange || "—"}</div>
+                        </div>
                       ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-xs">—</p>
-                )}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="space-y-1">
                 <p className="text-muted-foreground font-medium">
