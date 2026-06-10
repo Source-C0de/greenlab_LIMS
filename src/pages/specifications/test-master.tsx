@@ -88,6 +88,7 @@ function safeParseRows(raw?: string | null): TestParameterRow[] {
           limitType: (r.limitType as TestLimitType) || 'Range',
           method: r.method,
           unit: r.unit,
+          mu: r.mu,
           category: r.category,
           isCustom: !!r.isCustom,
         }));
@@ -147,6 +148,7 @@ export default function TestMasterPage() {
         limitType: 'Range',
         method: lib?.method,
         unit: lib?.unit,
+        mu: '',
         category: lib?.category,
       };
       return {
@@ -166,6 +168,7 @@ export default function TestMasterPage() {
         methodReference: '',
         limitRange: '',
         limitType: 'Range',
+        mu: '',
         isCustom: true,
       };
       return {
@@ -293,6 +296,7 @@ export default function TestMasterPage() {
             methodReference: '',
             limitRange: '',
             limitType: 'Range' as TestLimitType,
+            mu: '',
           }))
       : [];
 
@@ -600,7 +604,37 @@ export default function TestMasterPage() {
                                 className="h-8"
                               />
                             </div>
-                            <div className="col-span-12 sm:col-span-4 grid gap-1">
+                            <div className="col-span-6 sm:col-span-1 grid gap-1">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                {isRtl ? "الوحدة" : "Unit"}
+                              </Label>
+                              <Input
+                                value={row.unit || ""}
+                                onChange={(e) =>
+                                  updateParameterRow(row.id, {
+                                    unit: e.target.value,
+                                  })
+                                }
+                                placeholder="mg/L"
+                                className="h-8"
+                              />
+                            </div>
+                            <div className="col-span-6 sm:col-span-1 grid gap-1">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                {isRtl ? "عدم اليقين (MU)" : "MU"}
+                              </Label>
+                              <Input
+                                value={row.mu || ""}
+                                onChange={(e) =>
+                                  updateParameterRow(row.id, {
+                                    mu: e.target.value,
+                                  })
+                                }
+                                placeholder="±0.05"
+                                className="h-8"
+                              />
+                            </div>
+                            <div className="col-span-12 sm:col-span-3 grid gap-1">
                               <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
                                 {isRtl ? "مرجع الطريقة" : "Method Reference"}
                               </Label>
@@ -611,7 +645,7 @@ export default function TestMasterPage() {
                                     methodReference: e.target.value,
                                   })
                                 }
-                                placeholder={isRtl ? "مثال: ISO 6579-1" : "e.g. ISO 6579-1"}
+                                placeholder="ISO 6579-1"
                                 className="h-8"
                               />
                             </div>
@@ -639,7 +673,7 @@ export default function TestMasterPage() {
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="col-span-5 sm:col-span-2 grid gap-1">
+                            <div className="col-span-5 sm:col-span-1 grid gap-1">
                               <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
                                 {isRtl ? "الحد" : "Limit"}
                               </Label>
@@ -826,6 +860,8 @@ export default function TestMasterPage() {
                           methodReference: "",
                           limitRange: "",
                           limitType: "Range" as TestLimitType,
+                          unit: "",
+                          mu: "",
                         }));
                   if (finalRows.length === 0) {
                     return <p className="text-muted-foreground text-xs">—</p>;
@@ -833,13 +869,19 @@ export default function TestMasterPage() {
                   return (
                     <div className="border rounded-md overflow-hidden">
                       <div className="grid grid-cols-12 gap-2 px-2 py-1.5 bg-muted/50 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        <div className="col-span-4">
+                        <div className="col-span-3">
                           {isRtl ? "الاسم" : "Name"}
                         </div>
-                        <div className="col-span-4">
+                        <div className="col-span-2">
+                          {isRtl ? "الوحدة" : "Unit"}
+                        </div>
+                        <div className="col-span-1">
+                          {isRtl ? "عدم اليقين (MU)" : "MU"}
+                        </div>
+                        <div className="col-span-3">
                           {isRtl ? "مرجع الطريقة" : "Method Reference"}
                         </div>
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           {isRtl ? "نوع الحد" : "Limit Type"}
                         </div>
                         <div className="col-span-2">
@@ -851,11 +893,17 @@ export default function TestMasterPage() {
                           key={row.id}
                           className="grid grid-cols-12 gap-2 px-2 py-1.5 text-xs border-t first:border-t-0"
                         >
-                          <div className="col-span-4 font-medium">{row.name}</div>
-                          <div className="col-span-4 font-mono text-muted-foreground">
+                          <div className="col-span-3 font-medium">{row.name}</div>
+                          <div className="col-span-2 font-mono text-muted-foreground">
+                            {row.unit || "—"}
+                          </div>
+                          <div className="col-span-1 font-mono text-muted-foreground">
+                            {row.mu || "—"}
+                          </div>
+                          <div className="col-span-3 font-mono text-muted-foreground">
                             {row.methodReference || "—"}
                           </div>
-                          <div className="col-span-2 text-muted-foreground">
+                          <div className="col-span-1 text-muted-foreground">
                             {row.limitType}
                           </div>
                           <div className="col-span-2 font-mono">{row.limitRange || "—"}</div>
@@ -882,12 +930,6 @@ export default function TestMasterPage() {
                   {isRtl ? "نوع العينة" : "Sample Type"}
                 </p>
                 <p>{selectedTest.sampleType || "—"}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground font-medium">
-                  {isRtl ? "الرقم المرجعي" : "Reference No"}
-                </p>
-                <p className="font-mono">{selectedTest.referenceNo || "—"}</p>
               </div>
               <div className="col-span-2 space-y-1 border-t pt-2 mt-2">
                 <p className="text-muted-foreground font-medium">
