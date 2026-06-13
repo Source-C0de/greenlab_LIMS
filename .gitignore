@@ -50,3 +50,6 @@ Thumbs.db
 
 # Puku (local embeddings DB)
 .puku/
+
+# Puku CLI project-scoped skills — opt in by removing this line
+.puku-cli/skills/

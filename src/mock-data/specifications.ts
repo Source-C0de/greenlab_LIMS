@@ -44,6 +44,7 @@ export interface TestParameterRow {
   // Optional metadata inherited from the library entry, if any.
   method?: string;
   unit?: string;
+  mu?: string; // Measurement Uncertainty
   category?: string;
   // True if this row was created inline (not picked from the library).
   isCustom?: boolean;
@@ -60,6 +61,7 @@ export interface SpecParameter {
   name: string;
   method: string;
   unit: string;
+  mu?: string; // Measurement Uncertainty
   sopCode?: string;
   tests?: string;
   referenceNo?: string;

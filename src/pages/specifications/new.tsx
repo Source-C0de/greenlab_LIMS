@@ -93,6 +93,24 @@ export default function NewSpecification() {
   const [testSearchQuery, setTestSearchQuery] = useState("");
   const [openSuggFor, setOpenSuggFor] = useState<{ [id: string]: "tests" | "sopCode" | "referenceNo" | null }>({});
 
+  // Inline "new test parameter" form state
+  const [newParamForm, setNewParamForm] = useState({
+    name: "",
+    method: "",
+    unit: "",
+    mu: "",
+    sopCode: "",
+    tests: "",
+    referenceNo: "",
+    limitRange: "",
+    min: "",
+    max: "",
+    target: "",
+    limitType: "Range",
+    mandatory: true,
+  });
+  const [newParamOpen, setNewParamOpen] = useState(false);
+
   // Multi-select dialog for adding test parameters from the parameter library
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
@@ -131,6 +149,7 @@ export default function NewSpecification() {
           name: paramMaster.name,
           method: paramMaster.method,
           unit: paramMaster.unit,
+          mu: "",
           sopCode: `SOP-${paramMaster.id}`,
           tests: paramMaster.name,
           referenceNo: `REF-${paramMaster.category?.slice(0, 2).toUpperCase() || "GL"}-${paramMaster.id}`,
@@ -296,6 +315,7 @@ export default function NewSpecification() {
       name: paramMaster.name,
       method: paramMaster.method,
       unit: paramMaster.unit,
+      mu: "",
       sopCode: `SOP-${paramMaster.id}`,
       tests: paramMaster.name,
       referenceNo: `REF-${paramMaster.category?.slice(0, 2).toUpperCase() || "GL"}-${paramMaster.id}`,
@@ -313,6 +333,80 @@ export default function NewSpecification() {
 
   const handleRemoveParameter = (id: string) => {
     setParameters(parameters.filter(p => p.parameterId !== id));
+  };
+
+  const handleAddCustomParameter = () => {
+    if (!newParamForm.name.trim()) {
+      toast.error(
+        isRtl ? "يرجى إدخال اسم المعلمة" : "Please enter a parameter name"
+      );
+      return;
+    }
+
+    const exists = parameters.find(
+      (p) => p.name.toLowerCase() === newParamForm.name.trim().toLowerCase()
+    );
+    if (exists) {
+      toast.error(isRtl ? "المعلمة موجودة بالفعل" : "Parameter already added");
+      return;
+    }
+
+    const newId = `CUSTOM-${Date.now().toString(36)}-${Math.floor(
+      Math.random() * 1000
+    )
+      .toString(36)
+      .padStart(2, "0")}`;
+
+    const range = newParamForm.limitRange.trim();
+    const rangeMatch = range.match(/^(-?\d*\.?\d+)\s*[-–to]+\s*(-?\d*\.?\d+)$/i);
+    const min = rangeMatch
+      ? rangeMatch[1]
+      : newParamForm.min.trim() || "";
+    const max = rangeMatch
+      ? rangeMatch[2]
+      : newParamForm.max.trim() || "";
+
+    const newRow = {
+      parameterId: newId,
+      name: newParamForm.name.trim(),
+      method: newParamForm.method.trim(),
+      unit: newParamForm.unit.trim(),
+      mu: newParamForm.mu.trim(),
+      sopCode: newParamForm.sopCode.trim() || `SOP-${newId}`,
+      tests: newParamForm.tests.trim() || newParamForm.name.trim(),
+      referenceNo:
+        newParamForm.referenceNo.trim() || `REF-CUSTOM-${newId.slice(-4)}`,
+      limitRange: range,
+      min,
+      max,
+      target: newParamForm.target.trim(),
+      limitType: newParamForm.limitType,
+      mandatory: newParamForm.mandatory,
+      isCustom: true,
+    };
+
+    setParameters([...parameters, newRow]);
+    setNewParamForm({
+      name: "",
+      method: "",
+      unit: "",
+      mu: "",
+      sopCode: "",
+      tests: "",
+      referenceNo: "",
+      limitRange: "",
+      min: "",
+      max: "",
+      target: "",
+      limitType: "Range",
+      mandatory: true,
+    });
+    setNewParamOpen(false);
+    toast.success(
+      isRtl
+        ? `تم إضافة المعلمة "${newRow.name}" بنجاح`
+        : `Parameter "${newRow.name}" added`
+    );
   };
 
   const handleParamChange = (id: string, field: string, value: any) => {
@@ -588,6 +682,13 @@ export default function NewSpecification() {
                 <TestTube2 className="mr-2 h-4 w-4" />
                 {isRtl ? "إضافة معلمة اختبار" : "Add Test Parameter"}
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setNewParamOpen(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                {isRtl ? "معلمة جديدة" : "New Test Parameter"}
+              </Button>
               <div className="relative w-72">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -629,6 +730,7 @@ export default function NewSpecification() {
                   <TableHead className="w-[150px]">{isRtl ? "رقم المرجع GL" : "GL Reference No"}</TableHead>
                   <TableHead>{isRtl ? "الطريقة" : "Method"}</TableHead>
                   <TableHead className="w-[100px]">{isRtl ? "الوحدة" : "Unit"}</TableHead>
+                  <TableHead className="w-[100px]">{isRtl ? "عدم اليقين في القياس (MU)" : "MU"}</TableHead>
                   <TableHead className="w-[150px]">{isRtl ? "الحد (أدنى-أقصى)" : "Limit (Min–Max)"}</TableHead>
                   <TableHead className="w-[120px]">{isRtl ? "الهدف" : "Target"}</TableHead>
                   <TableHead className="w-[180px]">{isRtl ? "نوع الحد" : "Limit Type"}</TableHead>
@@ -639,14 +741,23 @@ export default function NewSpecification() {
               <TableBody>
                 {parameters.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="h-32 text-center text-muted-foreground italic">
+                    <TableCell colSpan={12} className="h-32 text-center text-muted-foreground italic">
                       {isRtl ? "لم يتم إضافة معلمات بعد. استخدم البحث أعلاه للإضافة." : "No parameters added yet. Use the search above to add."}
                     </TableCell>
                   </TableRow>
                 ) : (
                   parameters.map((p) => (
                     <TableRow key={p.parameterId}>
-                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col">
+                          <span>{p.name}</span>
+                          {p.isCustom && (
+                            <span className="text-[10px] text-amber-600 font-medium">
+                              {isRtl ? "مخصص" : "Custom"}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <AutoSuggestCell id={p.parameterId} field="sopCode" placeholder="SOP-..." />
                       </TableCell>
@@ -656,8 +767,30 @@ export default function NewSpecification() {
                       <TableCell>
                         <AutoSuggestCell id={p.parameterId} field="referenceNo" placeholder="REF-..." />
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{p.method}</TableCell>
-                      <TableCell className="text-xs">{p.unit}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        <Input
+                          className="h-8"
+                          value={p.method || ""}
+                          onChange={(e) => handleParamChange(p.parameterId, "method", e.target.value)}
+                          placeholder={isRtl ? "الطريقة" : "Method"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-8"
+                          value={p.unit || ""}
+                          onChange={(e) => handleParamChange(p.parameterId, "unit", e.target.value)}
+                          placeholder={isRtl ? "الوحدة" : "Unit"}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          className="h-8"
+                          value={p.mu || ""}
+                          onChange={(e) => handleParamChange(p.parameterId, "mu", e.target.value)}
+                          placeholder={isRtl ? "±0.05" : "±0.05"}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Input
                           size={1}
@@ -1018,6 +1151,196 @@ export default function NewSpecification() {
             <Button onClick={applyTestPickerSelection}>
               {isRtl ? "إضافة" : "Add"}{" "}
               {testPickerSelectedIds.length > 0 && `(${testPickerSelectedIds.length})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Test Parameter form */}
+      <Dialog open={newParamOpen} onOpenChange={setNewParamOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>
+              {isRtl ? "نموذج معلمة اختبار جديدة" : "New Test Parameter Form"}
+            </DialogTitle>
+            <DialogDescription>
+              {isRtl
+                ? "أضف معلمة اختبار جديدة. سيتم إدراجها في الجدول."
+                : "Add a new test parameter. It will be inserted into the table."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[60vh] pr-1">
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="np-name">
+                    {isRtl ? "اسم المعلمة" : "Parameter Name"}{" "}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="np-name"
+                    value={newParamForm.name}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, name: e.target.value })
+                    }
+                    placeholder={
+                      isRtl ? "مثال: الكلور الحر" : "e.g. Free Chlorine"
+                    }
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="np-method">{isRtl ? "الطريقة" : "Method"}</Label>
+                  <Input
+                    id="np-method"
+                    value={newParamForm.method}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, method: e.target.value })
+                    }
+                    placeholder={isRtl ? "مثال: المعايرة" : "e.g. Titration"}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="np-unit">{isRtl ? "الوحدة" : "Unit"}</Label>
+                  <Input
+                    id="np-unit"
+                    value={newParamForm.unit}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, unit: e.target.value })
+                    }
+                    placeholder={isRtl ? "مثال: mg/L" : "e.g. mg/L"}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="np-mu">
+                    {isRtl ? "عدم اليقين في القياس (MU)" : "Measurement Uncertainty (MU)"}
+                  </Label>
+                  <Input
+                    id="np-mu"
+                    value={newParamForm.mu}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, mu: e.target.value })
+                    }
+                    placeholder={isRtl ? "مثال: ±0.05" : "e.g. ±0.05"}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="np-sop">{isRtl ? "كود SOP" : "SOP Code"}</Label>
+                  <Input
+                    id="np-sop"
+                    value={newParamForm.sopCode}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, sopCode: e.target.value })
+                    }
+                    placeholder="SOP-..."
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="np-tests">
+                    {isRtl ? "قائمة معلمات الاختبار" : "Test Parameter List"}
+                  </Label>
+                  <Input
+                    id="np-tests"
+                    value={newParamForm.tests}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, tests: e.target.value })
+                    }
+                    placeholder={isRtl ? "اختبار..." : "Test..."}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="np-ref">{isRtl ? "الرقم المرجعي" : "Reference No"}</Label>
+                  <Input
+                    id="np-ref"
+                    value={newParamForm.referenceNo}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, referenceNo: e.target.value })
+                    }
+                    placeholder="REF-..."
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="np-limit-type">{isRtl ? "نوع الحد" : "Limit Type"}</Label>
+                  <Select
+                    value={newParamForm.limitType}
+                    onValueChange={(val) =>
+                      setNewParamForm({ ...newParamForm, limitType: val })
+                    }
+                  >
+                    <SelectTrigger id="np-limit-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {limitTypes.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="np-limit-range">
+                    {isRtl ? "الحد (أدنى-أقصى)" : "Limit (Min–Max)"}
+                  </Label>
+                  <Input
+                    id="np-limit-range"
+                    value={newParamForm.limitRange}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, limitRange: e.target.value })
+                    }
+                    placeholder={isRtl ? "مثال: 0.5 - 1.5" : "e.g. 0.5 - 1.5"}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="np-target">{isRtl ? "الهدف" : "Target"}</Label>
+                  <Input
+                    id="np-target"
+                    value={newParamForm.target}
+                    onChange={(e) =>
+                      setNewParamForm({ ...newParamForm, target: e.target.value })
+                    }
+                    placeholder="Target"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="invisible">.</Label>
+                  <div className="flex items-center gap-2 h-10 px-3 border rounded-md">
+                    <Checkbox
+                      id="np-mandatory"
+                      checked={newParamForm.mandatory}
+                      onCheckedChange={(val) =>
+                        setNewParamForm({ ...newParamForm, mandatory: !!val })
+                      }
+                    />
+                    <Label htmlFor="np-mandatory" className="cursor-pointer">
+                      {isRtl ? "إلزامي" : "Mandatory"}
+                    </Label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewParamOpen(false)}>
+              {isRtl ? "إلغاء" : "Cancel"}
+            </Button>
+            <Button onClick={handleAddCustomParameter}>
+              <Plus className="mr-2 h-4 w-4" />
+              {isRtl ? "إضافة المعلمة" : "Add Parameter"}
             </Button>
           </DialogFooter>
         </DialogContent>
