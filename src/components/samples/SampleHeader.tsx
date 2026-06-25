@@ -4,12 +4,9 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   Printer,
   Download,
-  FileEdit,
-  Plus,
   UserPlus,
   RefreshCw,
   FileBarChart,
-  Beaker
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 
@@ -25,7 +22,6 @@ interface SampleHeaderProps {
   onPrint?: () => void;
   onGenerateReport?: () => void;
   onAssignAnalyst?: () => void;
-  onAddSpecification?: () => void;
 }
 
 export function SampleHeader({
@@ -33,7 +29,6 @@ export function SampleHeader({
   onPrint,
   onGenerateReport,
   onAssignAnalyst,
-  onAddSpecification
 }: SampleHeaderProps) {
   const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
@@ -66,9 +61,6 @@ export function SampleHeader({
             <>
               <Button variant="outline" size="sm" onClick={onAssignAnalyst}>
                 <UserPlus className="mr-2 h-4 w-4" /> {isRtl ? "تعديل الفريق" : "Assign Technician"}
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddSpecification}>
-                <Beaker className="mr-2 h-4 w-4" /> {isRtl ? "إضافة مواصفة" : "Add Specification"}
               </Button>
               <Button variant="outline" size="sm">
                 <RefreshCw className="mr-2 h-4 w-4" /> {isRtl ? "تغيير الحالة" : "Change Status"}

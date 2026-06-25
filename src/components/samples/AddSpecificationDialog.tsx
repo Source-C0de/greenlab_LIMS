@@ -49,8 +49,8 @@ export function AddSpecificationDialog({
           </DialogTitle>
           <DialogDescription>
             {isRtl
-              ? "اختر مواصفة لربطها بهذه العينة. سيتم تحميل معايير القبول تلقائياً."
-              : "Select a specification to link with this sample. Acceptance criteria will be loaded automatically."}
+              ? "اختر مواصفة لربطها بهذه العينة."
+              : "Select a specification to link with this sample."}
           </DialogDescription>
         </DialogHeader>
 
@@ -94,10 +94,6 @@ export function AddSpecificationDialog({
                           <Badge variant="secondary" className="text-[10px] h-4">
                             {spec.category}
                           </Badge>
-                          <span className="text-[10px] text-muted-foreground">
-                            {spec.parameters.length}{" "}
-                            {isRtl ? "معلمة" : "params"}
-                          </span>
                         </div>
                       </div>
                     </div>

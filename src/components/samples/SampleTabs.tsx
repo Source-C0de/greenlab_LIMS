@@ -1,28 +1,31 @@
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Beaker,
   Info,
   Paperclip,
   History,
-  Activity
+  Activity,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { TestTable } from "@/components/tests/TestTable";
+import { TestTable, type TestTableTest } from "@/components/tests/TestTable";
+import { AddTestToSampleDialog, type NewSampleTest } from "@/components/samples/AddTestToSampleDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppContext } from "@/context/AppContext";
 import { SampleTimeline } from "@/components/shared/SampleTimeline";
-import { SpecificationCard } from "@/components/samples/SpecificationCard";
-import { Specification } from "@/mock-data/specifications";
 
 interface SampleTabsProps {
   sample: any;
   onViewTest: (id: string) => void;
-  specification?: Specification | null;
+  onAddTest: (tests: NewSampleTest[]) => void;
+  onUpdateTest: (testId: string, patch: Partial<TestTableTest>) => void;
 }
 
-export function SampleTabs({ sample, onViewTest, specification }: SampleTabsProps) {
-  const { language } = useAppContext();
+export function SampleTabs({ sample, onViewTest, onAddTest, onUpdateTest }: SampleTabsProps) {
+  const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
+  const [isAddTestOpen, setIsAddTestOpen] = useState(false);
 
   const timelineSteps = [
     { label: "Sample Received", status: "completed" as const, date: sample.receivedDate, actor: "Reception" },
@@ -55,10 +58,6 @@ export function SampleTabs({ sample, onViewTest, specification }: SampleTabsProp
       </TabsList>
 
       <TabsContent value="tests" className="space-y-6 animate-in fade-in-50 duration-300">
-        <SpecificationCard
-          specification={specification ?? null}
-          testCount={sample.tests?.length ?? 0}
-        />
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
@@ -68,8 +67,18 @@ export function SampleTabs({ sample, onViewTest, specification }: SampleTabsProp
                 ({sample.tests?.length ?? 0})
               </span>
             </h3>
+            {currentRole !== "client" && (
+              <Button size="sm" onClick={() => setIsAddTestOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                {isRtl ? "إضافة اختبار" : "Add Test"}
+              </Button>
+            )}
           </div>
-          <TestTable tests={sample.tests || []} onViewTest={onViewTest} />
+          <TestTable
+            tests={sample.tests || []}
+            onViewTest={onViewTest}
+            onUpdateTest={onUpdateTest}
+          />
         </div>
       </TabsContent>
 
@@ -97,7 +106,7 @@ export function SampleTabs({ sample, onViewTest, specification }: SampleTabsProp
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -142,6 +151,16 @@ export function SampleTabs({ sample, onViewTest, specification }: SampleTabsProp
           </CardContent>
         </Card>
       </TabsContent>
+
+      <AddTestToSampleDialog
+        isOpen={isAddTestOpen}
+        onClose={() => setIsAddTestOpen(false)}
+        onAdd={(newTests) => {
+          onAddTest(newTests);
+          setIsAddTestOpen(false);
+        }}
+        sampleId={sample.id}
+      />
     </Tabs>
   );
 }

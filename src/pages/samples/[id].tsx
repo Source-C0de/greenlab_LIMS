@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { useParams } from "wouter";
-import { mockSamples, mockSpecifications } from "@/mock-data";
+import { mockSamples } from "@/mock-data";
 import { SampleHeader } from "@/components/samples/SampleHeader";
 import { SampleTabs } from "@/components/samples/SampleTabs";
 import { TestDrawer } from "@/components/tests/TestDrawer";
 import { AssignAnalystDialog } from "@/components/samples/AssignAnalystDialog";
-import { AddSpecificationDialog } from "@/components/samples/AddSpecificationDialog";
 import { useAppContext } from "@/context/AppContext";
 import { toast } from "sonner";
-import { Specification } from "@/mock-data/specifications";
 
 export default function SampleDetail() {
   const { id } = useParams();
@@ -20,28 +18,9 @@ export default function SampleDetail() {
     return mockSamples.find(s => s.id === id) || mockSamples[0];
   });
 
-  // Track the specification linked to this sample. The test dashboard
-  // tab shows this spec together with the sample's test list.
-  const [specification, setSpecification] = useState<Specification | null>(
-    () => {
-      const found = mockSamples.find(s => s.id === id) || mockSamples[0];
-      // Try to find a spec whose name/category matches the sample's type
-      if (found) {
-        return (
-          mockSpecifications.find(
-            (s) =>
-              s.category.toLowerCase() === (found.sampleType || "").toLowerCase()
-          ) || null
-        );
-      }
-      return null;
-    }
-  );
-
   // Dialog States
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
-  const [isAddSpecOpen, setIsAddSpecOpen] = useState(false);
 
   const isDrawerOpen = selectedTestId !== null;
 
@@ -83,14 +62,6 @@ export default function SampleDetail() {
     });
   };
 
-  const handleAddSpecification = (spec: Specification) => {
-    setSpecification(spec);
-    setIsAddSpecOpen(false);
-    toast.success(isRtl ? "تم ربط المواصفة" : "Specification linked", {
-      description: spec.name
-    });
-  };
-
   return (
     <div className="flex flex-col h-full overflow-visible">
       <div className="md:px-2">
@@ -99,14 +70,26 @@ export default function SampleDetail() {
           onPrint={handlePrint}
           onGenerateReport={handleGenerateReport}
           onAssignAnalyst={() => setIsAssignOpen(true)}
-          onAddSpecification={() => setIsAddSpecOpen(true)}
         />
 
         <div className="flex-1">
           <SampleTabs
             sample={sample}
             onViewTest={handleViewTest}
-            specification={specification}
+            onAddTest={(newTests) => {
+              setSample(prev => ({
+                ...prev,
+                tests: [...(prev.tests || []), ...newTests],
+              }));
+            }}
+            onUpdateTest={(testId, patch) => {
+              setSample(prev => ({
+                ...prev,
+                tests: (prev.tests || []).map(t =>
+                  t.id === testId ? { ...t, ...patch } : t
+                ),
+              }));
+            }}
           />
         </div>
       </div>
@@ -122,13 +105,6 @@ export default function SampleDetail() {
         onClose={() => setIsAssignOpen(false)}
         onAssign={handleAssignAnalyst}
         currentAnalyst={sample.assignedAnalyst}
-      />
-
-      <AddSpecificationDialog
-        isOpen={isAddSpecOpen}
-        onClose={() => setIsAddSpecOpen(false)}
-        onAdd={handleAddSpecification}
-        currentSpecId={specification?.id ?? null}
       />
     </div>
   );

@@ -18,6 +18,9 @@ export interface TestMaster {
   referenceNo: string;
   sopCode: string;
   warehouseItems: string;
+  // The single specification this test is linked to. A test belongs to
+  // exactly one specification (e.g. Salmonella Detection → Drinking Water).
+  specificationId?: string;
   // Per-parameter details serialized as a JSON string. Each entry has
   // { id, name, methodReference, limitRange, limitType, method?, unit?, category? }.
   // Older records without this field fall back gracefully.
@@ -164,6 +167,7 @@ export const testMasterData: TestMaster[] = [
     referenceNo: "REF-2024-001",
     sopCode: "SOP-MB-001",
     warehouseItems: "Peptone Water, XLD Agar",
+    specificationId: "SPEC-001",
     parameterDetails: JSON.stringify([
       {
         id: "TPR-1",
@@ -185,6 +189,7 @@ export const testMasterData: TestMaster[] = [
     referenceNo: "REF-2024-002",
     sopCode: "SOP-MB-002",
     warehouseItems: "m-Endo Agar",
+    specificationId: "SPEC-001",
     parameterDetails: JSON.stringify([
       {
         id: "TPR-2",
@@ -192,6 +197,75 @@ export const testMasterData: TestMaster[] = [
         methodReference: "Standard Methods 9222B",
         limitRange: "0",
         limitType: "Max Only",
+      },
+    ]),
+  },
+  {
+    id: "TM-003",
+    testCode: "TC-CH-003",
+    testName: "pH Measurement",
+    testParameter: "pH",
+    methodType: "Electrometric",
+    methodReference: "APHA 4500-H+",
+    sampleType: "Water",
+    referenceNo: "REF-2024-003",
+    sopCode: "SOP-CH-003",
+    warehouseItems: "pH Buffer Solutions (4, 7, 10)",
+    specificationId: "SPEC-002",
+    parameterDetails: JSON.stringify([
+      {
+        id: "TPR-3",
+        name: "pH",
+        methodReference: "APHA 4500-H+",
+        limitRange: "6.5 - 8.5",
+        limitType: "Range",
+        unit: "pH",
+      },
+    ]),
+  },
+  {
+    id: "TM-004",
+    testCode: "TC-CH-004",
+    testName: "Total Dissolved Solids",
+    testParameter: "TDS",
+    methodType: "Gravimetric",
+    methodReference: "APHA 2540 C",
+    sampleType: "Water",
+    referenceNo: "REF-2024-004",
+    sopCode: "SOP-CH-004",
+    warehouseItems: "Evaporating Dishes, Desiccator",
+    specificationId: "SPEC-002",
+    parameterDetails: JSON.stringify([
+      {
+        id: "TPR-4",
+        name: "TDS",
+        methodReference: "APHA 2540 C",
+        limitRange: "0 - 2000",
+        limitType: "Max Only",
+        unit: "mg/L",
+      },
+    ]),
+  },
+  {
+    id: "TM-005",
+    testCode: "TC-CH-005",
+    testName: "Chloride Analysis",
+    testParameter: "Chloride",
+    methodType: "Titration",
+    methodReference: "APHA 4500-Cl B",
+    sampleType: "Water",
+    referenceNo: "REF-2024-005",
+    sopCode: "SOP-CH-005",
+    warehouseItems: "Silver Nitrate, Potassium Chromate Indicator",
+    specificationId: "SPEC-001",
+    parameterDetails: JSON.stringify([
+      {
+        id: "TPR-5",
+        name: "Chloride",
+        methodReference: "APHA 4500-Cl B",
+        limitRange: "0 - 250",
+        limitType: "Max Only",
+        unit: "mg/L",
       },
     ]),
   },

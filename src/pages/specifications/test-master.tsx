@@ -5,6 +5,7 @@ import {
   parameterLibrary,
   TestParameterRow,
   TestLimitType,
+  mockSpecifications,
 } from "@/mock-data/specifications";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
   Trash2,
   X,
   Check,
+  BookOpen,
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import {
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -47,6 +50,7 @@ type FormState = {
   referenceNo: string;
   sopCode: string;
   warehouseItems: string;
+  specificationId: string; // Single Specification ID this test is linked to
 };
 
 const emptyForm: FormState = {
@@ -58,6 +62,7 @@ const emptyForm: FormState = {
   referenceNo: "",
   sopCode: "",
   warehouseItems: "",
+  specificationId: "",
 };
 
 const limitTypeOptions: TestLimitType[] = [
@@ -243,6 +248,7 @@ export default function TestMasterPage() {
                   referenceNo: formData.referenceNo,
                   sopCode: formData.sopCode,
                   warehouseItems: formData.warehouseItems,
+                  specificationId: formData.specificationId || undefined,
                   parameterDetails,
                 }
               : t
@@ -261,6 +267,7 @@ export default function TestMasterPage() {
           referenceNo: formData.referenceNo,
           sopCode: formData.sopCode,
           warehouseItems: formData.warehouseItems,
+          specificationId: formData.specificationId || undefined,
           parameterDetails,
         };
         setTests([newTest, ...tests]);
@@ -310,6 +317,7 @@ export default function TestMasterPage() {
       referenceNo: test.referenceNo,
       sopCode: test.sopCode,
       warehouseItems: test.warehouseItems,
+      specificationId: test.specificationId ?? "",
     });
     setParamSearch("");
     setOpen(true);
@@ -366,6 +374,34 @@ export default function TestMasterPage() {
               : <span className="text-muted-foreground text-xs">—</span>}
           </div>
         ),
+      },
+      {
+        key: "specificationId",
+        header: isRtl ? "المواصفة" : "Specification",
+        render: (item: TestMaster) => {
+          if (!item.specificationId) {
+            return <span className="text-muted-foreground text-xs">—</span>;
+          }
+          const spec = mockSpecifications.find(s => s.id === item.specificationId);
+          if (!spec) {
+            return (
+              <Badge variant="outline" className="text-[10px] font-mono gap-1">
+                <BookOpen className="h-3 w-3" />
+                {item.specificationId}
+              </Badge>
+            );
+          }
+          return (
+            <Badge
+              variant="outline"
+              className="text-[10px] font-mono gap-1"
+              title={spec.name}
+            >
+              <BookOpen className="h-3 w-3" />
+              {spec.code}
+            </Badge>
+          );
+        },
       },
       {
         key: "actions",
@@ -719,6 +755,53 @@ export default function TestMasterPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  {/* Linked Specification (single select) */}
+                  <div className="grid gap-2">
+                    <Label>
+                      {isRtl ? "المواصفة" : "Specification"}
+                    </Label>
+                    <Select
+                      value={formData.specificationId || "none"}
+                      onValueChange={(val) =>
+                        setFormData({
+                          ...formData,
+                          specificationId: val === "none" ? "" : val,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            isRtl ? "اختر المواصفة..." : "Select a specification..."
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">
+                          <span className="text-muted-foreground">
+                            {isRtl ? "— لا شيء —" : "— None —"}
+                          </span>
+                        </SelectItem>
+                        {mockSpecifications.map(spec => (
+                          <SelectItem key={spec.id} value={spec.id}>
+                            <div className="flex items-center gap-2">
+                              <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="font-mono text-xs">{spec.code}</span>
+                              <span className="text-muted-foreground">·</span>
+                              <span>{spec.name}</span>
+                              <span className="text-[10px] text-muted-foreground">({spec.category})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-muted-foreground">
+                      {isRtl
+                        ? "اختر مواصفة واحدة لربط هذا الاختبار بها."
+                        : "Select one specification to link this test to."}
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
