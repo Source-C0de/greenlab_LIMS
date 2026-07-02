@@ -58,17 +58,17 @@ export function Sidebar({ isOpen }: SidebarProps) {
     } else {
       items.push(
         {
-          href: "/samples",
-          labelEn: "Samples",
-          labelAr: "العينات",
+          href: currentRole === "receptionist" ? "/samples/receiving" : "/samples",
+          labelEn: currentRole === "receptionist" ? "Sample Receiving" : "Samples",
+          labelAr: currentRole === "receptionist" ? "استلام العينات" : "العينات",
           icon: FlaskConical,
           roles: ["admin", "lab_manager", "analyst", "receptionist"],
-          children: [
-            { href: "/samples", labelEn: "Samples List", labelAr: "قائمة العينات" },
-            { href: "/samples/receiving", labelEn: "Sample Receiving", labelAr: "استلام العينات" },
+          children: currentRole === "receptionist" ? undefined : [
+            { href: "/samples", labelEn: "Samples List", labelAr: "قائمة العينات", roles: ["admin", "lab_manager", "analyst"] },
+            { href: "/samples/receiving", labelEn: "Sample Receiving", labelAr: "استلام العينات", roles: ["admin", "lab_manager", "analyst"] },
           ]
         },
-        { href: "/workflow", labelEn: "Workflow", labelAr: "سير العمل", icon: FolderKanban, roles: ["admin", "lab_manager", "analyst", "receptionist"] },
+        { href: "/workflow", labelEn: "Workflow", labelAr: "سير العمل", icon: FolderKanban, roles: ["admin", "lab_manager", "analyst"] },
         { href: "/clients", labelEn: "Clients", labelAr: "العملاء", icon: Users, roles: ["admin", "lab_manager", "receptionist"] },
         { href: "/reports", labelEn: "Reports", labelAr: "التقارير", icon: FileText, roles: ["admin", "lab_manager", "analyst", "receptionist"] },
         { href: "/inventory", labelEn: "Inventory", labelAr: "المخزون", icon: Package, roles: ["admin", "lab_manager", "receptionist"] },
@@ -150,21 +150,23 @@ export function Sidebar({ isOpen }: SidebarProps) {
 
                 {item.children && (isActive || location.startsWith(item.href)) && (
                   <div className={`${isRtl ? 'mr-8' : 'ml-8'} space-y-1 mt-1 border-l border-sidebar-border pl-2 rtl:pr-2 rtl:border-r rtl:border-l-0`}>
-                    {item.children.map((child: any) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        className={`
-                          block px-3 py-2 text-xs font-medium rounded-md transition-colors
-                          ${location === child.href
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                          }
-                        `}
-                      >
-                        {isRtl ? child.labelAr : child.labelEn}
-                      </Link>
-                    ))}
+                    {item.children
+                      .filter((child: any) => !child.roles || child.roles.includes(currentRole))
+                      .map((child: any) => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className={`
+                            block px-3 py-2 text-xs font-medium rounded-md transition-colors
+                            ${location === child.href
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                            }
+                          `}
+                        >
+                          {isRtl ? child.labelAr : child.labelEn}
+                        </Link>
+                      ))}
                   </div>
                 )}
               </div>
