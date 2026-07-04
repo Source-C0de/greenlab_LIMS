@@ -11,3 +11,5 @@ export * from "./accounts";
 export * from "./journals";
 export * from "./expenses";
 export * from "./specifications";
+export * from "./menuPermissions";
+export * from "./rolePermissions";

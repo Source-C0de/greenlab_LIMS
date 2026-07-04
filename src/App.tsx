@@ -16,6 +16,7 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import ForgotPassword from "@/pages/forgot-password";
 import OtpVerify from "@/pages/otp-verify";
+import SuperadminLogin from "@/pages/superadmin-login";
 
 // App Pages
 import Dashboard from "@/pages/dashboard";
@@ -63,6 +64,7 @@ function Router() {
       {/* Auth routes without sidebar */}
       <Route path="/" component={() => <Redirect to="/login" />} />
       <Route path="/login" component={Login} />
+      <Route path="/superadmin" component={SuperadminLogin} />
       <Route path="/register" component={Register} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/otp-verify" component={OtpVerify} />
