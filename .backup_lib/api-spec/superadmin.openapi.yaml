@@ -1,0 +1,1629 @@
+openapi: 3.1.0
+info:
+  title: GreenLabLIMS KSA — Superadmin API
+  version: 1.0.0
+  description: |
+    Platform-control-plane API for the GreenLabLIMS KSA SaaS operator.
+
+    All routes prefixed with `/api/superadmin` require a **superadmin JWT bearer**
+    token (`Authorization: Bearer <token>`) unless explicitly marked Public.
+
+    Auth model:
+      - Access tokens: 24h TTL
+      - Refresh tokens: 30d TTL
+      - Impersonation tokens: 1h TTL, scoped to a tenant via `tenant_id` claim
+
+    Errors are returned as `{ error: { code, message, details?, requestId? } }`
+    with the following codes: `unauthorized`, `forbidden`, `not_found`,
+    `validation`, `conflict`, `rate_limited`, `internal`.
+
+    Pagination is consistent across all list endpoints using the
+    `Paginated<T>` envelope (see schemas).
+
+servers:
+  - url: https://api.greenlablims.example.com
+    description: Production
+  - url: http://localhost:4000
+    description: Local dev
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Superadmin authentication & session management
+  - name: Users
+    description: Superadmin / platform user CRUD
+  - name: Tenants
+    description: Tenant (organization) CRUD + lifecycle
+  - name: Metrics
+    description: Platform-wide KPIs and time-series
+  - name: Audit
+    description: Append-only audit log
+  - name: Impersonation
+    description: '"Log in as tenant" support'
+  - name: Permissions
+    description: Roles, menu items, and the role→menu permission matrix
+
+# ----------------------------------------------------------------------------
+# PATHS
+# ----------------------------------------------------------------------------
+paths:
+  # =========================================================================
+  # A. AUTH
+  # =========================================================================
+  /superadmin/auth/login:
+    post:
+      operationId: loginSuperadmin
+      tags: [Auth]
+      summary: Email/password login
+      description: Returns access + refresh tokens for a superadmin user.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accessToken, refreshToken, expiresIn, user]
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: integer, description: "Seconds until accessToken expires" }
+                  user: { $ref: "#/components/schemas/SuperadminUser" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /superadmin/auth/refresh:
+    post:
+      operationId: refreshSuperadminToken
+      tags: [Auth]
+      summary: Exchange refresh token for new access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accessToken, refreshToken, expiresIn]
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  expiresIn: { type: integer }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /superadmin/auth/logout:
+    post:
+      operationId: logoutSuperadmin
+      tags: [Auth]
+      summary: Invalidate the given refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "204":
+          description: No content
+
+  /superadmin/auth/me:
+    get:
+      operationId: getCurrentSuperadmin
+      tags: [Auth]
+      summary: Current superadmin user profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuperadminUser" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /superadmin/auth/me/password:
+    patch:
+      operationId: changeOwnPassword
+      tags: [Auth]
+      summary: Change the current user's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 12 }
+      responses:
+        "204":
+          description: No content
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /superadmin/auth/forgot-password:
+    post:
+      operationId: requestPasswordReset
+      tags: [Auth]
+      summary: Request a password-reset email
+      description: Always returns 204 to avoid email enumeration.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "204":
+          description: No content
+
+  /superadmin/auth/reset-password:
+    post:
+      operationId: submitPasswordReset
+      tags: [Auth]
+      summary: Submit a new password using a reset token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { type: string, minLength: 12 }
+      responses:
+        "204":
+          description: No content
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  # =========================================================================
+  # B. USERS
+  # =========================================================================
+  /superadmin/users:
+    get:
+      operationId: listSuperadminUsers
+      tags: [Users]
+      summary: List superadmin/platform users
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Text search across email and fullName
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, suspended, disabled]
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [superadmin, platform_support, platform_billing, platform_readonly]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/SuperadminUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    post:
+      operationId: createSuperadminUser
+      tags: [Users]
+      summary: Invite a new superadmin/platform user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, fullName, role]
+              properties:
+                email: { type: string, format: email }
+                fullName: { type: string }
+                fullNameAr: { type: string }
+                role:
+                  type: string
+                  enum: [superadmin, platform_support, platform_billing, platform_readonly]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuperadminUser" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /superadmin/users/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getSuperadminUser
+      tags: [Users]
+      summary: Get one superadmin user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuperadminUser" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    put:
+      operationId: updateSuperadminUser
+      tags: [Users]
+      summary: Update a superadmin user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullName: { type: string }
+                fullNameAr: { type: string }
+                role:
+                  type: string
+                  enum: [superadmin, platform_support, platform_billing, platform_readonly]
+                mfaEnabled: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuperadminUser" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+    delete:
+      operationId: deleteSuperadminUser
+      tags: [Users]
+      summary: Soft-delete a superadmin user
+      responses:
+        "204": { description: No content }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/users/{id}/status:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    patch:
+      operationId: setSuperadminUserStatus
+      tags: [Users]
+      summary: Activate / suspend / disable a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [active, suspended, disabled]
+                reason: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SuperadminUser" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/users/{id}/reset-password:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      operationId: forcePasswordReset
+      tags: [Users]
+      summary: Force a password reset email for a user
+      description: Always returns 204 to avoid user enumeration.
+      responses:
+        "204": { description: No content }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # =========================================================================
+  # C. TENANTS
+  # =========================================================================
+  /superadmin/tenants:
+    get:
+      operationId: listTenants
+      tags: [Tenants]
+      summary: List tenants (paginated, filterable)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, trial, suspended, cancelled]
+        - in: query
+          name: plan
+          schema:
+            type: string
+            enum: [starter, professional, enterprise]
+        - in: query
+          name: region
+          schema: { type: string }
+        - in: query
+          name: includeDeleted
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Tenant" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+    post:
+      operationId: createTenant
+      tags: [Tenants]
+      summary: Create a new tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, nameAr, slug, planCode, contactEmail, billingCycle]
+              properties:
+                name: { type: string }
+                nameAr: { type: string }
+                slug:
+                  type: string
+                  pattern: "^[a-z0-9-]+$"
+                planCode:
+                  type: string
+                  enum: [starter, professional, enterprise]
+                contactEmail: { type: string, format: email }
+                contactPhone: { type: string }
+                crNumber: { type: string, description: "Saudi Commercial Registration number" }
+                vatNumber: { type: string, description: "ZATCA VAT number" }
+                city: { type: string }
+                region:
+                  type: string
+                  enum: [Riyadh, Makkah, Madinah, Eastern, Asir, Tabuk, Hail, Jouf, Najran, Bahah, Jazan, Northern]
+                billingCycle:
+                  type: string
+                  enum: [monthly, yearly]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /superadmin/tenants/export:
+    get:
+      operationId: exportTenants
+      tags: [Tenants]
+      summary: Export tenants as CSV or JSON
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [csv, json]
+            default: csv
+      responses:
+        "200":
+          description: OK
+          content:
+            text/csv:
+              schema: { type: string }
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Tenant" }
+
+  /superadmin/tenants/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getTenant
+      tags: [Tenants]
+      summary: Get one tenant (with usage counters + admin contact)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Tenant"
+                  - type: object
+                    properties:
+                      adminContact:
+                        type: object
+                        nullable: true
+                        properties:
+                          userId: { type: string }
+                          fullName: { type: string }
+                          email: { type: string }
+                          phone: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    put:
+      operationId: updateTenant
+      tags: [Tenants]
+      summary: Update a tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                nameAr: { type: string }
+                contactEmail: { type: string, format: email }
+                contactPhone: { type: string }
+                crNumber: { type: string }
+                vatNumber: { type: string }
+                city: { type: string }
+                region:
+                  type: string
+                  enum: [Riyadh, Makkah, Madinah, Eastern, Asir, Tabuk, Hail, Jouf, Najran, Bahah, Jazan, Northern]
+                billingCycle:
+                  type: string
+                  enum: [monthly, yearly]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+    delete:
+      operationId: deleteTenant
+      tags: [Tenants]
+      summary: Soft-delete a tenant
+      responses:
+        "204": { description: No content (soft-delete)" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tenants/{id}/status:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    patch:
+      operationId: setTenantStatus
+      tags: [Tenants]
+      summary: Set tenant lifecycle status
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [active, trial, suspended, cancelled]
+                reason: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tenants/{id}/plan:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    patch:
+      operationId: changeTenantPlan
+      tags: [Tenants]
+      summary: Change tenant's plan (optionally prorated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planCode]
+              properties:
+                planCode:
+                  type: string
+                  enum: [starter, professional, enterprise]
+                prorate:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tenants/{id}/suspend:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      operationId: suspendTenant
+      tags: [Tenants]
+      summary: Suspend a tenant (sets status=suspended + reason)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tenants/{id}/activate:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      operationId: activateTenant
+      tags: [Tenants]
+      summary: Activate a suspended tenant
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tenants/{id}/restore:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      operationId: restoreTenant
+      tags: [Tenants]
+      summary: Restore a soft-deleted tenant
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tenant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # =========================================================================
+  # D. METRICS
+  # =========================================================================
+  /superadmin/metrics/overview:
+    get:
+      operationId: getPlatformOverview
+      tags: [Metrics]
+      summary: Top-of-dashboard KPIs
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformOverviewMetrics" }
+
+  /superadmin/metrics/tenants:
+    get:
+      operationId: getTenantMetrics
+      tags: [Metrics]
+      summary: Per-tenant time series (signups, churn, MRR)
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: granularity
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        bucket: { type: string, format: date-time }
+                        signups: { type: integer }
+                        churns: { type: integer }
+                        mrrDelta: { type: number }
+
+  /superadmin/metrics/usage:
+    get:
+      operationId: getUsageMetrics
+      tags: [Metrics]
+      summary: Aggregate platform usage
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  samplesProcessed: { type: integer }
+                  apiCalls: { type: integer }
+                  storageGb: { type: number }
+                  logins: { type: integer }
+
+  /superadmin/metrics/geo:
+    get:
+      operationId: getGeoDistribution
+      tags: [Metrics]
+      summary: Tenant distribution by region/city
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  buckets:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        region: { type: string }
+                        tenants: { type: integer }
+
+  # =========================================================================
+  # E. AUDIT LOG
+  # =========================================================================
+  /superadmin/audit-log:
+    get:
+      operationId: listAuditEvents
+      tags: [Audit]
+      summary: List audit events (paginated, filterable)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - in: query
+          name: actor
+          schema: { type: string, description: "Actor email or user id" }
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [auth, tenant, user, plan, feature_flag, impersonation, billing]
+        - in: query
+          name: tenantId
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: [createdAt, actor, action]
+            default: createdAt
+        - in: query
+          name: sortOrder
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/AuditEvent" }
+
+  /superadmin/audit-log/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getAuditEvent
+      tags: [Audit]
+      summary: Get one audit event
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditEvent" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/audit-log/export:
+    get:
+      operationId: exportAuditLog
+      tags: [Audit]
+      summary: Export audit log as CSV or JSON
+      parameters:
+        - in: query
+          name: format
+          schema:
+            type: string
+            enum: [csv, json]
+            default: csv
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            text/csv:
+              schema: { type: string }
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AuditEvent" }
+
+  # =========================================================================
+  # F. IMPERSONATION
+  # =========================================================================
+  /superadmin/tenants/{id}/impersonate:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      operationId: impersonateTenant
+      tags: [Impersonation]
+      summary: Issue a short-lived impersonation token scoped to tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+                asUserId:
+                  type: string
+                  description: "Optional — target tenant user id to act as; defaults to primary admin"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [impersonationToken, expiresAt, sessionId, tenantName]
+                properties:
+                  sessionId: { type: string }
+                  impersonationToken: { type: string }
+                  expiresAt: { type: string, format: date-time }
+                  tenantName: { type: string }
+                  actingAs:
+                    type: object
+                    properties:
+                      userId: { type: string }
+                      fullName: { type: string }
+                      email: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/impersonation/end:
+    post:
+      operationId: endImpersonation
+      tags: [Impersonation]
+      summary: End the active impersonation session
+      responses:
+        "204": { description: No content }
+
+  /superadmin/impersonation/active:
+    get:
+      operationId: listActiveImpersonations
+      tags: [Impersonation]
+      summary: List currently active impersonation sessions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sessionId: { type: string }
+                        actorId: { type: string }
+                        actorEmail: { type: string }
+                        tenantId: { type: string }
+                        tenantName: { type: string }
+                        startedAt: { type: string, format: date-time }
+                        expiresAt: { type: string, format: date-time }
+
+  # =========================================================================
+  # G. ROLES  (the role registry itself — backend-owned)
+  # =========================================================================
+  /superadmin/roles:
+    get:
+      operationId: listRoles
+      tags: [Permissions]
+      summary: List all roles defined on the platform
+      description: |
+        Returns the canonical role registry. Each role has a stable `code`
+        (e.g. `admin`, `lab_manager`) and a bilingual display name.
+        The frontend uses this to render role pickers / badges.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Role" }
+
+    post:
+      operationId: createRole
+      tags: [Permissions]
+      summary: Create a new role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, nameEn, nameAr]
+              properties:
+                code: { type: string, description: "Stable snake_case identifier, e.g. 'lab_manager'" }
+                nameEn: { type: string }
+                nameAr: { type: string }
+                descriptionEn: { type: string }
+                descriptionAr: { type: string }
+                isSystem: { type: boolean, default: false, description: "System roles cannot be deleted" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Validation"
+
+  /superadmin/roles/{code}:
+    parameters:
+      - in: path
+        name: code
+        required: true
+        schema: { type: string, description: "Role code, e.g. 'admin', 'lab_manager'" }
+    get:
+      operationId: getRole
+      tags: [Permissions]
+      summary: Get one role by code
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    put:
+      operationId: updateRole
+      tags: [Permissions]
+      summary: Update a role's display names / description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nameEn: { type: string }
+                nameAr: { type: string }
+                descriptionEn: { type: string }
+                descriptionAr: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+    delete:
+      operationId: deleteRole
+      tags: [Permissions]
+      summary: Delete a role (only if non-system AND not assigned to any user)
+      responses:
+        "204": { description: No content }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Role is system-protected or still in use
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  # =========================================================================
+  # H. MENU ITEMS  (the navigation registry — backend-owned)
+  # =========================================================================
+  /superadmin/menu-items:
+    get:
+      operationId: listMenuItems
+      tags: [Permissions]
+      summary: List the full menu tree
+      description: |
+        Returns every menu item (with nested children) registered on the
+        platform. Each item has a stable `key` (e.g. `samples`,
+        `samples_receiving`) and a `href` it links to. Items are grouped
+        under the `section` they appear under in the sidebar.
+      parameters:
+        - in: query
+          name: section
+          schema:
+            type: string
+            enum: [main, accounting, specifications, client_portal, settings]
+        - in: query
+          name: includeDisabled
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/MenuItem" }
+
+    post:
+      operationId: createMenuItem
+      tags: [Permissions]
+      summary: Create a new menu item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, href, labelEn, labelAr, section, sortOrder]
+              properties:
+                key: { type: string, description: "Stable identifier, e.g. 'samples'" }
+                href: { type: string, description: "Route path, e.g. '/samples'" }
+                parentKey: { type: string, nullable: true, description: "Set for nested children" }
+                icon: { type: string, description: "Lucide icon name" }
+                labelEn: { type: string }
+                labelAr: { type: string }
+                section:
+                  type: string
+                  enum: [main, accounting, specifications, client_portal, settings]
+                sortOrder: { type: integer }
+                isEnabled: { type: boolean, default: true }
+                isSystem: { type: boolean, default: false, description: "System items cannot be deleted" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuItem" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /superadmin/menu-items/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getMenuItem
+      tags: [Permissions]
+      summary: Get one menu item
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    put:
+      operationId: updateMenuItem
+      tags: [Permissions]
+      summary: Update a menu item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                href: { type: string }
+                icon: { type: string }
+                labelEn: { type: string }
+                labelAr: { type: string }
+                section:
+                  type: string
+                  enum: [main, accounting, specifications, client_portal, settings]
+                sortOrder: { type: integer }
+                isEnabled: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuItem" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+    delete:
+      operationId: deleteMenuItem
+      tags: [Permissions]
+      summary: Delete a menu item (only if non-system)
+      responses:
+        "204": { description: No content }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Menu item is system-protected
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /superadmin/menu-items/reorder:
+    post:
+      operationId: reorderMenuItems
+      tags: [Permissions]
+      summary: Bulk reorder menu items
+      description: Accepts the new ordering of items within each section.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sections]
+              properties:
+                sections:
+                  type: array
+                  items:
+                    type: object
+                    required: [section, items]
+                    properties:
+                      section:
+                        type: string
+                        enum: [main, accounting, specifications, client_portal, settings]
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, sortOrder]
+                          properties:
+                            id: { type: string }
+                            sortOrder: { type: integer }
+      responses:
+        "204": { description: No content }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  # =========================================================================
+  # I. PERMISSION MATRIX  (role × menu-item — enables/disables the menu)
+  # =========================================================================
+  /superadmin/permissions/matrix:
+    get:
+      operationId: getPermissionMatrix
+      tags: [Permissions]
+      summary: Get the full role × menu-item permission matrix
+      description: |
+        Returns the complete matrix. Frontend uses this to decide which
+        sidebar items to render for the currently-logged-in role.
+        `enabled = true` means the role can SEE that menu item.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PermissionMatrix" }
+
+  /superadmin/permissions/menu-items/{menuItemId}:
+    parameters:
+      - in: path
+        name: menuItemId
+        required: true
+        schema: { type: string }
+    put:
+      operationId: setMenuItemPermissions
+      tags: [Permissions]
+      summary: Replace which roles can see this menu item (enables/disables it per role)
+      description: |
+        Atomically replaces the role list for this menu item. Pass every
+        role that should have access; omit roles that should NOT see the item.
+        This is the endpoint the superadmin clicks when toggling a
+        checkbox like "Lab managers can see Samples".
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleCodes]
+              properties:
+                roleCodes:
+                  type: array
+                  items: { type: string }
+                  description: "Codes of roles that SHOULD see this menu item"
+                applyToChildren: { type: boolean, default: false }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuItemPermissions" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /superadmin/permissions/bulk:
+    post:
+      operationId: bulkUpdatePermissions
+      tags: [Permissions]
+      summary: Bulk toggle multiple menu items × roles in one transaction
+      description: |
+        For the matrix-grid UI. Body is an array of
+        `{ menuItemId, roleCode, enabled }` triplets; backend applies
+        them in a single transaction so the UI never lands in an
+        inconsistent state mid-edit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [changes]
+              properties:
+                changes:
+                  type: array
+                  items:
+                    type: object
+                    required: [menuItemId, roleCode, enabled]
+                    properties:
+                      menuItemId: { type: string }
+                      roleCode: { type: string }
+                      enabled: { type: boolean }
+                      applyToChildren: { type: boolean, default: false }
+      responses:
+        "204": { description: No content }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  # =========================================================================
+  # J. RESOLVED PERMISSIONS (consumed by the frontend on every page load)
+  # =========================================================================
+  /superadmin/me/permissions:
+    get:
+      operationId: getMyPermissions
+      tags: [Permissions]
+      summary: Get the resolved menu items visible to the current user
+      description: |
+        Returns the menu tree the current superadmin should see, already
+        filtered by the role × menu-item matrix. Frontend calls this
+        on login + on permission change to refresh the sidebar.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sections:
+                    type: array
+                    items:
+                      type: object
+                      required: [section, items]
+                      properties:
+                        section:
+                          type: string
+                          enum: [main, accounting, specifications, client_portal, settings]
+                        items:
+                          type: array
+                          items: { $ref: "#/components/schemas/MenuItem" }
+
+# ----------------------------------------------------------------------------
+# COMPONENTS
+# ----------------------------------------------------------------------------
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Page:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      in: query
+      name: pageSize
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated but not allowed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Conflict (duplicate slug, email, etc.)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Validation:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Tenant:
+      type: object
+      required:
+        - id
+        - name
+        - nameAr
+        - slug
+        - planCode
+        - status
+        - contactEmail
+        - billingCycle
+        - activeUsers
+        - activeSamples
+        - monthlyRevenue
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string, description: "e.g. tnt_01HXYZ..." }
+        name: { type: string }
+        nameAr: { type: string }
+        slug: { type: string, pattern: "^[a-z0-9-]+$" }
+        planCode:
+          type: string
+          enum: [starter, professional, enterprise]
+        status:
+          type: string
+          enum: [active, trial, suspended, cancelled]
+        contactEmail: { type: string, format: email }
+        contactPhone: { type: string, nullable: true }
+        crNumber: { type: string, nullable: true, description: "Saudi Commercial Registration" }
+        vatNumber: { type: string, nullable: true, description: "ZATCA VAT number" }
+        city: { type: string, nullable: true }
+        region:
+          type: string
+          nullable: true
+          enum: [Riyadh, Makkah, Madinah, Eastern, Asir, Tabuk, Hail, Jouf, Najran, Bahah, Jazan, Northern]
+        billingCycle:
+          type: string
+          enum: [monthly, yearly]
+        activeUsers: { type: integer, description: "Computed" }
+        activeSamples: { type: integer, description: "Current month" }
+        monthlyRevenue: { type: number, description: "SAR" }
+        suspensionReason: { type: string, nullable: true }
+        trialEndsAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        deletedAt: { type: string, format: date-time, nullable: true }
+
+    SuperadminUser:
+      type: object
+      required: [id, email, fullName, role, status, mfaEnabled, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        fullNameAr: { type: string, nullable: true }
+        role:
+          type: string
+          enum: [superadmin, platform_support, platform_billing, platform_readonly]
+        status:
+          type: string
+          enum: [active, suspended, disabled]
+        mfaEnabled: { type: boolean }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AuditEvent:
+      type: object
+      required: [id, actorId, actorEmail, action, category, createdAt]
+      properties:
+        id: { type: string }
+        actorId: { type: string }
+        actorEmail: { type: string }
+        action:
+          type: string
+          description: "e.g. tenant.create, plan.update, user.suspend, impersonation.start"
+        category:
+          type: string
+          enum: [auth, tenant, user, plan, feature_flag, impersonation, billing]
+        targetType:
+          type: string
+          nullable: true
+          enum: [tenant, user, plan, feature_flag]
+        targetId: { type: string, nullable: true }
+        tenantId: { type: string, nullable: true }
+        ipAddress: { type: string, nullable: true }
+        userAgent: { type: string, nullable: true }
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+        createdAt: { type: string, format: date-time }
+
+    PlatformOverviewMetrics:
+      type: object
+      required:
+        - mrr
+        - arr
+        - totalTenants
+        - activeTenants
+        - trialTenants
+        - suspendedTenants
+        - cancelledTenants
+        - totalActiveUsers
+        - totalSamplesThisMonth
+        - generatedAt
+      properties:
+        mrr: { type: number, description: "SAR" }
+        arr: { type: number }
+        totalTenants: { type: integer }
+        activeTenants: { type: integer }
+        trialTenants: { type: integer }
+        suspendedTenants: { type: integer }
+        cancelledTenants: { type: integer }
+        totalActiveUsers: { type: integer }
+        totalSamplesThisMonth: { type: integer }
+        newSignupsLast30Days: { type: integer }
+        churnLast30Days: { type: integer }
+        generatedAt: { type: string, format: date-time }
+
+    Paginated:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items: {}
+        pagination:
+          type: object
+          required: [page, pageSize, total, totalPages]
+          properties:
+            page: { type: integer }
+            pageSize: { type: integer }
+            total: { type: integer }
+            totalPages: { type: integer }
+
+    Role:
+      type: object
+      required: [code, nameEn, nameAr, isSystem, createdAt, updatedAt]
+      properties:
+        code: { type: string, description: "Stable snake_case identifier, e.g. 'lab_manager'" }
+        nameEn: { type: string, description: "e.g. 'Lab Manager'" }
+        nameAr: { type: string, description: "e.g. 'مدير المختبر'" }
+        descriptionEn: { type: string, nullable: true }
+        descriptionAr: { type: string, nullable: true }
+        isSystem: { type: boolean, description: "System-defined roles cannot be deleted" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    MenuItem:
+      type: object
+      required: [id, key, href, labelEn, labelAr, section, sortOrder, isEnabled, isSystem, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        key: { type: string, description: "Stable identifier, e.g. 'samples', 'samples_receiving'" }
+        href: { type: string, description: "Route path, e.g. '/samples'" }
+        parentKey: { type: string, nullable: true, description: "Set for nested children" }
+        icon: { type: string, nullable: true, description: "Lucide icon name" }
+        labelEn: { type: string }
+        labelAr: { type: string }
+        section:
+          type: string
+          enum: [main, accounting, specifications, client_portal, settings]
+        sortOrder: { type: integer }
+        isEnabled: { type: boolean, description: "Master toggle; if false, no role sees it" }
+        isSystem: { type: boolean, description: "System-defined items cannot be deleted" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PermissionMatrix:
+      type: object
+      required: [roles, menuItems, cells]
+      description: |
+        Sparse matrix. `cells` is keyed by `{roleCode}::{menuItemKey}` and
+        only contains the explicit grants (denied entries are implicit).
+        Frontend renders the toggle grid from this.
+      properties:
+        roles:
+          type: array
+          items: { $ref: "#/components/schemas/Role" }
+        menuItems:
+          type: array
+          items: { $ref: "#/components/schemas/MenuItem" }
+        cells:
+          type: array
+          items:
+            type: object
+            required: [roleCode, menuItemKey, enabled]
+            properties:
+              roleCode: { type: string }
+              menuItemKey: { type: string }
+              enabled: { type: boolean }
+
+    MenuItemPermissions:
+      type: object
+      required: [menuItemId, roleCodes, updatedAt]
+      properties:
+        menuItemId: { type: string }
+        roleCodes:
+          type: array
+          items: { type: string }
+          description: "Roles that can see this menu item"
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: string, description: "User id of the last editor" }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [unauthorized, forbidden, not_found, validation, conflict, rate_limited, internal]
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true
+              nullable: true
+            requestId: { type: string, nullable: true }
