@@ -4,3 +4,4 @@ This is GL internal project for testing.
 3. Implement add channel option
 4. Implement Customer Segment
 5. add backend 
+6. modified whole architecture.
