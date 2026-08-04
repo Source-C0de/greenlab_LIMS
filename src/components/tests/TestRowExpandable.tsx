@@ -2,6 +2,7 @@ import { useState } from "react";
 import { TableRow, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   Popover,
   PopoverContent,
@@ -32,7 +33,8 @@ export interface TestTableTest {
   category: string;
   method: string;
   assignedTo: string | null;
-  status: string;
+  status?: string;
+  reviewStatus?: string;
   parameters: Parameter[];
   specificationId?: string;
 }
@@ -64,15 +66,6 @@ export function TestRowExpandable({
   const isRtl = language === "ar";
   const [isExpanded, setIsExpanded] = useState(false);
   const [parameters, setParameters] = useState<Parameter[]>(test.parameters);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Completed": return "bg-green-500/10 text-green-600 border-green-200";
-      case "In Progress": return "bg-blue-500/10 text-blue-600 border-blue-200";
-      case "Review": return "bg-yellow-500/10 text-yellow-600 border-yellow-200";
-      default: return "bg-gray-500/10 text-gray-600 border-gray-200";
-    }
-  };
 
   const renderAnalystCell = () => {
     if (!canEditAnalyst || !onAssignAnalyst) {
@@ -204,9 +197,7 @@ export function TestRowExpandable({
           {renderAnalystCell()}
         </TableCell>
         <TableCell>
-          <Badge className={`font-normal ${getStatusColor(test.status)}`}>
-            {test.status}
-          </Badge>
+          <StatusBadge status={test.reviewStatus ?? test.status ?? "pending"} />
         </TableCell>
         <TableCell className="text-right">
           <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>

@@ -44,6 +44,8 @@ tags:
     description: '"Log in as tenant" support'
   - name: Permissions
     description: Roles, menu items, and the role→menu permission matrix
+  - name: TestApproval
+    description: Per-test review & approval workflow (analyst submits → lab manager approves or rejects)
 
 # ----------------------------------------------------------------------------
 # PATHS
@@ -1356,6 +1358,392 @@ paths:
                           type: array
                           items: { $ref: "#/components/schemas/MenuItem" }
 
+  # =========================================================================
+  # K. TEST APPROVAL  (analyst submits → lab manager approves or rejects)
+  # =========================================================================
+  # Tests are owned by samples. The analyst enters parameter values, submits
+  # the test for review, and a reviewer (lab_manager by default; configurable
+  # per tenant via the Permissions matrix) either approves it (status →
+  # 'approved') or rejects it back to the analyst with a reason (status →
+  # 'changes_requested').
+  #
+  # Lifecycle:
+  #   pending → in_progress → submitted_for_review → (approved | changes_requested)*
+  #                                                  ↑     ↓
+  #                                                  └─────┘  (resubmit loop)
+  #                                                  approved  →  (final)
+  # When ALL tests on a sample are approved, the sample's overall status
+  # auto-transitions to 'approved' (server-side trigger).
+
+  /superadmin/samples/{sampleId}/tests:
+    parameters:
+      - in: path
+        name: sampleId
+        required: true
+        schema: { type: string, description: "Sample id, e.g. SAM-2024-001" }
+    get:
+      operationId: listSampleTests
+      tags: [TestApproval]
+      summary: List all tests under a sample (for the reviewer's overview page)
+      parameters:
+        - in: query
+          name: reviewStatus
+          schema:
+            type: string
+            enum: [pending, in_progress, submitted_for_review, approved, changes_requested]
+        - in: query
+          name: assignedTo
+          schema: { type: string, description: "Analyst user id" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sampleId: { type: string }
+                  sampleStatus: { type: string }
+                  tests:
+                    type: array
+                    items: { $ref: "#/components/schemas/Test" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tests/queue:
+    get:
+      operationId: listPendingReviewTests
+      tags: [TestApproval]
+      summary: List tests awaiting lab-manager review (the approval queue)
+      description: |
+        Returns every test currently in `submitted_for_review` status
+        across all samples. Filterable by sample, sampleType, priority,
+        and assigned analyst. Default sort is oldest-submission first.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - in: query
+          name: sampleId
+          schema: { type: string }
+        - in: query
+          name: sampleType
+          schema: { type: string }
+        - in: query
+          name: priority
+          schema:
+            type: string
+            enum: [normal, high, urgent]
+        - in: query
+          name: assignedTo
+          schema: { type: string }
+        - in: query
+          name: submittedFrom
+          schema: { type: string, format: date-time }
+        - in: query
+          name: submittedTo
+          schema: { type: string, format: date-time }
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: [submittedAt, priority, sampleId]
+            default: submittedAt
+        - in: query
+          name: sortOrder
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Test" }
+
+  /superadmin/tests/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, description: "Test id, e.g. T-001" }
+    get:
+      operationId: getTest
+      tags: [TestApproval]
+      summary: Get one test with all parameters and review history
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Test" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tests/{id}/parameters:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    put:
+      operationId: updateTestParameters
+      tags: [TestApproval]
+      summary: Bulk upsert parameter values for a test (analyst action)
+      description: |
+        Analyst enters or edits parameter values. Backend recomputes
+        per-parameter status (Pass/Fail) against the spec's min/max
+        after every save. Allowed in statuses `pending`,
+        `in_progress`, and `changes_requested` (re-entry after rejection).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parameters]
+              properties:
+                parameters:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, value]
+                    properties:
+                      id: { type: string, description: "Parameter id, e.g. P-01" }
+                      value: { type: string, description: "Raw value as entered by the analyst" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Test" }
+        "403":
+          description: Test is not editable in its current reviewStatus
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /superadmin/tests/{id}/submit:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      operationId: submitTestForReview
+      tags: [TestApproval]
+      summary: Analyst submits the test for lab-manager review
+      description: |
+        Transitions the test from `in_progress` (or `changes_requested`)
+        into `submitted_for_review`. All parameters must have values;
+        the backend returns 422 if any parameter is still blank.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Test" }
+        "403":
+          description: Test is already submitted or in a non-submittable state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: One or more parameters are blank
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tests/{id}/approve:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      operationId: approveTest
+      tags: [TestApproval]
+      summary: Lab manager approves a submitted test
+      description: |
+        Transitions the test from `submitted_for_review` to `approved`.
+        Records a `TestReview` event with `decision: 'approved'`.
+        Once ALL tests on a sample are approved, the sample itself
+        auto-transitions to `approved`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string, description: "Optional reviewer comment" }
+                signaturePng: { type: string, format: byte, description: "Optional reviewer signature image (base64)" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Test" }
+        "403":
+          description: Test is not in `submitted_for_review` status, or caller lacks permission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tests/{id}/reject:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    post:
+      operationId: rejectTest
+      tags: [TestApproval]
+      summary: Lab manager rejects a submitted test, sending it back to the analyst
+      description: |
+        Transitions the test from `submitted_for_review` to
+        `changes_requested`. The assigned analyst sees the rejection
+        reason and re-enters parameter values. Records a `TestReview`
+        event with `decision: 'changes_requested'`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, description: "Why the test was rejected (shown to the analyst)" }
+                comment: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Test" }
+        "403":
+          description: Test is not in `submitted_for_review` status, or caller lacks permission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /superadmin/tests/{id}/history:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listTestReviewHistory
+      tags: [TestApproval]
+      summary: Full audit trail of approval actions on a single test
+      description: Returns every `TestReview` event ever recorded for this test, newest first.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  testId: { type: string }
+                  events:
+                    type: array
+                    items: { $ref: "#/components/schemas/TestReview" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /superadmin/tests/bulk-approve:
+    post:
+      operationId: bulkApproveTests
+      tags: [TestApproval]
+      summary: Approve multiple tests in one transaction
+      description: |
+        Convenience endpoint for the lab-manager queue UI's "Approve all
+        selected" action. All-or-nothing: if any test fails the
+        pre-condition (wrong status, missing permission), the entire
+        batch is rejected with 422 and no test is changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [testIds]
+              properties:
+                testIds:
+                  type: array
+                  items: { type: string }
+                comment: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approved:
+                    type: array
+                    items: { $ref: "#/components/schemas/Test" }
+        "422": { $ref: "#/components/responses/Validation" }
+
+  /superadmin/me/tests/submitted:
+    get:
+      operationId: listMySubmittedTests
+      tags: [TestApproval]
+      summary: Tests the current analyst has submitted, awaiting decision
+      description: Convenience endpoint so the analyst sees their own pending submissions without needing to filter the global queue.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Test" }
+
+  /superadmin/me/tests/changes-requested:
+    get:
+      operationId: listMyChangesRequestedTests
+      tags: [TestApproval]
+      summary: Tests the current analyst must revise (rejected tests)
+      description: Tests in `changes_requested` status assigned to the current analyst.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Test" }
+
 # ----------------------------------------------------------------------------
 # COMPONENTS
 # ----------------------------------------------------------------------------
@@ -1483,7 +1871,7 @@ components:
           description: "e.g. tenant.create, plan.update, user.suspend, impersonation.start"
         category:
           type: string
-          enum: [auth, tenant, user, plan, feature_flag, impersonation, billing]
+          enum: [auth, tenant, user, plan, feature_flag, impersonation, billing, test, sample]
         targetType:
           type: string
           nullable: true
@@ -1609,6 +1997,100 @@ components:
           description: "Roles that can see this menu item"
         updatedAt: { type: string, format: date-time }
         updatedBy: { type: string, description: "User id of the last editor" }
+
+    Test:
+      type: object
+      required:
+        - id
+        - sampleId
+        - name
+        - category
+        - method
+        - assignedTo
+        - reviewStatus
+        - parameters
+        - reviewHistory
+        - createdAt
+        - updatedAt
+      properties:
+        id: { type: string, description: "e.g. T-001" }
+        sampleId: { type: string, description: "e.g. SAM-2024-001" }
+        name: { type: string }
+        category: { type: string, description: "e.g. Chemical, Microbiology, Instrumentation" }
+        method: { type: string, description: "e.g. AOAC 989.05, USP 42" }
+        assignedTo:
+          type: string
+          nullable: true
+          description: "Analyst user id (nullable before assignment)"
+        reviewStatus:
+          type: string
+          enum: [pending, in_progress, submitted_for_review, approved, changes_requested]
+        parameters:
+          type: array
+          items: { $ref: "#/components/schemas/TestParameter" }
+        reviewHistory:
+          type: array
+          description: "Append-only log of every approval/rejection event"
+          items: { $ref: "#/components/schemas/TestReview" }
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TestParameter:
+      type: object
+      required: [id, name, value, unit, min, max, status]
+      properties:
+        id: { type: string, description: "e.g. P-01" }
+        name: { type: string, description: "e.g. pH, Fat Content" }
+        value:
+          type: string
+          nullable: true
+          description: "Raw value as entered; null while pending"
+        unit: { type: string, description: "e.g. '%', 'mg/L', 'CFU/ml'" }
+        min: { type: number, nullable: true }
+        max: { type: number, nullable: true }
+        status:
+          type: string
+          enum: [pending, pass, fail]
+          description: "Computed by backend against min/max after every save"
+        note: { type: string, nullable: true, description: "Optional analyst annotation" }
+
+    TestReview:
+      type: object
+      required: [id, testId, reviewerId, reviewerEmail, decision, createdAt]
+      properties:
+        id: { type: string }
+        testId: { type: string }
+        reviewerId: { type: string }
+        reviewerEmail: { type: string }
+        decision:
+          type: string
+          enum: [approved, changes_requested]
+        reason:
+          type: string
+          nullable: true
+          description: "Required when decision = 'changes_requested'"
+        comment: { type: string, nullable: true }
+        signatureUrl:
+          type: string
+          nullable: true
+          description: "URL of stored reviewer signature (if uploaded)"
+        previousReviewStatus:
+          type: string
+          enum: [pending, in_progress, submitted_for_review, approved, changes_requested]
+        newReviewStatus:
+          type: string
+          enum: [pending, in_progress, submitted_for_review, approved, changes_requested]
+        ipAddress: { type: string, nullable: true }
+        userAgent: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
 
     Error:
       type: object

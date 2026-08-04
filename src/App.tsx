@@ -45,6 +45,8 @@ import ApprovalQueue from "@/pages/specifications/approval";
 import VersionHistory from "@/pages/specifications/history";
 import TestMasterPage from "@/pages/specifications/test-master";
 import SampleReceiving from "@/pages/samples/receiving";
+import ApprovalsQueue from "@/pages/approvals/queue";
+import MySubmissions from "@/pages/approvals/my-submissions";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -100,6 +102,10 @@ function Router() {
       <Route path="/specifications/approval"><LayoutWrapper component={ApprovalQueue} /></Route>
       <Route path="/specifications/history"><LayoutWrapper component={VersionHistory} /></Route>
       <Route path="/specifications/test-master"><LayoutWrapper component={TestMasterPage} /></Route>
+
+      {/* Approval Routes */}
+      <Route path="/approvals"><LayoutWrapper component={ApprovalsQueue} /></Route>
+      <Route path="/approvals/my-submissions"><LayoutWrapper component={MySubmissions} /></Route>
 
       {/* 404 */}
       <Route component={NotFound} />

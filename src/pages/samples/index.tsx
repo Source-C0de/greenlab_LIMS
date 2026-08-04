@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { mockSamples, mockClients, sampleTypes, mockSpecifications } from "@/mock-data";
 import { DataTable } from "@/components/shared/DataTable";
@@ -65,12 +65,12 @@ export default function SamplesList() {
   const watchedSampleType = watch("sampleType");
 
   // Auto-load specification when sample type changes
-  useState(() => {
+  useEffect(() => {
     if (watchedSampleType) {
       const spec = mockSpecifications.find(s => s.productName === watchedSampleType);
       setSelectedSpec(spec || null);
     }
-  });
+  }, [watchedSampleType]);
 
   // Effect to watch sampleType and update selectedSpec
   const handleTypeChange = (val: string) => {

@@ -12,6 +12,7 @@ import {
   Building2,
   FolderKanban,
   Calculator,
+  ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -40,7 +41,9 @@ export type MenuKey =
   | "client_portal"
   | "my_samples"
   | "my_reports"
-  | "my_invoices";
+  | "my_invoices"
+  | "test_approvals"
+  | "my_submissions";
 
 export type MenuGroup = "lab" | "client" | "accounting" | "admin";
 
@@ -253,6 +256,22 @@ export const MENU_REGISTRY: Record<MenuKey, MenuEntry> = {
     icon: Receipt,
     href: "/invoices",
     group: "client",
+  },
+  test_approvals: {
+    key: "test_approvals",
+    labelEn: "Test Approvals",
+    labelAr: "اعتماد الاختبارات",
+    icon: ClipboardCheck,
+    href: "/approvals",
+    group: "lab",
+  },
+  my_submissions: {
+    key: "my_submissions",
+    labelEn: "My Submissions",
+    labelAr: "طلباتي",
+    icon: ClipboardCheck,
+    href: "/approvals/my-submissions",
+    group: "lab",
   },
 };
 

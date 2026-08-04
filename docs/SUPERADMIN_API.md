@@ -359,6 +359,160 @@ This replaces the hardcoded `roles: Role[]` arrays currently baked into `src/com
 
 ---
 
+## K. Test approval (analyst submits → lab manager approves or rejects)
+
+This is the per-test approval workflow. After an analyst enters parameter values for a test, they submit it; the lab manager reviews it and either accepts or rejects it (with a reason that bounces it back to the analyst).
+
+### Lifecycle
+
+```
+pending
+  ↓  (analyst starts work)
+in_progress
+  ↓  (analyst submits; all parameters must be filled)
+submitted_for_review
+  ↓                            ↓
+approveTest()         rejectTest(reason)
+  ↓                            ↓
+approved              changes_requested
+(final)                ↓  (analyst edits parameters)
+                       ↓
+                       in_progress  (loop back into submit)
+```
+
+When **all** tests on a sample reach `approved`, the sample's overall status auto-transitions to `approved` on the server (no separate client call needed).
+
+### Permission gating
+
+The approve/reject endpoints are **not** gated by a hardcoded role at the API layer. The reviewer role (defaults to `lab_manager`) is configurable per tenant via the Permissions matrix (sections G/H/I). A shortcut check is "the caller must have the `test.approve` permission key".
+
+### Endpoints
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/api/superadmin/samples/:sampleId/tests` | Bearer | List all tests under a sample (filter: `reviewStatus`, `assignedTo`) |
+| `GET` | `/api/superadmin/tests/queue` | Bearer | The lab-manager approval queue (filter: `sampleId`, `sampleType`, `priority`, `assignedTo`, `submittedFrom`, `submittedTo`, `sortBy`, `sortOrder`) |
+| `GET` | `/api/superadmin/tests/:id` | Bearer | Get one test with parameters + review history |
+| `PUT` | `/api/superadmin/tests/:id/parameters` | Bearer (analyst) | Bulk upsert parameter values; backend recomputes per-parameter Pass/Fail |
+| `POST` | `/api/superadmin/tests/:id/submit` | Bearer (analyst) | Submit for review; 422 if any parameter is blank |
+| `POST` | `/api/superadmin/tests/:id/approve` | Bearer (reviewer) | Approve → status `approved`; optional comment + signature |
+| `POST` | `/api/superadmin/tests/:id/reject` | Bearer (reviewer) | Reject → status `changes_requested`; **reason is required** |
+| `GET` | `/api/superadmin/tests/:id/history` | Bearer | Full audit trail of approval actions on one test |
+| `POST` | `/api/superadmin/tests/bulk-approve` | Bearer (reviewer) | Approve multiple tests in one transaction |
+| `GET` | `/api/superadmin/me/tests/submitted` | Bearer (analyst) | Tests I submitted that are awaiting decision |
+| `GET` | `/api/superadmin/me/tests/changes-requested` | Bearer (analyst) | Tests I must revise (rejected) |
+
+### Test shape
+
+```ts
+{
+  id: string;                                   // "T-001"
+  sampleId: string;                             // "SAM-2024-001"
+  name: string;                                 // "Chemical Analysis"
+  category: string;                             // "Chemical"
+  method: string;                               // "AOAC 989.05"
+  assignedTo: string | null;                    // analyst user id
+  reviewStatus: "pending" | "in_progress" | "submitted_for_review" | "approved" | "changes_requested";
+  parameters: TestParameter[];
+  reviewHistory: TestReview[];                  // append-only
+  submittedAt?: string;                         // ISO datetime
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### TestParameter shape
+
+```ts
+{
+  id: string;                                   // "P-01"
+  name: string;                                 // "pH"
+  value: string | null;                         // raw entry from analyst
+  unit: string;                                 // "%", "mg/L", "CFU/ml"
+  min: number | null;
+  max: number | null;
+  status: "pending" | "pass" | "fail";          // computed by backend against min/max
+  note?: string;
+}
+```
+
+### TestReview shape (one event per approve/reject)
+
+```ts
+{
+  id: string;
+  testId: string;
+  reviewerId: string;
+  reviewerEmail: string;
+  decision: "approved" | "changes_requested";
+  reason?: string;                              // required when decision = "changes_requested"
+  comment?: string;
+  signatureUrl?: string;
+  previousReviewStatus: "pending" | "in_progress" | "submitted_for_review" | "approved" | "changes_requested";
+  newReviewStatus:     "pending" | "in_progress" | "submitted_for_review" | "approved" | "changes_requested";
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: string;
+}
+```
+
+### Example: analyst submits a test
+
+```
+PUT  /api/superadmin/tests/T-001/parameters
+     { "parameters": [
+         { "id": "P-01", "value": "6.7" },
+         { "id": "P-02", "value": "3.2" },
+         { "id": "P-03", "value": "8.6" }
+     ]}
+  → 200 OK, Test{ reviewStatus: "in_progress", parameters[].status: "pass" }
+
+POST /api/superadmin/tests/T-001/submit
+  → 200 OK, Test{ reviewStatus: "submitted_for_review", submittedAt: "..." }
+  → Audit log entry: category="test", action="test.submit", actorId=<analyst>
+```
+
+### Example: lab manager approves
+
+```
+POST /api/superadmin/tests/T-001/approve
+     { "comment": "All within spec.", "signaturePng": "<base64>" }
+  → 200 OK, Test{ reviewStatus: "approved", approvedAt: "..." }
+  → TestReview appended: decision="approved", previousReviewStatus="submitted_for_review"
+  → Audit log entry: category="test", action="test.approve", actorId=<manager>
+  → Server checks: are all tests on SAM-2024-001 now approved? If yes, sample auto-transitions to status="approved"
+```
+
+### Example: lab manager rejects
+
+```
+POST /api/superadmin/tests/T-001/reject
+     { "reason": "pH value 6.7 doesn't match the titration worksheet", "comment": "Re-measure" }
+  → 200 OK, Test{ reviewStatus: "changes_requested" }
+  → TestReview appended: decision="changes_requested", reason, previousReviewStatus="submitted_for_review"
+  → Audit log entry: category="test", action="test.reject", actorId=<manager>
+  → Analyst sees this in GET /api/superadmin/me/tests/changes-requested
+  → Analyst edits parameters → PUT /tests/T-001/parameters → POST /tests/T-001/submit (loop)
+```
+
+### Audit log integration
+
+The existing `/api/superadmin/audit-log` endpoint now also accepts `category=test` and `category=sample` (extended enum). Filter like this:
+
+```
+GET /api/superadmin/audit-log?category=test&from=2026-07-01&to=2026-07-31
+  → returns every test.submit, test.approve, test.reject event in the window
+```
+
+### Frontend wiring (informational — out of scope for this API spec)
+
+- New page: `/specifications/approval` becomes Test Approval Queue (or new route `/test-approval`)
+- Approved tests flow into the existing `/reports` system once their parent sample is approved
+- The existing `src/pages/specifications/approval.tsx` (which today approves *specifications*) is for a different domain and should be renamed/kept distinct
+
+---
+
 ## JWT token model
 
 **Access token (24h):**

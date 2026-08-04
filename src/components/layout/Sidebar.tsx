@@ -13,6 +13,7 @@ import {
   Building2,
   FolderKanban,
   Calculator,
+  ClipboardCheck,
   LogOut,
   type LucideIcon,
 } from "lucide-react";
@@ -116,7 +117,9 @@ export function Sidebar({ isOpen }: SidebarProps) {
         { href: "/clients", labelEn: "Clients", labelAr: "العملاء", icon: Users, roles: ["admin", "lab_manager", "receptionist"], key: "clients" },
         { href: "/reports", labelEn: "Reports", labelAr: "التقارير", icon: FileText, roles: ["admin", "lab_manager", "analyst", "receptionist"], key: "reports" },
         { href: "/inventory", labelEn: "Inventory", labelAr: "المخزون", icon: Package, roles: ["admin", "lab_manager", "receptionist"], key: "inventory" },
-        { href: "/analytics", labelEn: "Analytics", labelAr: "التحليلات", icon: BarChart3, roles: ["admin", "lab_manager"], key: "analytics" }
+        { href: "/analytics", labelEn: "Analytics", labelAr: "التحليلات", icon: BarChart3, roles: ["admin", "lab_manager"], key: "analytics" },
+        { href: "/approvals", labelEn: "Test Approvals", labelAr: "اعتماد الاختبارات", icon: ClipboardCheck, roles: ["admin", "lab_manager"], key: "test_approvals" },
+        { href: "/approvals/my-submissions", labelEn: "My Submissions", labelAr: "طلباتي", icon: ClipboardCheck, roles: ["admin", "lab_manager", "analyst"], key: "my_submissions" }
       );
 
       // Only Admin gets billing/accounting access in the main menu
