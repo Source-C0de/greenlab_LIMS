@@ -51,6 +51,10 @@ export interface ParameterValue {
   max: number | null;
   target?: number;
   limitType?: string;
+  /** Measurement uncertainty (e.g. "±0.05"). */
+  mu?: string;
+  /** Reference / standard method number (e.g. "ISO 10523"). */
+  reference?: string;
   status: ParameterStatus;
   note?: string;
 }
@@ -179,9 +183,9 @@ export const mockSamples: MockSample[] = [
         submittedAt: "2024-01-17T14:00:00Z",
         qaApprovedAt: NOW,
         parameters: [
-          { id: "P-01", name: "pH", value: "6.7", unit: "", min: 6.5, max: 6.8, status: "pass" },
-          { id: "P-02", name: "Fat Content", value: "3.2", unit: "%", min: 3.0, max: 3.5, status: "pass" },
-          { id: "P-03", name: "Solid Non-Fat", value: "8.6", unit: "%", min: 8.5, max: 9.0, status: "pass" },
+          { id: "P-01", name: "pH", value: "6.7", unit: "", min: 6.5, max: 6.8, mu: "±0.05", reference: "ISO 10523", status: "pass" },
+          { id: "P-02", name: "Fat Content", value: "3.2", unit: "%", min: 3.0, max: 3.5, mu: "±0.1", reference: "AOAC 989.05", status: "pass" },
+          { id: "P-03", name: "Solid Non-Fat", value: "8.6", unit: "%", min: 8.5, max: 9.0, mu: "±0.1", reference: "AOAC 990.20", status: "pass" },
         ],
         approvals: {
           lab_supervisor: {
@@ -267,8 +271,8 @@ export const mockSamples: MockSample[] = [
         submittedAt: "2024-01-17T15:30:00Z",
         qaApprovedAt: NOW,
         parameters: [
-          { id: "P-04", name: "Total Plate Count", value: "500", unit: "CFU/ml", min: null, max: 10000, status: "pass" },
-          { id: "P-05", name: "Coliforms", value: "Negative", unit: "", min: null, max: null, status: "pass" },
+          { id: "P-04", name: "Total Plate Count", value: "500", unit: "CFU/ml", min: null, max: 10000, mu: "±50", reference: "ISO 4833-1", status: "pass" },
+          { id: "P-05", name: "Coliforms", value: "Negative", unit: "", min: null, max: null, mu: "—", reference: "ISO 7251", status: "pass" },
         ],
         approvals: {
           lab_supervisor: {
@@ -323,9 +327,9 @@ export const mockSamples: MockSample[] = [
         assignedTo: "A002",
         reviewStatus: "in_progress",
         parameters: [
-          { id: "P-06", name: "Turbidity", value: "0.2", unit: "NTU", min: 0, max: 1.0, status: "pass" },
-          { id: "P-07", name: "TDS", value: "120", unit: "mg/L", min: 0, max: 500, status: "pass" },
-          { id: "P-08", name: "Chloride", value: "", unit: "mg/L", min: 0, max: 250, status: "pending" },
+          { id: "P-06", name: "Turbidity", value: "0.2", unit: "NTU", min: 0, max: 1.0, mu: "±0.05", reference: "APHA 2130 B", status: "pass" },
+          { id: "P-07", name: "TDS", value: "120", unit: "mg/L", min: 0, max: 500, mu: "±5", reference: "APHA 2540 C", status: "pass" },
+          { id: "P-08", name: "Chloride", value: "", unit: "mg/L", min: 0, max: 250, mu: "±2", reference: "APHA 4500-Cl B", status: "pending" },
         ],
         approvals: { lab_supervisor: null, tech_manager: null, qa: null },
         reviewHistory: [],
@@ -356,8 +360,8 @@ export const mockSamples: MockSample[] = [
         reviewStatus: "awaiting_lab_supervisor",
         submittedAt: "2024-01-18T08:30:00Z",
         parameters: [
-          { id: "P-09", name: "Ethanol %", value: "85", unit: "%", min: 80, max: 90, status: "pass" },
-          { id: "P-10", name: "Water Content", value: "2.5", unit: "%", min: 0, max: 5.0, status: "pass" },
+          { id: "P-09", name: "Ethanol %", value: "85", unit: "%", min: 80, max: 90, mu: "±0.5", reference: "GC-FID Internal", status: "pass" },
+          { id: "P-10", name: "Water Content", value: "2.5", unit: "%", min: 0, max: 5.0, mu: "±0.1", reference: "Karl Fischer ASTM E1064", status: "pass" },
         ],
         approvals: { lab_supervisor: null, tech_manager: null, qa: null },
         reviewHistory: [],
@@ -388,7 +392,7 @@ export const mockSamples: MockSample[] = [
         reviewStatus: "awaiting_tech_manager",
         submittedAt: "2024-01-18T09:15:00Z",
         parameters: [
-          { id: "P-11", name: "Active Ingredient", value: "498", unit: "mg", min: 475, max: 525, status: "pass" },
+          { id: "P-11", name: "Active Ingredient", value: "498", unit: "mg", min: 475, max: 525, mu: "±5", reference: "USP 42 <621>", status: "pass" },
         ],
         approvals: {
           lab_supervisor: {
@@ -431,7 +435,7 @@ export const mockSamples: MockSample[] = [
         reviewStatus: "awaiting_lab_supervisor",
         submittedAt: "2024-01-18T07:45:00Z",
         parameters: [
-          { id: "P-12", name: "COD", value: "45", unit: "mg/L", min: 0, max: 50, status: "pass" },
+          { id: "P-12", name: "COD", value: "45", unit: "mg/L", min: 0, max: 50, mu: "±2", reference: "APHA 5220 B", status: "pass" },
         ],
         approvals: { lab_supervisor: null, tech_manager: null, qa: null },
         reviewHistory: [],
@@ -462,8 +466,8 @@ export const mockSamples: MockSample[] = [
         reviewStatus: "changes_requested",
         submittedAt: "2024-01-17T11:00:00Z",
         parameters: [
-          { id: "P-13", name: "MFI", value: "0.45", unit: "g/10min", min: 0.5, max: 1.0, status: "fail" },
-          { id: "P-14", name: "Density", value: "0.952", unit: "g/cm³", min: 0.94, max: 0.96, status: "pass" },
+          { id: "P-13", name: "MFI", value: "0.45", unit: "g/10min", min: 0.5, max: 1.0, mu: "±0.02", reference: "ASTM D1238", status: "fail" },
+          { id: "P-14", name: "Density", value: "0.952", unit: "g/cm³", min: 0.94, max: 0.96, mu: "±0.002", reference: "ASTM D792", status: "pass" },
         ],
         approvals: { lab_supervisor: null, tech_manager: null, qa: null },
         reviewHistory: [

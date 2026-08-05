@@ -81,50 +81,57 @@ export function TestTable({ tests, onViewTest, onUpdateTest }: TestTableProps) {
       </div>
 
       <div className="rounded-xl border shadow-sm overflow-hidden bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead className="w-10">
-                <Checkbox />
-              </TableHead>
-              <TableHead className="w-[250px]">{isRtl ? "الاختبار" : "Test Name"}</TableHead>
-              <TableHead>{isRtl ? "الفئة" : "Category"}</TableHead>
-              <TableHead>{isRtl ? "الطريقة" : "Method"}</TableHead>
-              <TableHead>{isRtl ? "المحلل" : "Technical Assistant"}</TableHead>
-              <TableHead>{isRtl ? "الحالة" : "Status"}</TableHead>
-              <TableHead className="text-right w-20"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tests.map((test) => (
-              <TestRowExpandable
-                key={test.id}
-                test={test}
-                onView={onViewTest}
-                onAssignAnalyst={
-                  onUpdateTest
-                    ? (analyst) => {
-                        if (analyst === null) {
-                          onUpdateTest(test.id, { assignedTo: null });
-                        } else {
-                          onUpdateTest(test.id, { assignedTo: analyst.name });
-                        }
-                      }
-                    : undefined
-                }
-                analystPickerOpen={analystPickerFor === test.id}
-                onAnalystPickerOpenChange={(open) => {
-                  setAnalystPickerFor(open ? test.id : null);
-                  if (!open) setAnalystSearch("");
-                }}
-                analystSearch={analystSearch}
-                onAnalystSearchChange={setAnalystSearch}
-                filteredAnalysts={filteredAnalysts}
-                canEditAnalyst={currentRole !== "client"}
-              />
-            ))}
-          </TableBody>
-        </Table>
+        <div className="max-h-[640px] overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-muted/50">
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="w-10">
+                  <Checkbox />
+                </TableHead>
+                <TableHead className="w-[260px]">{isRtl ? "الاختبار / المعامل" : "Test / Parameter"}</TableHead>
+                <TableHead className="w-[140px]">{isRtl ? "الحد" : "Limit"}</TableHead>
+                <TableHead className="w-[120px]">{isRtl ? "النتيجة" : "Result"}</TableHead>
+                <TableHead className="w-[90px]">{isRtl ? "الوحدة" : "Unit"}</TableHead>
+                <TableHead className="w-[90px]">{isRtl ? "MU" : "MU"}</TableHead>
+                <TableHead className="w-[140px]">{isRtl ? "المرجع" : "Reference"}</TableHead>
+                <TableHead className="w-[120px]">{isRtl ? "الحالة" : "Status"}</TableHead>
+                <TableHead className="text-right w-16"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tests.flatMap((test) =>
+                (test.parameters ?? []).map((param) => (
+                  <TestRowExpandable
+                    key={`${test.id}-${param.id}`}
+                    test={test}
+                    parameter={param}
+                    onView={onViewTest}
+                    onAssignAnalyst={
+                      onUpdateTest
+                        ? (analyst) => {
+                            if (analyst === null) {
+                              onUpdateTest(test.id, { assignedTo: null });
+                            } else {
+                              onUpdateTest(test.id, { assignedTo: analyst.name });
+                            }
+                          }
+                        : undefined
+                    }
+                    analystPickerOpen={analystPickerFor === test.id}
+                    onAnalystPickerOpenChange={(open) => {
+                      setAnalystPickerFor(open ? test.id : null);
+                      if (!open) setAnalystSearch("");
+                    }}
+                    analystSearch={analystSearch}
+                    onAnalystSearchChange={setAnalystSearch}
+                    filteredAnalysts={filteredAnalysts}
+                    canEditAnalyst={currentRole !== "client"}
+                  />
+                )),
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

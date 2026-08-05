@@ -1,10 +1,11 @@
 // =========================================================================
-// TestRowExpandable — single test row inside TestTable. The summary row
-// shows the status + a compact 3-stage chain so the user can see where
-// the test is in the pipeline at a glance. Expanding the row reveals
-// the parameters table and the recent decision history — it is read-only;
-// all approval / rejection actions live in the single TestReviewDrawer
-// opened from the sample header's "Review" button.
+// TestRowExpandable — single parameter row inside the sample test table.
+// The parent TestTable now flattens every test's parameters into one row
+// each, so this component renders the analytical columns
+// (Test/Parameter / Limit / Result / Unit / MU / Reference) plus Status and
+// a View action. Expanding the row reveals the parameter detail and recent
+// review decision history. Read-only — approval / rejection actions live in
+// the single TestReviewDrawer opened from the sample header's "Review" button.
 // =========================================================================
 
 import { useState } from "react";
@@ -18,7 +19,11 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ApprovalChainPanel } from "@/components/approvals/ApprovalChainPanel";
 import { useAppContext } from "@/context/AppContext";
-import { currentStage, roleForStage } from "@/mock-data/samples";
+import {
+  currentStage,
+  roleForStage,
+  type ParameterValue,
+} from "@/mock-data/samples";
 import { approvalLabels } from "@/hooks/test-approvals/labels";
 import {
   ChevronRight,
@@ -34,6 +39,7 @@ export type TestTableTest = import("@/mock-data/samples").Test;
 
 interface TestRowExpandableProps {
   test: TestTableTest;
+  parameter: ParameterValue;
   onView: (id: string) => void;
   analystPickerOpen?: boolean;
   onAnalystPickerOpenChange?: (open: boolean) => void;
@@ -44,8 +50,26 @@ interface TestRowExpandableProps {
   canEditAnalyst?: boolean;
 }
 
+// Format the Limit column to show "<min> – <max> <unit>". When only one side
+// of the range is defined we render a half-open style (≥ min or ≤ max).
+function formatLimit(p: ParameterValue): string {
+  if (p.min == null && p.max == null) return "—";
+  if (p.min != null && p.max != null) {
+    const l = Number.isInteger(p.min) ? p.min.toString() : p.min.toFixed(2);
+    const r = Number.isInteger(p.max) ? p.max.toString() : p.max.toFixed(2);
+    return `${l} – ${r}${p.unit ? ` ${p.unit}` : ""}`;
+  }
+  if (p.min != null) return `≥ ${p.min}${p.unit ? ` ${p.unit}` : ""}`;
+  return `≤ ${p.max}${p.unit ? ` ${p.unit}` : ""}`;
+}
+
+function formatResult(p: ParameterValue): string {
+  return p.value?.toString().trim() || "—";
+}
+
 export function TestRowExpandable({
   test,
+  parameter,
   onView,
 }: TestRowExpandableProps) {
   const { language, currentRole } = useAppContext();
@@ -56,7 +80,19 @@ export function TestRowExpandable({
 
   const stage = currentStage(test);
   const canActOnStage =
-    !!stage && (currentRole === roleForStage(stage) || currentRole === "superadmin");
+    !!stage &&
+    (currentRole === roleForStage(stage) || currentRole === "superadmin");
+
+  // Row highlight is driven by the *parameter* status (pass / warn / fail),
+  // not the test-level review status, so lab staff can spot bad readings fast.
+  const parameterRowTone =
+    parameter.status === "fail"
+      ? "bg-red-500/5 hover:bg-red-500/10"
+      : parameter.status === "warn"
+      ? "bg-amber-500/5 hover:bg-amber-500/10"
+      : canActOnStage
+      ? "bg-amber-500/5 hover:bg-amber-500/10"
+      : "";
 
   return (
     <>
@@ -64,23 +100,29 @@ export function TestRowExpandable({
       <TableRow
         className={cn(
           "cursor-pointer hover:bg-muted/30 transition-colors",
-          canActOnStage && "bg-amber-500/5 hover:bg-amber-500/10",
+          parameterRowTone,
         )}
         onClick={() => setExpanded((v) => !v)}
       >
         <TableCell onClick={(e) => e.stopPropagation()} className="w-10">
           <Checkbox />
         </TableCell>
-        <TableCell className="w-[250px]">
+        <TableCell className="w-[260px]">
           <div className="flex items-center gap-2">
             <ChevronRight
               className={cn(
-                "h-4 w-4 text-muted-foreground transition-transform",
+                "h-4 w-4 text-muted-foreground transition-transform shrink-0",
                 expanded && (isRtl ? "-rotate-90" : "rotate-90"),
               )}
             />
-            <div className="flex flex-col">
-              <span className="font-medium">{test.name}</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium truncate">{test.name}</span>
+                <span className="text-muted-foreground text-xs">/</span>
+                <span className="font-medium truncate text-primary">
+                  {parameter.name}
+                </span>
+              </div>
               {/* Compact 3-stage chain lives right under the test name */}
               <div className="mt-1">
                 <ApprovalChainPanel
@@ -89,24 +131,45 @@ export function TestRowExpandable({
                   variant="compact"
                 />
               </div>
+              <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Badge variant="outline" className="font-mono text-[10px]">
+                  {test.method}
+                </Badge>
+                <span className="truncate">
+                  {test.assignedAnalyst ?? "—"}
+                </span>
+              </div>
             </div>
           </div>
         </TableCell>
-        <TableCell className="text-sm text-muted-foreground">
-          {test.category}
+        <TableCell className="text-xs font-mono whitespace-nowrap">
+          {formatLimit(parameter)}
+        </TableCell>
+        <TableCell
+          className={cn(
+            "text-sm font-mono whitespace-nowrap",
+            parameter.status === "fail" && "text-red-600",
+            parameter.status === "warn" && "text-amber-600",
+          )}
+        >
+          {formatResult(parameter)}
+        </TableCell>
+        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+          {parameter.unit || "—"}
+        </TableCell>
+        <TableCell className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+          {parameter.mu || "—"}
+        </TableCell>
+        <TableCell
+          className="text-xs font-mono text-muted-foreground max-w-[180px] truncate"
+          title={parameter.reference}
+        >
+          {parameter.reference || "—"}
         </TableCell>
         <TableCell>
-          <Badge variant="outline" className="font-mono text-xs">
-            {test.method}
-          </Badge>
+          <StatusBadge status={parameter.status} />
         </TableCell>
-        <TableCell className="text-sm">
-          {test.assignedAnalyst ?? "—"}
-        </TableCell>
-        <TableCell>
-          <StatusBadge status={test.reviewStatus} />
-        </TableCell>
-        <TableCell className="text-right w-20">
+        <TableCell className="text-right w-16">
           <Button
             variant="ghost"
             size="icon"
@@ -126,50 +189,57 @@ export function TestRowExpandable({
       {/* Expanded panel */}
       {expanded && (
         <TableRow className="bg-muted/10 hover:bg-muted/10">
-          <TableCell colSpan={7} className="p-0">
+          <TableCell colSpan={9} className="p-0">
             <div className="px-6 py-4 space-y-4">
-              {/* Parameters */}
+              {/* Parameter detail */}
               <div>
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                  {labels.parametersTitle}
+                  {parameter.name} — {labels.parametersTitle}
                 </h4>
                 <div className="rounded-md border overflow-hidden bg-background">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/30">
                       <tr>
-                        <th className="px-3 py-2 text-start font-medium">
-                          {labels.testLabel}
-                        </th>
-                        <th className="px-3 py-2 text-start font-medium">Value</th>
-                        <th className="px-3 py-2 text-start font-medium">Range</th>
+                        <th className="px-3 py-2 text-start font-medium">Limit</th>
+                        <th className="px-3 py-2 text-start font-medium">Result</th>
+                        <th className="px-3 py-2 text-start font-medium">Unit</th>
+                        <th className="px-3 py-2 text-start font-medium">MU</th>
+                        <th className="px-3 py-2 text-start font-medium">Reference</th>
                         <th className="px-3 py-2 text-start font-medium">
                           {labels.statusLabel}
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {test.parameters.map((p) => (
-                        <tr key={p.id} className="border-t">
-                          <td className="px-3 py-2">{p.name}</td>
-                          <td className="px-3 py-2 font-mono">
-                            {p.value || "—"}
-                            {p.unit && (
-                              <span className="text-muted-foreground ms-1">
-                                {p.unit}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {p.min ?? "—"} / {p.max ?? "—"}
-                          </td>
-                          <td className="px-3 py-2">
-                            <StatusBadge status={p.status} />
-                          </td>
-                        </tr>
-                      ))}
+                      <tr className="border-t">
+                        <td className="px-3 py-2 font-mono text-xs">
+                          {formatLimit(parameter)}
+                        </td>
+                        <td className="px-3 py-2 font-mono">
+                          {formatResult(parameter)}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {parameter.unit || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-xs font-mono text-muted-foreground">
+                          {parameter.mu || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-xs font-mono text-muted-foreground">
+                          {parameter.reference || "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <StatusBadge status={parameter.status} />
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
+                {parameter.note && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Note:</span>{" "}
+                    {parameter.note}
+                  </p>
+                )}
               </div>
 
               {/* History */}
