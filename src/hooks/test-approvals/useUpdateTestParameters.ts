@@ -1,6 +1,5 @@
 // =========================================================================
 // useUpdateTestParameters — analyst-side mutation: bulk-upsert parameter values
-// Backend ref: PUT /api/superadmin/tests/{id}/parameters
 // =========================================================================
 
 import { useCallback } from "react";
@@ -19,8 +18,6 @@ function recomputeStatus(p: ParameterValue): ParameterValue {
   const value = (p.value ?? "").trim();
   if (value === "") return { ...p, status: "pending" };
 
-  // Try numeric comparison first; non-numeric values are treated as pending
-  // (text values like "Negative" can't be auto-graded server-side either).
   const num = Number(value);
   if (Number.isNaN(num)) return { ...p, status: "pending" };
 

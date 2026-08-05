@@ -1,7 +1,7 @@
 // =========================================================================
 // useApprovalQueue — paginated, filterable queue of tests awaiting review
+// across any of the three approval stages.
 // =========================================================================
-// Backend ref: GET /api/superadmin/tests/queue
 
 import { useMemo } from "react";
 import { useSyncExternalStore } from "react";
@@ -10,8 +10,13 @@ import { lookupAnalyst } from "@/mock-data/testQueue";
 import type { ListTestsQuery, PaginatedTests } from "./types";
 import type { TestQueueItem } from "@/mock-data/testQueue";
 
+const AWAITING_STATUSES = new Set([
+  "awaiting_lab_supervisor",
+  "awaiting_tech_manager",
+  "awaiting_qa",
+]);
+
 export function useApprovalQueue(query: ListTestsQuery = {}): PaginatedTests {
-  // Subscribe to the store so the queue refreshes after mutations.
   useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);
 
   const result = useMemo(() => {
@@ -19,11 +24,16 @@ export function useApprovalQueue(query: ListTestsQuery = {}): PaginatedTests {
     const pageSize = query.pageSize ?? 20;
     const sortBy = query.sortBy ?? "submittedAt";
     const sortOrder = query.sortOrder ?? "asc";
+    const statusFilter = query.status && query.status.length > 0 ? new Set(query.status) : null;
 
     const all: TestQueueItem[] = [];
     for (const sample of samplesStore) {
       for (const test of sample.tests) {
-        if (test.reviewStatus !== "submitted_for_review") continue;
+        // Default queue = anything in the 3-stage pipeline.
+        const matchesStatus = statusFilter
+          ? statusFilter.has(test.reviewStatus as never)
+          : AWAITING_STATUSES.has(test.reviewStatus);
+        if (!matchesStatus) continue;
         if (query.sampleId && sample.id !== query.sampleId) continue;
         if (query.sampleType && sample.sampleType !== query.sampleType) continue;
         if (query.priority && sample.priority !== query.priority) continue;
@@ -78,7 +88,8 @@ export function useApprovalQueue(query: ListTestsQuery = {}): PaginatedTests {
     query.submittedTo,
     query.sortBy,
     query.sortOrder,
-    getStoreSnapshot(), // re-derive on store changes
+    query.status?.join("|"),
+    getStoreSnapshot(),
   ]);
 
   return result;

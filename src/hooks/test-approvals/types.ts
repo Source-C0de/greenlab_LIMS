@@ -3,6 +3,7 @@
 // =========================================================================
 // Mirrors the backend OpenAPI spec (section K).
 
+import type { Role } from "@/context/AppContext";
 import type { Test, TestQueueItem } from "@/mock-data";
 
 export interface ListTestsQuery {
@@ -12,6 +13,14 @@ export interface ListTestsQuery {
   sampleType?: string;
   priority?: "Normal" | "High" | "Urgent";
   assignedTo?: string;
+  /** Filter to tests whose current review status is one of these. */
+  status?: Array<
+    | "awaiting_lab_supervisor"
+    | "awaiting_tech_manager"
+    | "awaiting_qa"
+    | "qa_approved"
+    | "changes_requested"
+  >;
   submittedFrom?: string;
   submittedTo?: string;
   sortBy?: "submittedAt" | "priority" | "sampleId";
@@ -31,12 +40,23 @@ export interface PaginatedTests {
 export interface ApproveTestInput {
   testId: string;
   comment?: string;
+  /** Identity of the person approving — captured into the audit trail. */
+  approverId?: string;
+  approverName?: string;
+  approverEmail?: string;
+  approverRole?: Role;
 }
 
 export interface RejectTestInput {
   testId: string;
   reason: string;
   comment?: string;
+  /** Which stage is rejecting — defaults to the test's current stage. */
+  stage?: "lab_supervisor" | "tech_manager" | "qa";
+  reviewerId?: string;
+  reviewerName?: string;
+  reviewerEmail?: string;
+  reviewerRole?: Role;
 }
 
 export interface SubmitTestInput {
@@ -51,6 +71,10 @@ export interface UpdateTestParametersInput {
 export interface BulkApproveInput {
   testIds: string[];
   comment?: string;
+  approverId?: string;
+  approverName?: string;
+  approverEmail?: string;
+  approverRole?: Role;
 }
 
 export interface BulkApproveResult {

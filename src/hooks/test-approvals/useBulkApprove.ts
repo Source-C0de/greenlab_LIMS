@@ -1,6 +1,8 @@
 // =========================================================================
-// useBulkApprove — multi-test approval used by the queue page's bulk action
-// Backend ref: POST /api/superadmin/tests/bulk-approve
+// useBulkApprove — multi-test approval used by the queue page's bulk action.
+// Note: bulk approve only advances each test by one stage, matching what the
+// per-row action does. If the current role doesn't own the stage a row sits
+// in, that row is reported as a failure rather than silently advanced.
 // =========================================================================
 
 import { useCallback } from "react";
@@ -19,10 +21,16 @@ export function useBulkApprove(): (input: BulkApproveInput) => Promise<BulkAppro
 
       const result: BulkApproveResult = { approved: [], failed: [] };
 
-      // Sequential so we surface per-row failures cleanly.
       for (const testId of input.testIds) {
         try {
-          const r = await approve({ testId, comment: input.comment });
+          const r = await approve({
+            testId,
+            comment: input.comment,
+            approverId: input.approverId,
+            approverName: input.approverName,
+            approverEmail: input.approverEmail,
+            approverRole: input.approverRole,
+          });
           if (r.test) {
             result.approved.push(r.test);
           } else {
@@ -37,10 +45,10 @@ export function useBulkApprove(): (input: BulkApproveInput) => Promise<BulkAppro
       }
 
       if (result.approved.length > 0) {
-        toast.success(
-          labels.bulkApprove(result.approved.length),
-          { description: result.failed.length === 0 ? undefined : `${result.failed.length} failed` },
-        );
+        toast.success(labels.bulkApprove(result.approved.length), {
+          description:
+            result.failed.length === 0 ? undefined : `${result.failed.length} failed`,
+        });
       }
       if (result.failed.length > 0 && result.approved.length === 0) {
         toast.error(labels.cannotApprove);

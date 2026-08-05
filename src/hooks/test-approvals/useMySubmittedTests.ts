@@ -9,31 +9,39 @@ import type { Test } from "@/mock-data/samples";
 import { MOCK_CURRENT_USER_ID } from "./types";
 
 export interface MySubmittedTests {
-  submitted: Test[];
-  changesRequested: (Test & { latestReason?: string })[];
+  inChain: Test[];
+  changesRequested: (Test & { latestReason?: string; rejectedBy?: string })[];
 }
 
 export function useMySubmittedTests(userId: string = MOCK_CURRENT_USER_ID): MySubmittedTests {
   useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);
 
   return useMemo(() => {
-    const submitted: Test[] = [];
-    const changesRequested: (Test & { latestReason?: string })[] = [];
+    const inChain: Test[] = [];
+    const changesRequested: (Test & { latestReason?: string; rejectedBy?: string })[] = [];
 
     for (const sample of samplesStore) {
       for (const test of sample.tests) {
         if (test.assignedTo !== userId) continue;
-        if (test.reviewStatus === "submitted_for_review") {
-          submitted.push(test);
+        if (
+          test.reviewStatus === "awaiting_lab_supervisor" ||
+          test.reviewStatus === "awaiting_tech_manager" ||
+          test.reviewStatus === "awaiting_qa"
+        ) {
+          inChain.push(test);
         } else if (test.reviewStatus === "changes_requested") {
           const lastReject = [...test.reviewHistory]
             .reverse()
             .find((r) => r.decision === "changes_requested");
-          changesRequested.push({ ...test, latestReason: lastReject?.reason });
+          changesRequested.push({
+            ...test,
+            latestReason: lastReject?.reason,
+            rejectedBy: lastReject?.stage,
+          });
         }
       }
     }
 
-    return { submitted, changesRequested };
+    return { inChain, changesRequested };
   }, [userId, getStoreSnapshot()]);
 }

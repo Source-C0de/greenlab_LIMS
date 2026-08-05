@@ -10,6 +10,10 @@ const STATUS_LABELS: Record<string, string> = {
   in_review: "In Review",
   changes_requested: "Changes Requested",
   in_progress: "In Progress",
+  awaiting_lab_supervisor: "Pending Lab Supervisor",
+  awaiting_tech_manager: "Pending Technical Manager",
+  awaiting_qa: "Pending QA",
+  qa_approved: "QA Approved",
 };
 
 const FALLBACK_STATUS = "pending";
@@ -27,30 +31,45 @@ export function StatusBadge({ status, className = "" }: StatusBadgeProps) {
     case "ok":
     case "active":
     case "final":
-      colorClass = "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/25";
+    case "qa_approved":
+      colorClass =
+        "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/25";
       break;
     case "testing":
     case "pending":
     case "submitted":
     case "low stock":
     case "trial":
-      colorClass = "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25";
+      colorClass =
+        "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25";
       break;
     case "review":
     case "submitted_for_review":
     case "in_review":
-      colorClass = "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30 hover:bg-purple-500/25";
+    case "awaiting_lab_supervisor":
+      colorClass =
+        "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30 hover:bg-purple-500/25";
+      break;
+    case "awaiting_tech_manager":
+      colorClass =
+        "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/25";
+      break;
+    case "awaiting_qa":
+      colorClass =
+        "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/25";
       break;
     case "received":
     case "draft":
     case "in_progress":
-      colorClass = "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/25";
+      colorClass =
+        "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/25";
       break;
     case "rejected":
     case "overdue":
     case "expired":
     case "changes_requested":
-      colorClass = "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 hover:bg-red-500/25";
+      colorClass =
+        "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 hover:bg-red-500/25";
       variant = "destructive";
       break;
     default:

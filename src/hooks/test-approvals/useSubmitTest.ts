@@ -1,5 +1,6 @@
 // =========================================================================
-// useSubmitTest — analyst-side mutation: submit a test for review
+// useSubmitTest — analyst-side mutation: submit a test for the approval
+// chain. The test enters the queue at `awaiting_lab_supervisor`.
 // =========================================================================
 // Backend ref: POST /api/superadmin/tests/{id}/submit
 
@@ -31,7 +32,7 @@ export function useSubmitTest(): (input: SubmitTestInput) => Promise<SubmitResul
     const test = sample.tests[testIndex];
 
     // Pre-condition: test must be in_progress or changes_requested.
-    if (!["in_progress", "changes_requested"].includes(test.reviewStatus)) {
+    if (!["in_progress", "changes_requested", "pending"].includes(test.reviewStatus)) {
       toast.error(labels.cannotApprove);
       return { test: null };
     }
@@ -51,19 +52,23 @@ export function useSubmitTest(): (input: SubmitTestInput) => Promise<SubmitResul
     const previous = test.reviewStatus;
     const updated: Test = {
       ...test,
-      reviewStatus: "submitted_for_review",
+      // Re-entering the chain at the top: any prior approvals are wiped.
+      reviewStatus: "awaiting_lab_supervisor",
       submittedAt: now,
       updatedAt: now,
+      approvals: { lab_supervisor: null, tech_manager: null, qa: null },
       reviewHistory: [
         ...test.reviewHistory,
         {
           id: `rev-${Date.now()}`,
           reviewerId: test.assignedTo ?? "ANALYST",
+          reviewerName: test.assignedTo ?? "Analyst",
+          reviewerRole: "analyst",
           reviewerEmail: "analyst@greenlablims.sa",
-          decision: "approved", // submission is not a reject decision; we record an "auto" entry
+          decision: "approved",
           comment: "Submitted for review",
           previousReviewStatus: previous,
-          newReviewStatus: "submitted_for_review",
+          newReviewStatus: "awaiting_lab_supervisor",
           createdAt: now,
         },
       ],

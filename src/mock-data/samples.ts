@@ -1,17 +1,46 @@
 // =========================================================================
-// Test approval workflow — typed interfaces + status pipeline
+// Test approval workflow — typed interfaces + 3-stage status pipeline
 // =========================================================================
-// Backend ref: .backup_lib/api-spec/superadmin.openapi.yaml (section K)
+// Approval chain per test:
+//   Analyst submits
+//     → Lab Supervisor approves
+//       → Technical Manager approves
+//         → QA approves (terminal "qa_approved")
+
+import type { Role } from "@/context/AppContext";
 
 export type TestReviewStatus =
   | "pending"
   | "in_progress"
-  | "submitted_for_review"
-  | "approved"
-  | "changes_requested";
+  | "changes_requested"
+  | "awaiting_lab_supervisor"
+  | "awaiting_tech_manager"
+  | "awaiting_qa"
+  | "qa_approved";
 
 export type ParameterStatus = "pending" | "pass" | "fail";
 export type ReviewDecision = "approved" | "changes_requested";
+
+/** Which approval stage a review entry corresponds to. */
+export type ApprovalStage =
+  | "lab_supervisor"
+  | "tech_manager"
+  | "qa";
+
+export interface StageApproval {
+  /** Stage this approval covers. */
+  stage: ApprovalStage;
+  /** Role that owns this stage — used to gate UI actions. */
+  approverRole: Role;
+  /** Display name of the person who approved. */
+  approverName: string;
+  approverId: string;
+  approverEmail: string;
+  /** ISO timestamp when they signed off. */
+  approvedAt: string;
+  /** Optional reviewer comment. */
+  comment?: string;
+}
 
 export interface ParameterValue {
   id: string;
@@ -30,7 +59,13 @@ export interface TestReviewEntry {
   id: string;
   reviewerId: string;
   reviewerEmail: string;
+  /** Free-form display name for the person taking this action. */
+  reviewerName?: string;
+  /** Role that took this action — drives stage gating. */
+  reviewerRole?: Role;
   decision: ReviewDecision;
+  /** Which approval stage this entry advances/cancels. */
+  stage?: ApprovalStage;
   reason?: string;
   comment?: string;
   previousReviewStatus: TestReviewStatus;
@@ -48,8 +83,15 @@ export interface Test {
   reviewStatus: TestReviewStatus;
   parameters: ParameterValue[];
   reviewHistory: TestReviewEntry[];
+  /** Three sign-off slots — one per approval stage. */
+  approvals: {
+    lab_supervisor: StageApproval | null;
+    tech_manager: StageApproval | null;
+    qa: StageApproval | null;
+  };
   submittedAt?: string;
-  approvedAt?: string;
+  /** Set when QA signs off the final stage. */
+  qaApprovedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -69,7 +111,46 @@ export interface MockSample {
 }
 
 // =========================================================================
-// Seed data — every test now carries the typed reviewStatus + history
+// Helpers — what stage a test is currently sitting at
+// =========================================================================
+
+/** Returns the stage that must approve the test right now, or null if done. */
+export function currentStage(
+  test: Pick<Test, "reviewStatus" | "approvals">,
+): ApprovalStage | null {
+  if (test.reviewStatus === "qa_approved") return null;
+  if (test.reviewStatus === "awaiting_lab_supervisor") return "lab_supervisor";
+  if (test.reviewStatus === "awaiting_tech_manager") return "tech_manager";
+  if (test.reviewStatus === "awaiting_qa") return "qa";
+  return null;
+}
+
+/** Role that owns a given stage — single source of truth for UI gating. */
+export function roleForStage(stage: ApprovalStage): Role {
+  switch (stage) {
+    case "lab_supervisor":
+      return "lab_manager"; // Lab Supervisor maps to the lab_manager role
+    case "tech_manager":
+      return "admin"; // Technical Manager — modeled as admin in this mock
+    case "qa":
+      return "admin"; // QA — modeled as admin in this mock
+  }
+}
+
+/** Human-readable stage label key — used by i18n. */
+export function labelKeyForStage(stage: ApprovalStage): string {
+  switch (stage) {
+    case "lab_supervisor":
+      return "stageLabSupervisor";
+    case "tech_manager":
+      return "stageTechManager";
+    case "qa":
+      return "stageQa";
+  }
+}
+
+// =========================================================================
+// Seed data — every test carries the three-slot approvals block
 // =========================================================================
 
 const NOW = "2024-01-18T10:00:00Z";
@@ -94,23 +175,81 @@ export const mockSamples: MockSample[] = [
         category: "Chemical",
         method: "AOAC 989.05",
         assignedTo: "A001",
-        reviewStatus: "approved",
+        reviewStatus: "qa_approved",
         submittedAt: "2024-01-17T14:00:00Z",
-        approvedAt: "2024-01-18T10:00:00Z",
+        qaApprovedAt: NOW,
         parameters: [
           { id: "P-01", name: "pH", value: "6.7", unit: "", min: 6.5, max: 6.8, status: "pass" },
           { id: "P-02", name: "Fat Content", value: "3.2", unit: "%", min: 3.0, max: 3.5, status: "pass" },
           { id: "P-03", name: "Solid Non-Fat", value: "8.6", unit: "%", min: 8.5, max: 9.0, status: "pass" },
         ],
+        approvals: {
+          lab_supervisor: {
+            stage: "lab_supervisor",
+            approverRole: "lab_manager",
+            approverId: "LS-001",
+            approverName: "Ahmed Al-Otaibi",
+            approverEmail: "lab.supervisor@greenlablims.sa",
+            approvedAt: "2024-01-17T16:00:00Z",
+            comment: "All within spec.",
+          },
+          tech_manager: {
+            stage: "tech_manager",
+            approverRole: "admin",
+            approverId: "TM-001",
+            approverName: "Sara Al-Mutairi",
+            approverEmail: "tech.manager@greenlablims.sa",
+            approvedAt: "2024-01-17T18:00:00Z",
+            comment: "Confirmed.",
+          },
+          qa: {
+            stage: "qa",
+            approverRole: "admin",
+            approverId: "QA-001",
+            approverName: "Mansour Al-Harbi",
+            approverEmail: "qa@greenlablims.sa",
+            approvedAt: NOW,
+            comment: "Released.",
+          },
+        },
         reviewHistory: [
           {
             id: "rev-001-1",
-            reviewerId: "LM-001",
-            reviewerEmail: "manager@greenlablims.sa",
+            reviewerId: "LS-001",
+            reviewerName: "Ahmed Al-Otaibi",
+            reviewerRole: "lab_manager",
+            reviewerEmail: "lab.supervisor@greenlablims.sa",
             decision: "approved",
+            stage: "lab_supervisor",
             comment: "All within spec.",
-            previousReviewStatus: "submitted_for_review",
-            newReviewStatus: "approved",
+            previousReviewStatus: "awaiting_lab_supervisor",
+            newReviewStatus: "awaiting_tech_manager",
+            createdAt: "2024-01-17T16:00:00Z",
+          },
+          {
+            id: "rev-001-2",
+            reviewerId: "TM-001",
+            reviewerName: "Sara Al-Mutairi",
+            reviewerRole: "admin",
+            reviewerEmail: "tech.manager@greenlablims.sa",
+            decision: "approved",
+            stage: "tech_manager",
+            comment: "Confirmed.",
+            previousReviewStatus: "awaiting_tech_manager",
+            newReviewStatus: "awaiting_qa",
+            createdAt: "2024-01-17T18:00:00Z",
+          },
+          {
+            id: "rev-001-3",
+            reviewerId: "QA-001",
+            reviewerName: "Mansour Al-Harbi",
+            reviewerRole: "admin",
+            reviewerEmail: "qa@greenlablims.sa",
+            decision: "approved",
+            stage: "qa",
+            comment: "Released.",
+            previousReviewStatus: "awaiting_qa",
+            newReviewStatus: "qa_approved",
             createdAt: NOW,
           },
         ],
@@ -124,24 +263,40 @@ export const mockSamples: MockSample[] = [
         category: "Microbiology",
         method: "ISO 4833-1",
         assignedTo: "A002",
-        reviewStatus: "approved",
+        reviewStatus: "qa_approved",
         submittedAt: "2024-01-17T15:30:00Z",
-        approvedAt: "2024-01-18T10:00:00Z",
+        qaApprovedAt: NOW,
         parameters: [
           { id: "P-04", name: "Total Plate Count", value: "500", unit: "CFU/ml", min: null, max: 10000, status: "pass" },
           { id: "P-05", name: "Coliforms", value: "Negative", unit: "", min: null, max: null, status: "pass" },
         ],
-        reviewHistory: [
-          {
-            id: "rev-002-1",
-            reviewerId: "LM-001",
-            reviewerEmail: "manager@greenlablims.sa",
-            decision: "approved",
-            previousReviewStatus: "submitted_for_review",
-            newReviewStatus: "approved",
-            createdAt: NOW,
+        approvals: {
+          lab_supervisor: {
+            stage: "lab_supervisor",
+            approverRole: "lab_manager",
+            approverId: "LS-001",
+            approverName: "Ahmed Al-Otaibi",
+            approverEmail: "lab.supervisor@greenlablims.sa",
+            approvedAt: "2024-01-17T17:00:00Z",
           },
-        ],
+          tech_manager: {
+            stage: "tech_manager",
+            approverRole: "admin",
+            approverId: "TM-001",
+            approverName: "Sara Al-Mutairi",
+            approverEmail: "tech.manager@greenlablims.sa",
+            approvedAt: "2024-01-17T19:00:00Z",
+          },
+          qa: {
+            stage: "qa",
+            approverRole: "admin",
+            approverId: "QA-001",
+            approverName: "Mansour Al-Harbi",
+            approverEmail: "qa@greenlablims.sa",
+            approvedAt: NOW,
+          },
+        },
+        reviewHistory: [],
         createdAt: "2024-01-15T09:00:00Z",
         updatedAt: NOW,
       },
@@ -172,6 +327,7 @@ export const mockSamples: MockSample[] = [
           { id: "P-07", name: "TDS", value: "120", unit: "mg/L", min: 0, max: 500, status: "pass" },
           { id: "P-08", name: "Chloride", value: "", unit: "mg/L", min: 0, max: 250, status: "pending" },
         ],
+        approvals: { lab_supervisor: null, tech_manager: null, qa: null },
         reviewHistory: [],
         createdAt: "2024-01-16T09:00:00Z",
         updatedAt: "2024-01-16T09:00:00Z",
@@ -197,12 +353,13 @@ export const mockSamples: MockSample[] = [
         category: "Instrumentation",
         method: "GC-MS Internal",
         assignedTo: "A003",
-        reviewStatus: "submitted_for_review",
+        reviewStatus: "awaiting_lab_supervisor",
         submittedAt: "2024-01-18T08:30:00Z",
         parameters: [
           { id: "P-09", name: "Ethanol %", value: "85", unit: "%", min: 80, max: 90, status: "pass" },
           { id: "P-10", name: "Water Content", value: "2.5", unit: "%", min: 0, max: 5.0, status: "pass" },
         ],
+        approvals: { lab_supervisor: null, tech_manager: null, qa: null },
         reviewHistory: [],
         createdAt: "2024-01-16T09:00:00Z",
         updatedAt: "2024-01-18T08:30:00Z",
@@ -228,14 +385,27 @@ export const mockSamples: MockSample[] = [
         category: "Pharmaceutical",
         method: "USP 42",
         assignedTo: "A004",
-        reviewStatus: "submitted_for_review",
+        reviewStatus: "awaiting_tech_manager",
         submittedAt: "2024-01-18T09:15:00Z",
         parameters: [
           { id: "P-11", name: "Active Ingredient", value: "498", unit: "mg", min: 475, max: 525, status: "pass" },
         ],
+        approvals: {
+          lab_supervisor: {
+            stage: "lab_supervisor",
+            approverRole: "lab_manager",
+            approverId: "LS-001",
+            approverName: "Ahmed Al-Otaibi",
+            approverEmail: "lab.supervisor@greenlablims.sa",
+            approvedAt: "2024-01-18T10:00:00Z",
+            comment: "Verified.",
+          },
+          tech_manager: null,
+          qa: null,
+        },
         reviewHistory: [],
         createdAt: "2024-01-17T09:00:00Z",
-        updatedAt: "2024-01-18T09:15:00Z",
+        updatedAt: "2024-01-18T10:00:00Z",
       },
     ],
   },
@@ -258,11 +428,12 @@ export const mockSamples: MockSample[] = [
         category: "Chemical",
         method: "EPA 410.4",
         assignedTo: "A004",
-        reviewStatus: "submitted_for_review",
+        reviewStatus: "awaiting_lab_supervisor",
         submittedAt: "2024-01-18T07:45:00Z",
         parameters: [
           { id: "P-12", name: "COD", value: "45", unit: "mg/L", min: 0, max: 50, status: "pass" },
         ],
+        approvals: { lab_supervisor: null, tech_manager: null, qa: null },
         reviewHistory: [],
         createdAt: "2024-01-14T09:00:00Z",
         updatedAt: "2024-01-18T07:45:00Z",
@@ -294,15 +465,19 @@ export const mockSamples: MockSample[] = [
           { id: "P-13", name: "MFI", value: "0.45", unit: "g/10min", min: 0.5, max: 1.0, status: "fail" },
           { id: "P-14", name: "Density", value: "0.952", unit: "g/cm³", min: 0.94, max: 0.96, status: "pass" },
         ],
+        approvals: { lab_supervisor: null, tech_manager: null, qa: null },
         reviewHistory: [
           {
             id: "rev-007-1",
-            reviewerId: "LM-001",
-            reviewerEmail: "manager@greenlablims.sa",
+            reviewerId: "LS-001",
+            reviewerName: "Ahmed Al-Otaibi",
+            reviewerRole: "lab_manager",
+            reviewerEmail: "lab.supervisor@greenlablims.sa",
             decision: "changes_requested",
+            stage: "lab_supervisor",
             reason: "MFI value 0.45 is below the minimum 0.5 — please re-measure and confirm.",
             comment: "Re-run the test using the fresh calibration standard.",
-            previousReviewStatus: "submitted_for_review",
+            previousReviewStatus: "awaiting_lab_supervisor",
             newReviewStatus: "changes_requested",
             createdAt: "2024-01-17T13:00:00Z",
           },

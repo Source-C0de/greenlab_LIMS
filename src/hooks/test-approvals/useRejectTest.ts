@@ -1,7 +1,8 @@
 // =========================================================================
-// useRejectTest — mutation hook: reject a test, send it back to the analyst
+// useRejectTest — any stage can reject a test. Rejection pushes the test
+// back to `changes_requested` so the analyst must revise and resubmit; the
+// previous approvals are cleared so the test re-enters the chain at the top.
 // =========================================================================
-// Backend ref: POST /api/superadmin/tests/{id}/reject
 
 import { useCallback } from "react";
 import { useNotifications } from "@/context/NotificationContext";
@@ -38,52 +39,86 @@ export function useRejectTest(): (input: RejectTestInput) => Promise<RejectResul
 
       const { sample, testIndex } = found;
       const test = sample.tests[testIndex];
-      if (test.reviewStatus !== "submitted_for_review") {
+      const rejectable = [
+        "awaiting_lab_supervisor",
+        "awaiting_tech_manager",
+        "awaiting_qa",
+      ].includes(test.reviewStatus as string);
+      if (!rejectable) {
         toast.error(labels.cannotReject);
         return { test: null };
+      }
+
+      // Derive the stage from the current status if not provided.
+      let stage = input.stage;
+      if (!stage) {
+        if (test.reviewStatus === "awaiting_lab_supervisor") stage = "lab_supervisor";
+        else if (test.reviewStatus === "awaiting_tech_manager") stage = "tech_manager";
+        else stage = "qa";
       }
 
       await new Promise((resolve) => setTimeout(resolve, SIM_LATENCY_MS));
 
       const now = new Date().toISOString();
+      const reviewerName = input.reviewerName?.trim() || (lang === "ar" ? "المراجع" : "Reviewer");
+      const reviewerRole = input.reviewerRole ?? "lab_manager";
+      const reviewerEmail = input.reviewerEmail ?? "reviewer@greenlablims.sa";
+      const reviewerId = input.reviewerId ?? "RV-001";
+
       const updated: Test = {
         ...test,
         reviewStatus: "changes_requested",
         updatedAt: now,
+        // Clear the approval slot the rejection came from — the test will
+        // re-enter the chain at the top when the analyst resubmits.
+        approvals: {
+          ...test.approvals,
+          [stage]: null,
+        },
         reviewHistory: [
           ...test.reviewHistory,
           {
             id: `rev-${Date.now()}`,
-            reviewerId: "LM-001",
-            reviewerEmail: "manager@greenlablims.sa",
+            reviewerId,
+            reviewerName,
+            reviewerRole,
+            reviewerEmail,
             decision: "changes_requested",
+            stage,
             reason: input.reason,
             comment: input.comment,
-            previousReviewStatus: "submitted_for_review",
+            previousReviewStatus: test.reviewStatus,
             newReviewStatus: "changes_requested",
             createdAt: now,
           },
         ],
       };
       sample.tests[testIndex] = updated;
+      sample.status = "Review";
       notifyStoreChanged();
 
-      // Surface the rejection in the analyst's notification bell.
+      const stageLabel =
+        stage === "lab_supervisor"
+          ? labels.stageLabSupervisor
+          : stage === "tech_manager"
+          ? labels.stageTechManager
+          : labels.stageQa;
+
       addNotification({
         title: lang === "ar" ? "تم رفض الاختبار" : "Test rejected",
         titleAr: "تم رفض الاختبار",
         message:
           lang === "ar"
-            ? `${updated.name} • ${sample.id} • ${input.reason}`
-            : `${updated.name} • ${sample.id} • ${input.reason}`,
-        messageAr: `${updated.name} • ${sample.id} • ${input.reason}`,
+            ? `${updated.name} • ${sample.id} • ${stageLabel}`
+            : `${updated.name} • ${sample.id} • ${stageLabel}`,
+        messageAr: `${updated.name} • ${sample.id} • ${stageLabel}`,
         type: "warning",
         link: `/samples/${sample.id}`,
-        roles: ["analyst", "lab_manager"],
+        roles: ["analyst", "lab_manager", "admin"],
       });
 
       toast.warning(labels.rejectedToast, {
-        description: input.reason,
+        description: `${stageLabel}: ${input.reason}`,
       });
 
       return { test: updated };
