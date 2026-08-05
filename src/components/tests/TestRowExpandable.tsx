@@ -18,7 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ApprovalChainPanel } from "@/components/approvals/ApprovalChainPanel";
 import { RejectTestDialog } from "@/components/approvals/RejectTestDialog";
-import { TestDrawer } from "@/components/tests/TestDrawer";
 import { useAppContext } from "@/context/AppContext";
 import { useApproveTest } from "@/hooks/test-approvals/useApproveTest";
 import { currentStage, roleForStage } from "@/mock-data/samples";
@@ -68,7 +67,6 @@ export function TestRowExpandable({
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const stage = currentStage(test);
   const canActOnStage =
@@ -150,7 +148,9 @@ export function TestRowExpandable({
             size="icon"
             onClick={(e) => {
               e.stopPropagation();
-              setDrawerOpen(true);
+              // The single TestDrawer lives in the parent (SampleDetail); we
+              // just notify it which test to show. Opening a second drawer
+              // here used to render two stacked Sheet overlays (black blobs).
               onView(test.id);
             }}
           >
@@ -319,12 +319,6 @@ export function TestRowExpandable({
         open={rejectOpen}
         onOpenChange={setRejectOpen}
         onRejected={() => setRejectOpen(false)}
-      />
-
-      <TestDrawer
-        test={test}
-        isOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
       />
     </>
   );
