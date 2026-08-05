@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TestTable, type TestTableTest } from "@/components/tests/TestTable";
-import { AwaitingYourApprovalBanner } from "@/components/tests/AwaitingYourApprovalBanner";
 import { AddTestToSampleDialog, type NewSampleTest } from "@/components/samples/AddTestToSampleDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppContext } from "@/context/AppContext";
@@ -75,10 +74,6 @@ export function SampleTabs({ sample, onViewTest, onAddTest, onUpdateTest }: Samp
               </Button>
             )}
           </div>
-          <AwaitingYourApprovalBanner
-            tests={sample.tests || []}
-            sampleId={sample.id}
-          />
           <TestTable
             tests={sample.tests || []}
             onViewTest={onViewTest}

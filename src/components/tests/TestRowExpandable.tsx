@@ -1,10 +1,10 @@
 // =========================================================================
-// TestRowExpandable — single test row inside TestTable. Displays the
-// summary row with status + inline 3-stage approval chain, and when
-// expanded shows parameters, full approval audit, history, and an inline
-// Approve / Reject action bar gated by the current user role. This
-// satisfies the requirement that "each test need approval in same page
-// not other menu".
+// TestRowExpandable — single test row inside TestTable. The summary row
+// shows the status + a compact 3-stage chain so the user can see where
+// the test is in the pipeline at a glance. Expanding the row reveals
+// the parameters table and the recent decision history — it is read-only;
+// all approval / rejection actions live in the single TestReviewDrawer
+// opened from the sample header's "Review" button.
 // =========================================================================
 
 import { useState } from "react";
@@ -17,18 +17,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ApprovalChainPanel } from "@/components/approvals/ApprovalChainPanel";
-import { RejectTestDialog } from "@/components/approvals/RejectTestDialog";
 import { useAppContext } from "@/context/AppContext";
-import { useApproveTest } from "@/hooks/test-approvals/useApproveTest";
 import { currentStage, roleForStage } from "@/mock-data/samples";
 import { approvalLabels } from "@/hooks/test-approvals/labels";
 import {
-  CheckCircle2,
   ChevronRight,
   Eye,
   History,
-  ShieldAlert,
-  XCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -49,12 +44,6 @@ interface TestRowExpandableProps {
   canEditAnalyst?: boolean;
 }
 
-const MOCK_REVIEWER = {
-  id: "RV-001",
-  name: "Demo Reviewer",
-  email: "reviewer@greenlablims.sa",
-};
-
 export function TestRowExpandable({
   test,
   onView,
@@ -63,29 +52,11 @@ export function TestRowExpandable({
   const isRtl = language === "ar";
   const labels = approvalLabels(isRtl ? "ar" : "en");
 
-  const approve = useApproveTest();
   const [expanded, setExpanded] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [rejectOpen, setRejectOpen] = useState(false);
 
   const stage = currentStage(test);
   const canActOnStage =
     !!stage && (currentRole === roleForStage(stage) || currentRole === "superadmin");
-
-  const handleApprove = async () => {
-    setBusy(true);
-    try {
-      await approve({
-        testId: test.id,
-        approverId: MOCK_REVIEWER.id,
-        approverName: MOCK_REVIEWER.name,
-        approverEmail: MOCK_REVIEWER.email,
-        approverRole: stage ? roleForStage(stage) : currentRole,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <>
@@ -133,14 +104,7 @@ export function TestRowExpandable({
           {test.assignedAnalyst ?? "—"}
         </TableCell>
         <TableCell>
-          <div className="flex flex-col gap-1.5 items-start">
-            <StatusBadge status={test.reviewStatus} />
-            {canActOnStage && (
-              <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
-                {labels.awaitingYou}
-              </Badge>
-            )}
-          </div>
+          <StatusBadge status={test.reviewStatus} />
         </TableCell>
         <TableCell className="text-right w-20">
           <Button
@@ -208,13 +172,6 @@ export function TestRowExpandable({
                 </div>
               </div>
 
-              {/* Detailed approval chain — explicit "Show chain" affordance */}
-              <ApprovalChainPanel
-                approvals={test.approvals}
-                reviewStatus={test.reviewStatus}
-                variant="detailed"
-              />
-
               {/* History */}
               {test.reviewHistory && test.reviewHistory.length > 0 && (
                 <div>
@@ -272,54 +229,10 @@ export function TestRowExpandable({
                   </ol>
                 </div>
               )}
-
-              {/* Inline actions — always visible at the bottom of the panel */}
-              <div className="flex items-center justify-between pt-2 border-t">
-                {canActOnStage ? (
-                  <span className="text-xs text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1.5">
-                    <ShieldAlert className="h-3.5 w-3.5" />
-                    {labels.awaitingYou}
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <ShieldAlert className="h-3.5 w-3.5" />
-                    {labels.notYourStage}
-                  </span>
-                )}
-                {canActOnStage && (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => setRejectOpen(true)}
-                      disabled={busy}
-                    >
-                      <XCircle className="me-1.5 h-3.5 w-3.5" />
-                      {labels.reject}
-                    </Button>
-                    <Button size="sm" onClick={handleApprove} disabled={busy}>
-                      <CheckCircle2 className="me-1.5 h-3.5 w-3.5" />
-                      {busy
-                        ? isRtl
-                          ? "جاري الاعتماد..."
-                          : "Approving..."
-                        : labels.approveCurrentStage}
-                    </Button>
-                  </div>
-                )}
-              </div>
             </div>
           </TableCell>
         </TableRow>
       )}
-
-      <RejectTestDialog
-        testId={rejectOpen ? test.id : null}
-        testName={test.name}
-        open={rejectOpen}
-        onOpenChange={setRejectOpen}
-        onRejected={() => setRejectOpen(false)}
-      />
     </>
   );
 }
