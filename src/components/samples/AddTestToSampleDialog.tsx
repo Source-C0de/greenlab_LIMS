@@ -40,34 +40,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import type { Test, ParameterValue } from "@/mock-data/samples";
 
-// Shape of a test once added to a sample. Mirrors the existing
-// mockSamples tests shape so downstream code (TestTable, TestDrawer,
-// ParameterTable) keeps working without changes.
-export interface NewSampleTest {
-  id: string;
-  name: string;
-  category: string;
-  method: string;
-  methodType?: string;
-  testCode?: string;
-  specificationId?: string;
-  assignedTo: string | null;
-  status: string;
-  parameters: Array<{
-    id: string;
-    name: string;
-    value: string;
-    unit: string;
-    min: number | string | null;
-    max: number | string | null;
-    target?: string | number | null;
-    limitType: string;
-    method?: string;
-    methodReference?: string;
-    status: string;
-  }>;
-}
+// Shape of a test once added to a sample. Mirrors the canonical `Test`
+// type from `mock-data/samples` so the row fits straight into TestTable
+// and the approval pipeline (TestReviewDrawer / currentStage / roleForStage)
+// keeps working without any patching on the consumer side.
+export type NewSampleTest = Test;
 
 interface AddTestToSampleDialogProps {
   isOpen: boolean;
@@ -83,9 +62,9 @@ const newParamId = () =>
     .toString(36)
     .padStart(2, "0")}`;
 
-// Parse a TestMaster's parameterDetails JSON into the Parameter shape
-// used by the sample test / ParameterTable.
-function loadParametersFromMaster(test: TestMaster) {
+// Parse a TestMaster's parameterDetails JSON into the canonical
+// ParameterValue shape used by TestTable / ParameterTable.
+function loadParametersFromMaster(test: TestMaster): ParameterValue[] {
   if (!test.parameterDetails) return [];
   try {
     const rows: TestParameterRow[] = JSON.parse(test.parameterDetails);
@@ -102,14 +81,19 @@ function loadParametersFromMaster(test: TestMaster) {
         ? parseLimit(r.limitRange, "max")
         : null,
       target:
-        r.limitType === "Exact Value" || r.limitType === "Pass / Fail" ||
-        r.limitType === "Not Detected" || r.limitType === "Text"
+        r.limitType === "Exact Value" ||
+        r.limitType === "Pass / Fail" ||
+        r.limitType === "Not Detected" ||
+        r.limitType === "Text"
           ? r.limitRange
           : null,
       limitType: r.limitType,
+      // Method + reference are stored in ParameterValue's optional slots so
+      // the new test rows already show meaningful Limit / MU / Reference
+      // values straight after they're added to the sample.
       method: r.method,
-      methodReference: r.methodReference,
-      status: "Pending",
+      reference: r.methodReference,
+      status: "pending",
     }));
   } catch {
     return [];
@@ -204,6 +188,7 @@ export function AddTestToSampleDialog({
       return;
     }
 
+    const now = new Date().toISOString();
     const newTests: NewSampleTest[] = selectedTestIds.map((id) => {
       const master = testMasterData.find((t) => t.id === id)!;
       return {
@@ -211,6 +196,7 @@ export function AddTestToSampleDialog({
         id: `${sampleId}-T-${id}-${Math.floor(Math.random() * 1000)
           .toString(36)
           .padStart(2, "0")}`,
+        sampleId,
         name: master.testName,
         category: master.methodType?.includes("Micro")
           ? "Microbiology"
@@ -220,12 +206,22 @@ export function AddTestToSampleDialog({
           ? "Chemical"
           : "Physical",
         method: master.methodReference || master.methodType,
-        methodType: master.methodType,
-        testCode: master.testCode,
-        specificationId,
         assignedTo: analyst.name,
-        status: "Pending",
+        assignedAnalyst: analyst.name,
+        // A freshly-added test sits at the "changes_requested" terminal so
+        // `currentStage(test)` returns null — analyst is still collecting
+        // results. The approval chain becomes active once the analyst
+        // submits the test for review from TestDrawer.
+        reviewStatus: "pending",
         parameters: loadParametersFromMaster(master),
+        reviewHistory: [],
+        approvals: {
+          lab_supervisor: null,
+          tech_manager: null,
+          qa: null,
+        },
+        createdAt: now,
+        updatedAt: now,
       };
     });
 
