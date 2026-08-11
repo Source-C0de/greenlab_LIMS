@@ -5,3 +5,4 @@ This is GL internal project for testing.
 4. Implement Customer Segment
 5. add backend 
 6. modified whole architecture.
+7. implement report
