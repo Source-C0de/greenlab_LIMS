@@ -22,6 +22,7 @@ import SuperadminLogin from "@/pages/superadmin-login";
 import Dashboard from "@/pages/dashboard";
 import SamplesList from "@/pages/samples/index";
 import SampleDetail from "@/pages/samples/[id]";
+import SampleReportPage from "@/pages/samples/report";
 import WorkflowBoard from "@/pages/workflow";
 import ClientsList from "@/pages/clients";
 import ReportsList from "@/pages/reports/index";
@@ -75,6 +76,7 @@ function Router() {
       <Route path="/dashboard"><LayoutWrapper component={Dashboard} /></Route>
       <Route path="/samples"><LayoutWrapper component={SamplesList} /></Route>
       <Route path="/samples/receiving"><LayoutWrapper component={SampleReceiving} /></Route>
+      <Route path="/samples/:id/report"><LayoutWrapper component={SampleReportPage} /></Route>
       <Route path="/samples/:id"><LayoutWrapper component={SampleDetail} /></Route>
       <Route path="/workflow"><LayoutWrapper component={WorkflowBoard} /></Route>
       <Route path="/clients"><LayoutWrapper component={ClientsList} /></Route>

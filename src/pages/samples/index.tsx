@@ -4,7 +4,7 @@ import { mockSamples, mockClients, sampleTypes, mockSpecifications } from "@/moc
 import { DataTable } from "@/components/shared/DataTable";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Download, Loader2, Beaker, Info } from "lucide-react";
+import { Plus, Filter, Download, Loader2, Beaker, Info, FileText } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { 
   Dialog, 
@@ -185,8 +185,23 @@ export default function SamplesList() {
       }
     },
     { key: "receivedDate", header: "Received Date" },
-    { 
-      key: "actions", 
+    {
+      key: "report",
+      header: "Report",
+      render: (item: any) =>
+        item.status === "Approved" ? (
+          <Link href={`/samples/${item.id}/report`}>
+            <Button variant="outline" size="sm" className="gap-1.5 text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-800">
+              <FileText className="h-3.5 w-3.5" />
+              View Report
+            </Button>
+          </Link>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )
+    },
+    {
+      key: "actions",
       header: "",
       render: (item: any) => (
         <Link href={`/samples/${item.id}`}>
