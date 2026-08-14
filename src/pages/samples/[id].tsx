@@ -165,7 +165,15 @@ export default function SampleDetail() {
     <div className="flex flex-col h-full overflow-visible">
       <div className="md:px-2">
         <SampleHeader
-          sample={sample}
+          sample={{
+            id: sample.id,
+            clientName: sample.clientName,
+            sampleType: sample.sampleType,
+            status: sample.status,
+            priority: sample.priority,
+            receivedDate: sample.receivedDate,
+            receivedBy: sample.assignedAnalyst ?? undefined,
+          }}
           pendingForMe={myPending.length}
           onPrint={handlePrint}
           onGenerateReport={handleGenerateReport}

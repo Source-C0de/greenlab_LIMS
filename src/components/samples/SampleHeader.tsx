@@ -19,6 +19,7 @@ interface SampleHeaderProps {
     status: string;
     priority: string;
     receivedDate: string;
+    receivedBy?: string;
   };
   /** Number of tests on this sample that are awaiting the current user's stage. */
   pendingForMe?: number;
@@ -83,6 +84,11 @@ export function SampleHeader({
             <span className="h-1 w-1 rounded-full bg-muted-foreground/30"></span>
             <span>
               <strong>{isRtl ? "تاريخ الاستلام:" : "Received:"}</strong> {sample.receivedDate}
+            </span>
+            <span className="h-1 w-1 rounded-full bg-muted-foreground/30"></span>
+            <span>
+              <strong>{isRtl ? "استلم بواسطة:" : "Received By:"}</strong>{" "}
+              {sample.receivedBy ?? "—"}
             </span>
           </div>
         </div>
