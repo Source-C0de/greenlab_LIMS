@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
+import MarketingReports from "@/components/dashboard/MarketingReports";
 import { 
   Select, 
   SelectContent, 
@@ -271,6 +272,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <MarketingReports />
     </div>
   );
 }

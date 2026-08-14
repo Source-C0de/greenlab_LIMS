@@ -492,3 +492,88 @@ export const mockSamples: MockSample[] = [
     ],
   },
 ];
+
+// =========================================================================
+// Marketing Reports — derived view used by the Dashboard's Marketing
+// Reports segment. Keeps MockSample unchanged; computes the four
+// columns that aren't stored on the seed (delivery, due, days,
+// progress) on demand.
+// =========================================================================
+
+export interface MarketingSampleRow {
+  sample: MockSample;
+  /** Same as receivedDate — surfaced separately to mirror the screenshot. */
+  deliveryDate: string;
+  /** receivedDate + priority-based SLA window. */
+  dueDate: string;
+  /** Signed calendar-day delta from today to dueDate (positive = late). */
+  daysRemaining: number;
+  /** 0..100 completion percentage. */
+  progress: number;
+  /** Flat list of parameter names performed, joined for the cell. */
+  performedParameters: string;
+}
+
+/** SLA window per priority — mirrors common LIMS TAT contracts. */
+const PRIORITY_DAYS: Record<MockSample["priority"], number> = {
+  Urgent: 2,
+  High: 5,
+  Normal: 10,
+};
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Adds N whole days to an ISO yyyy-mm-dd string and returns the new ISO date. */
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Computes the marketing-row view for a single sample. */
+export function deriveMarketingRow(
+  sample: MockSample,
+  nowIso: string,
+): MarketingSampleRow {
+  const slaDays = PRIORITY_DAYS[sample.priority] ?? 10;
+  const dueDate = addDays(sample.receivedDate, slaDays);
+  const today = new Date(nowIso + "T00:00:00Z").getTime();
+  const due = new Date(dueDate + "T00:00:00Z").getTime();
+  const daysRemaining = Math.round((due - today) / MS_PER_DAY);
+
+  // Progress = avg of per-test pass ratio over all parameters, fallback 100
+  // for samples already completed (status "Approved") and 0 for the rest.
+  let progress: number;
+  if (sample.status === "Approved") {
+    progress = 100;
+  } else {
+    const params = sample.tests.flatMap((t) => t.parameters);
+    if (params.length === 0) {
+      progress = 0;
+    } else {
+      const passed = params.filter((p) => p.status === "pass").length;
+      progress = Math.round((passed / params.length) * 100);
+    }
+  }
+
+  const performed = sample.tests
+    .flatMap((t) => t.parameters.map((p) => p.name))
+    .filter(Boolean);
+
+  return {
+    sample,
+    deliveryDate: sample.receivedDate,
+    dueDate,
+    daysRemaining,
+    progress,
+    performedParameters: performed.join(", "),
+  };
+}
+
+/** Convenience: derive rows for the full sample list. */
+export function deriveMarketingRows(
+  nowIso: string,
+  samples: MockSample[] = mockSamples,
+): MarketingSampleRow[] {
+  return samples.map((s) => deriveMarketingRow(s, nowIso));
+}
