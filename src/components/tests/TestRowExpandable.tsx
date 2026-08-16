@@ -29,6 +29,8 @@ import {
   ChevronRight,
   Eye,
   History,
+  Edit as EditIcon,
+  Trash2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -41,6 +43,11 @@ interface TestRowExpandableProps {
   test: TestTableTest;
   parameter: ParameterValue;
   onView: (id: string) => void;
+  onEdit?: (testId: string) => void;
+  onDelete?: (testId: string) => void;
+  /** Show Edit + Delete buttons only when true. Caller (TestTable) gates
+   *  by the current user's role. */
+  canModifyTest?: boolean;
   analystPickerOpen?: boolean;
   onAnalystPickerOpenChange?: (open: boolean) => void;
   analystSearch?: string;
@@ -71,6 +78,9 @@ export function TestRowExpandable({
   test,
   parameter,
   onView,
+  onEdit,
+  onDelete,
+  canModifyTest,
 }: TestRowExpandableProps) {
   const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
@@ -170,19 +180,49 @@ export function TestRowExpandable({
           <StatusBadge status={parameter.status} />
         </TableCell>
         <TableCell className="text-right w-16">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              // The single TestDrawer lives in the parent (SampleDetail); we
-              // just notify it which test to show. Opening a second drawer
-              // here used to render two stacked Sheet overlays (black blobs).
-              onView(test.id);
-            }}
-          >
-            <Eye className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                // The single TestDrawer lives in the parent (SampleDetail); we
+                // just notify it which test to show. Opening a second drawer
+                // here used to render two stacked Sheet overlays (black blobs).
+                onView(test.id);
+              }}
+              title={isRtl ? "عرض" : "View"}
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+            {canModifyTest && onEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(test.id);
+                }}
+                title={isRtl ? "تعديل" : "Edit"}
+              >
+                <EditIcon className="h-4 w-4" />
+              </Button>
+            )}
+            {canModifyTest && onDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(test.id);
+                }}
+                title={isRtl ? "حذف" : "Delete"}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </TableCell>
       </TableRow>
 

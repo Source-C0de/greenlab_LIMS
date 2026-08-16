@@ -2,11 +2,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
-  Printer,
-  Download,
   UserPlus,
   RefreshCw,
-  FileBarChart,
   ClipboardCheck,
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
@@ -23,8 +20,6 @@ interface SampleHeaderProps {
   };
   /** Number of tests on this sample that are awaiting the current user's stage. */
   pendingForMe?: number;
-  onPrint?: () => void;
-  onGenerateReport?: () => void;
   onAssignAnalyst?: () => void;
   onReview?: () => void;
 }
@@ -32,8 +27,6 @@ interface SampleHeaderProps {
 export function SampleHeader({
   sample,
   pendingForMe = 0,
-  onPrint,
-  onGenerateReport,
   onAssignAnalyst,
   onReview,
 }: SampleHeaderProps) {
@@ -132,20 +125,6 @@ export function SampleHeader({
               <div className="h-8 w-px bg-border mx-1 hidden md:block"></div>
             </>
           )}
-          {sample.status === "Approved" ? (
-            <Button size="sm" onClick={onGenerateReport}>
-              <Download className="mr-2 h-4 w-4" />{" "}
-              {isRtl ? "تحميل التقرير" : "Download Report"}
-            </Button>
-          ) : (
-            <Button size="sm" onClick={onGenerateReport}>
-              <FileBarChart className="mr-2 h-4 w-4" />{" "}
-              {isRtl ? "إصدار التقرير" : "Generate Report"}
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" onClick={onPrint}>
-            <Printer className="h-4 w-4" />
-          </Button>
         </div>
       </div>
     </div>

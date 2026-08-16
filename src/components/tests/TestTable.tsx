@@ -35,13 +35,27 @@ interface TestTableProps {
   tests: TestTableTest[];
   onViewTest: (id: string) => void;
   onUpdateTest?: (testId: string, patch: Partial<TestTableTest>) => void;
+  onEditTest?: (testId: string) => void;
+  onDeleteTest?: (testId: string) => void;
 }
 
-export function TestTable({ tests, onViewTest, onUpdateTest }: TestTableProps) {
+export function TestTable({
+  tests,
+  onViewTest,
+  onUpdateTest,
+  onEditTest,
+  onDeleteTest,
+}: TestTableProps) {
   const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
   const [analystPickerFor, setAnalystPickerFor] = useState<string | null>(null);
   const [analystSearch, setAnalystSearch] = useState("");
+
+  // Edit / Delete buttons show only for admins / lab managers / superadmin.
+  const canModifyTest =
+    currentRole === "admin" ||
+    currentRole === "lab_manager" ||
+    currentRole === "superadmin";
 
   const filteredAnalysts = mockAnalysts.filter(
     (a) =>
@@ -106,6 +120,9 @@ export function TestTable({ tests, onViewTest, onUpdateTest }: TestTableProps) {
                     test={test}
                     parameter={param}
                     onView={onViewTest}
+                    onEdit={canModifyTest ? onEditTest : undefined}
+                    onDelete={canModifyTest ? onDeleteTest : undefined}
+                    canModifyTest={canModifyTest}
                     onAssignAnalyst={
                       onUpdateTest
                         ? (analyst) => {

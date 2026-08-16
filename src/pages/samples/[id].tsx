@@ -83,30 +83,6 @@ export default function SampleDetail() {
   };
 
   // Action Handlers
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleGenerateReport = () => {
-    toast.info(
-      isRtl ? "جاري إنشاء التقرير..." : "Generating chemical analysis report...",
-      {
-        description: isRtl ? "سيتم الانتهاء قريباً" : "This may take a few seconds",
-      },
-    );
-
-    setTimeout(() => {
-      toast.success(
-        isRtl ? "تم إنشاء التقرير بنجاح" : "Report generated successfully!",
-        {
-          description: isRtl
-            ? "تم إرساله إلى بريدك الإلكتروني"
-            : "The PDF has been sent to your email.",
-        },
-      );
-    }, 2000);
-  };
-
   const handleAssignAnalyst = (analyst: any) => {
     const target = findSample(id ?? "");
     if (target) {
@@ -161,6 +137,36 @@ export default function SampleDetail() {
     notifyStoreChanged();
   };
 
+  const handleEditTest = (testId: string) => {
+    // For now we open the existing TestDrawer for the selected test so the
+    // editor lands in the same place the View action leads. Once the
+    // dedicated EditTestDialog is wired up this becomes a `setEditTestId`.
+    setSelectedTestId(testId);
+    toast.info(
+      isRtl ? "تحرير الاختبار" : "Edit test",
+      {
+        description: isRtl
+          ? `افتح ${testId} في المحرر`
+          : `Open ${testId} in the editor`,
+      },
+    );
+  };
+
+  const handleDeleteTest = (testId: string) => {
+    const target = findSample(id ?? "");
+    if (!target) return;
+    const before = target.tests.length;
+    target.tests = target.tests.filter((t) => t.id !== testId);
+    if (target.tests.length === before) return;
+    notifyStoreChanged();
+    toast.success(
+      isRtl ? "تم حذف الاختبار" : "Test deleted",
+      {
+        description: testId,
+      },
+    );
+  };
+
   return (
     <div className="flex flex-col h-full overflow-visible">
       <div className="md:px-2">
@@ -175,8 +181,6 @@ export default function SampleDetail() {
             receivedBy: sample.assignedAnalyst ?? undefined,
           }}
           pendingForMe={myPending.length}
-          onPrint={handlePrint}
-          onGenerateReport={handleGenerateReport}
           onAssignAnalyst={() => setIsAssignOpen(true)}
           onReview={openReview}
         />
@@ -187,6 +191,8 @@ export default function SampleDetail() {
             onViewTest={handleViewTest}
             onAddTest={handleAddTest}
             onUpdateTest={handleUpdateTest}
+            onEditTest={handleEditTest}
+            onDeleteTest={handleDeleteTest}
           />
         </div>
       </div>

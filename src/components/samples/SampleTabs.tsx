@@ -7,25 +7,38 @@ import {
   History,
   Activity,
   Plus,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TestTable, type TestTableTest } from "@/components/tests/TestTable";
 import { AddTestToSampleDialog, type NewSampleTest } from "@/components/samples/AddTestToSampleDialog";
+import { ReplicateTestsDialog } from "@/components/samples/ReplicateTestsDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppContext } from "@/context/AppContext";
 import { SampleTimeline } from "@/components/shared/SampleTimeline";
+import type { MockSample } from "@/mock-data/samples";
 
 interface SampleTabsProps {
-  sample: any;
+  sample: MockSample;
   onViewTest: (id: string) => void;
   onAddTest: (tests: NewSampleTest[]) => void;
   onUpdateTest: (testId: string, patch: Partial<TestTableTest>) => void;
+  onEditTest?: (testId: string) => void;
+  onDeleteTest?: (testId: string) => void;
 }
 
-export function SampleTabs({ sample, onViewTest, onAddTest, onUpdateTest }: SampleTabsProps) {
+export function SampleTabs({
+  sample,
+  onViewTest,
+  onAddTest,
+  onUpdateTest,
+  onEditTest,
+  onDeleteTest,
+}: SampleTabsProps) {
   const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
   const [isAddTestOpen, setIsAddTestOpen] = useState(false);
+  const [isReplicateOpen, setIsReplicateOpen] = useState(false);
 
   const timelineSteps = [
     { label: "Sample Received", status: "completed" as const, date: sample.receivedDate, actor: "Reception" },
@@ -68,16 +81,38 @@ export function SampleTabs({ sample, onViewTest, onAddTest, onUpdateTest }: Samp
               </span>
             </h3>
             {currentRole !== "client" && (
-              <Button size="sm" onClick={() => setIsAddTestOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                {isRtl ? "إضافة اختبار" : "Add Test"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsReplicateOpen(true)}
+                  disabled={(sample.tests?.length ?? 0) === 0}
+                  title={
+                    (sample.tests?.length ?? 0) === 0
+                      ? isRtl
+                        ? "لا توجد اختبارات لتكرارها"
+                        : "No tests to replicate"
+                      : isRtl
+                        ? "تكرار هذه الاختبارات إلى عينات أخرى"
+                        : "Replicate these tests to other samples"
+                  }
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  {isRtl ? "تكرار إلى عينات أخرى" : "Replicate to Samples"}
+                </Button>
+                <Button size="sm" onClick={() => setIsAddTestOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {isRtl ? "إضافة اختبار" : "Add Test"}
+                </Button>
+              </div>
             )}
           </div>
           <TestTable
             tests={sample.tests || []}
             onViewTest={onViewTest}
             onUpdateTest={onUpdateTest}
+            onEditTest={onEditTest}
+            onDeleteTest={onDeleteTest}
           />
         </div>
       </TabsContent>
@@ -160,6 +195,12 @@ export function SampleTabs({ sample, onViewTest, onAddTest, onUpdateTest }: Samp
           setIsAddTestOpen(false);
         }}
         sampleId={sample.id}
+      />
+
+      <ReplicateTestsDialog
+        sourceSample={sample}
+        isOpen={isReplicateOpen}
+        onClose={() => setIsReplicateOpen(false)}
       />
     </Tabs>
   );
