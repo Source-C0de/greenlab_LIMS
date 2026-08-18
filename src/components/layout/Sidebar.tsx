@@ -80,7 +80,17 @@ export function Sidebar({ isOpen }: SidebarProps) {
 
     // Dashboard - Only for roles that need the general operational dashboard
     if (["admin", "lab_manager", "analyst", "receptionist"].includes(effectiveRole)) {
-      items.push({ href: "/dashboard", labelEn: "Dashboard", labelAr: "لوحة القيادة", icon: LayoutDashboard, roles: ["admin", "lab_manager", "analyst", "receptionist"], key: "dashboard" });
+      items.push({
+        href: "/dashboard",
+        labelEn: "Dashboard",
+        labelAr: "لوحة القيادة",
+        icon: LayoutDashboard,
+        roles: ["admin", "lab_manager", "analyst", "receptionist"],
+        key: "dashboard",
+        children: [
+          { href: "/dashboard/marketing", labelEn: "Marketing Reports", labelAr: "تقارير التسويق", key: "marketing_reports" },
+        ],
+      });
     }
 
     if (effectiveRole === "client") {

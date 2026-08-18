@@ -43,7 +43,8 @@ export type MenuKey =
   | "my_reports"
   | "my_invoices"
   | "test_approvals"
-  | "my_submissions";
+  | "my_submissions"
+  | "marketing_reports";
 
 export type MenuGroup = "lab" | "client" | "accounting" | "admin";
 
@@ -271,6 +272,14 @@ export const MENU_REGISTRY: Record<MenuKey, MenuEntry> = {
     labelAr: "طلباتي",
     icon: ClipboardCheck,
     href: "/approvals/my-submissions",
+    group: "lab",
+  },
+  marketing_reports: {
+    key: "marketing_reports",
+    labelEn: "Marketing Reports",
+    labelAr: "تقارير التسويق",
+    icon: BarChart3,
+    href: "/dashboard/marketing",
     group: "lab",
   },
 };

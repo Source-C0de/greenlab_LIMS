@@ -20,6 +20,7 @@ import SuperadminLogin from "@/pages/superadmin-login";
 
 // App Pages
 import Dashboard from "@/pages/dashboard";
+import MarketingReportsPage from "@/pages/dashboard/marketing";
 import SamplesList from "@/pages/samples/index";
 import SampleDetail from "@/pages/samples/[id]";
 import SampleReportPage from "@/pages/samples/report";
@@ -74,6 +75,7 @@ function Router() {
 
       {/* App routes wrapped in layout */}
       <Route path="/dashboard"><LayoutWrapper component={Dashboard} /></Route>
+      <Route path="/dashboard/marketing"><LayoutWrapper component={MarketingReportsPage} /></Route>
       <Route path="/samples"><LayoutWrapper component={SamplesList} /></Route>
       <Route path="/samples/receiving"><LayoutWrapper component={SampleReceiving} /></Route>
       <Route path="/samples/:id/report"><LayoutWrapper component={SampleReportPage} /></Route>
