@@ -18,6 +18,8 @@ import {
   Search,
   FileSpreadsheet,
   Eye,
+  Edit,
+  Trash2,
   X,
   ChevronLeft,
   ChevronRight,
@@ -792,12 +794,61 @@ export default function SamplesList() {
                               <Button
                                 variant="outline"
                                 size="icon"
-                                className="h-8 w-8 text-sky-700 border-sky-200 hover:bg-sky-50"
+                                className="h-7 w-7 text-sky-700 border-sky-200 hover:bg-sky-50"
                                 title={isRtl ? "عرض" : "View"}
                               >
                                 <Eye className="h-3.5 w-3.5" />
                               </Button>
                             </Link>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7"
+                              title={isRtl ? "تعديل" : "Edit"}
+                              onClick={() =>
+                                toast.info(
+                                  isRtl
+                                    ? `تعديل ${s.id}`
+                                    : `Edit ${s.id}`,
+                                )
+                              }
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-7 w-7 text-rose-600 border-rose-200 hover:bg-rose-50"
+                              title={isRtl ? "حذف" : "Delete"}
+                              onClick={() =>
+                                toast.error(
+                                  isRtl
+                                    ? `حذف ${s.id}`
+                                    : `Delete ${s.id}`,
+                                )
+                              }
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                            {isApproved && (
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100 hover:text-amber-800"
+                                title={
+                                  isRtl ? "إعادة إصدار" : "Reissue report"
+                                }
+                                onClick={() =>
+                                  toast.info(
+                                    isRtl
+                                      ? `إعادة إصدار التقرير لـ ${s.id}`
+                                      : `Reissue report for ${s.id}`,
+                                  )
+                                }
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
