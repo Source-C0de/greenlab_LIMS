@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -8,9 +9,12 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import { ParameterTable } from "./ParameterTable";
 import { useAppContext } from "@/context/AppContext";
-import { Beaker, Calendar, User, Save, CheckCircle } from "lucide-react";
+import { Beaker, Calendar, User, Save, CheckCircle, Send } from "lucide-react";
+import { useSubmitTest } from "@/hooks/test-approvals/useSubmitTest";
+import { approvalLabels } from "@/hooks/test-approvals/labels";
 
 interface TestDrawerProps {
   test: any;
@@ -21,19 +25,39 @@ interface TestDrawerProps {
 export function TestDrawer({ test, isOpen, onClose }: TestDrawerProps) {
   const { language } = useAppContext();
   const isRtl = language === "ar";
+  const labels = approvalLabels(isRtl ? "ar" : "en");
+  const submit = useSubmitTest();
+  const [submitting, setSubmitting] = useState(false);
 
   if (!test) return null;
 
+  const reviewStatus: string | undefined = test.reviewStatus ?? test.status;
+  const canSubmit =
+    reviewStatus === "in_progress" || reviewStatus === "changes_requested";
+
+  const handleSubmit = async () => {
+    if (!test?.id) return;
+    setSubmitting(true);
+    try {
+      const { test: updated } = await submit({ testId: test.id });
+      if (updated) {
+        onClose();
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent 
-        side={isRtl ? "left" : "right"} 
+      <SheetContent
+        side={isRtl ? "left" : "right"}
         className="w-full sm:max-w-xl overflow-y-auto"
       >
         <SheetHeader className="mb-6 border-b pb-4">
           <div className="flex items-center gap-2 mb-2">
             <Badge variant="outline" className="font-mono text-xs">{test.id}</Badge>
-            <Badge className="bg-blue-500/10 text-blue-600 border-blue-200">{test.status}</Badge>
+            <StatusBadge status={reviewStatus ?? "pending"} />
           </div>
           <SheetTitle className="text-2xl">{test.name}</SheetTitle>
           <SheetDescription>
@@ -91,6 +115,21 @@ export function TestDrawer({ test, isOpen, onClose }: TestDrawerProps) {
             <Button variant="outline" onClick={onClose} className="flex-1 sm:flex-none">
               {isRtl ? "إلغاء" : "Cancel"}
             </Button>
+            {canSubmit && (
+              <Button
+                variant="secondary"
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex-1 sm:flex-none gap-2"
+              >
+                <Send className="w-4 h-4" />
+                {submitting
+                  ? isRtl
+                    ? "جاري الإرسال..."
+                    : "Submitting..."
+                  : labels.submit}
+              </Button>
+            )}
             <Button className="flex-1 sm:flex-none gap-2">
               <Save className="w-4 h-4" />
               {isRtl ? "حفظ النتائج" : "Save Results"}
