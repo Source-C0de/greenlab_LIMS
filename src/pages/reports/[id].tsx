@@ -3,8 +3,9 @@ import { useRef, useState } from "react";
 import { mockReports, mockSamples } from "@/mock-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { QrCodeMock } from "@/components/shared/QrCodeMock";
-import { Printer, Download, Award, CheckCircle2, Loader2 } from "lucide-react";
+import { QrCode } from "@/components/shared/QrCode";
+import { Printer, Download, CheckCircle2, Loader2 } from "lucide-react";
+import { APP_VERSION, DOC_CODE_NO, DOC_LAST_MODIFIED } from "@/lib/app-meta";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
@@ -14,10 +15,28 @@ export default function ReportDetail() {
   const params = useParams();
   const reportRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
-  
+
   const reportId = params.id;
   const report = mockReports.find(r => r.id === reportId) || mockReports[0];
   const sample = mockSamples.find(s => s.id === report.sampleId) || mockSamples[0];
+
+  // Controlled radio state for "Status of Report". Default is derived from the
+  // source report's status: Final → "New Report", Draft → "Re-issued Report".
+  type ReportStatusOption = "New Report" | "Re-issued Report" | "Supplement Report";
+  const [reportStatus, setReportStatus] = useState<ReportStatusOption>(() =>
+    report.status === "Draft" ? "Re-issued Report" : "New Report"
+  );
+
+  // Build the GL/AR/D/YYYY/NNNN report number from the source id and issue date.
+  // For mock reports whose id is already RPT-YYYY-NNN we re-format to the new
+  // template. If issueDate is missing we fall back to today's date.
+  const issueDate = report.issueDate || new Date().toISOString().slice(0, 10);
+  const formattedReportNo = `GL/AR/D/${issueDate.slice(0, 4)}/${report.id.replace(/[^0-9]/g, "").slice(-4).padStart(4, "0")}`;
+
+  // QR target — same origin so a LAN device on the same Wi-Fi as the dev server
+  // can scan and view the report. Falls back to localhost if window isn't
+  // available (e.g. during SSR, though this app is CSR-only).
+  const qrUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/reports/${report.id}`;
 
   const handleDownloadPDF = async () => {
     if (!reportRef.current) return;
@@ -87,23 +106,66 @@ export default function ReportDetail() {
         <Card className="bg-white text-black print:shadow-none print:border-none shadow-lg border-2">
           <CardContent className="p-8 sm:p-12">
             {/* Header */}
-            <div className="flex justify-between items-start border-b-2 border-emerald-800 pb-6 mb-8">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 bg-emerald-800 text-white flex items-center justify-center rounded-lg font-bold text-2xl">
-                  GL
-                </div>
+            <div className="grid grid-cols-3 items-center gap-6 border-b-2 border-gray-300 pb-4 mb-8">
+              <div className="text-sm leading-snug text-gray-800">
+                <p>Version No: <span className="font-bold">{APP_VERSION}</span></p>
+                <p>Code No: <span className="font-bold">{DOC_CODE_NO}</span></p>
+                <p>Last Modified: <span className="font-bold">{DOC_LAST_MODIFIED}</span></p>
+              </div>
+              <div className="text-center">
+                <h3 className="text-2xl font-bold text-blue-700 tracking-tight">Analysis Report</h3>
+              </div>
+              <div className="flex justify-end">
+                <img
+                  src="/images/greenlab_logo_original.png"
+                  alt="Green Lab"
+                  className="h-20 w-auto shrink-0 object-contain"
+                />
+              </div>
+            </div>
+
+            {/* Report Information */}
+            <div className="flex items-start justify-between gap-6 mb-6">
+              <div className="text-sm leading-relaxed">
+                <p className="mb-1">
+                  <span className="font-bold">Report No</span>
+                  <span className="mx-2">:</span>
+                  <span className="font-mono">{formattedReportNo}</span>
+                </p>
+                <p className="mb-1">
+                  <span className="font-bold">Issue Date</span>
+                  <span className="mx-2">:</span>
+                  <span>{issueDate}</span>
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-8 grow">
                 <div>
-                  <h2 className="text-2xl font-bold text-emerald-900 tracking-tight">GreenLabLIMS <span className="font-light">KSA</span></h2>
-                  <p className="text-sm text-gray-600">Central Laboratory Facility - Riyadh</p>
-                  <div className="flex items-center mt-1 text-xs text-gray-500 font-medium">
-                    <Award className="h-3 w-3 mr-1 text-amber-500" /> ISO/IEC 17025:2017 Accredited
+                  <p className="font-bold text-sm mb-1">Status of Report:</p>
+                  <div className="flex gap-6">
+                    {(["New Report", "Re-issued Report", "Supplement Report"] as const).map(
+                      (option) => (
+                        <label
+                          key={option}
+                          className="inline-flex items-center gap-2 cursor-pointer text-sm"
+                        >
+                          <input
+                            type="radio"
+                            name="report-status"
+                            value={option}
+                            checked={reportStatus === option}
+                            onChange={() => setReportStatus(option)}
+                            className="h-3.5 w-3.5 accent-blue-700"
+                          />
+                          <span>{option}</span>
+                        </label>
+                      ),
+                    )}
                   </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <h3 className="text-xl font-bold text-gray-800 uppercase tracking-widest mb-1">Certificate of Analysis</h3>
-                <p className="text-sm font-mono">Report No: <span className="font-bold">{report.id}</span></p>
-                <p className="text-sm">Issue Date: {report.issueDate || 'DRAFT'}</p>
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <QrCode value={qrUrl} size={110} level="H" />
+                  <p className="text-[10px] text-gray-500">Scan to verify</p>
+                </div>
               </div>
             </div>
 
@@ -221,7 +283,7 @@ export default function ReportDetail() {
               </div>
               
               <div className="flex flex-col items-end justify-end">
-                <QrCodeMock value={`https://verify.greenlablims.sa/${report.id}`} size={100} />
+                <QrCode value={`https://verify.greenlablims.sa/${report.id}`} size={100} level="H" />
                 <p className="text-[10px] text-gray-500 mt-2 text-center w-[100px]">Scan to verify authenticity</p>
               </div>
             </div>
