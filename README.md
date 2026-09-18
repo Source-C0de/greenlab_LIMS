@@ -30,6 +30,7 @@
 20. [Legacy / Backup Artifacts](#20-legacy--backup-artifacts)
 21. [Roadmap](#21-roadmap)
 22. [License](#22-license)
+23. [AI / Agent Context](#23-ai--agent-context)
 
 ---
 
@@ -534,3 +535,22 @@ Planned follow-ups (not yet implemented):
 ## 22. License
 
 Internal project — see repository owner for licensing terms.
+
+---
+
+## 23. AI / Agent Context
+
+This repository is configured for both Claude Code and Puku CLI agent sessions.
+Each harness reads a dedicated context file at session start — **do not move,
+rename, or delete them**:
+
+- **[`CLAUDE.md`](./CLAUDE.md)** — canonical, full project context (16 sections,
+  stack, conventions, recipes, do-not list, open gaps). Read this for any
+  non-trivial task.
+- **[`puku.md`](./puku.md)** — slim session-start index for Puku CLI sessions.
+  Points back to `CLAUDE.md` and adds Puku-specific notes (skills, plans,
+  enabled plugins). Read this first when starting a new Puku session, then
+  follow the pointer to `CLAUDE.md` for depth.
+
+When making changes that touch either file, update both cross-references so
+future sessions discover the convention.

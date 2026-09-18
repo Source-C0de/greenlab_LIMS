@@ -3,6 +3,9 @@
 > A Saudi-localized Laboratory Information Management System.
 > React 18 + Vite 6 + TypeScript SPA, **100% mock-data driven** (no backend calls).
 
+> **Note for Puku CLI sessions:** see [`puku.md`](./puku.md) at the repo root
+> for the session-start index and Puku-specific notes (skills, plans).
+
 ## 1. What this is
 
 `greenlims-ksa` is a single-page Vite app for a Saudi Arabia LIMS. It ships
