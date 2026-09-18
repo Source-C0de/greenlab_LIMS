@@ -161,7 +161,7 @@ const NOW = "2024-01-18T10:00:00Z";
 
 export const mockSamples: MockSample[] = [
   {
-    id: "SAM-2024-001",
+    id: "FD/2024/0001",
     clientId: "C001",
     clientName: "Al-Marai Company",
     sampleType: "Food",
@@ -174,7 +174,7 @@ export const mockSamples: MockSample[] = [
     tests: [
       {
         id: "T-001",
-        sampleId: "SAM-2024-001",
+        sampleId: "FD/2024/0001",
         name: "Chemical Analysis",
         category: "Chemical",
         method: "AOAC 989.05",
@@ -262,7 +262,7 @@ export const mockSamples: MockSample[] = [
       },
       {
         id: "T-002",
-        sampleId: "SAM-2024-001",
+        sampleId: "FD/2024/0001",
         name: "Microbial Screening",
         category: "Microbiology",
         method: "ISO 4833-1",
@@ -307,7 +307,7 @@ export const mockSamples: MockSample[] = [
     ],
   },
   {
-    id: "SAM-2024-002",
+    id: "WT/2024/0001",
     clientId: "C007",
     clientName: "SWCC - Saline Water",
     sampleType: "Water",
@@ -320,7 +320,7 @@ export const mockSamples: MockSample[] = [
     tests: [
       {
         id: "T-003",
-        sampleId: "SAM-2024-002",
+        sampleId: "WT/2024/0001",
         name: "Physico-Chemical Water Test",
         category: "Chemical",
         method: "APHA 2320 B",
@@ -339,10 +339,10 @@ export const mockSamples: MockSample[] = [
     ],
   },
   {
-    id: "SAM-2024-003",
+    id: "CO/2024/0001",
     clientId: "C003",
     clientName: "Ajmal Perfumes",
-    sampleType: "Perfume/Oud",
+    sampleType: "Cosmetics",
     description: "Oud Al-Layl Fragrance Batch #OL-089",
     status: "Review",
     assignedAnalyst: "Khaled",
@@ -352,7 +352,7 @@ export const mockSamples: MockSample[] = [
     tests: [
       {
         id: "T-004",
-        sampleId: "SAM-2024-003",
+        sampleId: "CO/2024/0001",
         name: "Purity & Composition",
         category: "Instrumentation",
         method: "GC-MS Internal",
@@ -371,10 +371,10 @@ export const mockSamples: MockSample[] = [
     ],
   },
   {
-    id: "SAM-2024-004",
+    id: "DR/2024/0001",
     clientId: "C005",
     clientName: "Tabuk Pharmaceuticals",
-    sampleType: "Pharmaceutical",
+    sampleType: "Drugs",
     description: "Amoxicillin 500mg Capsules",
     status: "Received",
     assignedAnalyst: null,
@@ -384,9 +384,9 @@ export const mockSamples: MockSample[] = [
     tests: [
       {
         id: "T-005",
-        sampleId: "SAM-2024-004",
+        sampleId: "DR/2024/0001",
         name: "Assay of Amoxicillin",
-        category: "Pharmaceutical",
+        category: "Drugs",
         method: "USP 42",
         assignedTo: "A004",
         reviewStatus: "awaiting_tech_manager",
@@ -414,7 +414,7 @@ export const mockSamples: MockSample[] = [
     ],
   },
   {
-    id: "SAM-2024-005",
+    id: "WT/2024/0002",
     clientId: "C002",
     clientName: "Saudi Aramco",
     sampleType: "Water",
@@ -427,7 +427,7 @@ export const mockSamples: MockSample[] = [
     tests: [
       {
         id: "T-006",
-        sampleId: "SAM-2024-005",
+        sampleId: "WT/2024/0002",
         name: "Chemical Oxygen Demand",
         category: "Chemical",
         method: "EPA 410.4",
@@ -445,10 +445,10 @@ export const mockSamples: MockSample[] = [
     ],
   },
   {
-    id: "SAM-2024-006",
+    id: "MISC/2024/0001",
     clientId: "C004",
     clientName: "SABIC",
-    sampleType: "Chemical",
+    sampleType: "Miscellaneous",
     description: "Polyethylene Resin Batch #PE-789",
     status: "Review",
     assignedAnalyst: "Shahjahan",
@@ -458,7 +458,7 @@ export const mockSamples: MockSample[] = [
     tests: [
       {
         id: "T-007",
-        sampleId: "SAM-2024-006",
+        sampleId: "MISC/2024/0001",
         name: "Melt Flow Index",
         category: "Chemical",
         method: "ASTM D1238",

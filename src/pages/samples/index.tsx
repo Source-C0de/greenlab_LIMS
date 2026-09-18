@@ -6,6 +6,7 @@ import {
   sampleTypes,
   mockSpecifications,
 } from "@/mock-data";
+import { generateSampleId } from "@/lib/sample-id";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -167,7 +168,7 @@ export default function SamplesList() {
         : [];
 
       const newSample = {
-        id: `SAM-2024-${String(samples.length + 1).padStart(3, "0")}`,
+        id: generateSampleId(data.sampleType, samples),
         clientId: data.clientId,
         clientName: client
           ? language === "ar"

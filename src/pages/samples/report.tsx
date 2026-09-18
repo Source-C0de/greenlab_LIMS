@@ -56,10 +56,13 @@ function fmtDate(iso?: string | null) {
 }
 
 export default function SampleReportPage() {
-  const params = useParams();
+  // Sample IDs contain slashes (e.g. "FD/2024/0001"), so wouter's `:id` would
+  // not match. The route is registered as `/samples/*/report`, and the splat
+  // is exposed under the literal key `"*"` by wouter/regexparam.
+  const params = useParams<{ "*": string }>();
   const { language } = useAppContext();
   const isRtl = language === "ar";
-  const sampleId = params.id ?? "";
+  const sampleId = (params["*"] ?? "").replace(/\/$/, "");
 
   // Re-read sample from the live store so the report reflects latest approvals.
   useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);

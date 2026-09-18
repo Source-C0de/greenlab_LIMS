@@ -18,7 +18,11 @@ import { toast } from "sonner";
 import type { Test, MockSample } from "@/mock-data/samples";
 
 export default function SampleDetail() {
-  const { id } = useParams();
+  // Sample IDs contain slashes (e.g. "FD/2024/0001"), so wouter's `:id`
+  // would not match. The route is registered as `/samples/*`, and the
+  // splat is exposed under the literal key `"*"` by wouter/regexparam.
+  const params = useParams<{ "*": string }>();
+  const id = (params["*"] ?? "").replace(/\/$/, "");
   const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
 

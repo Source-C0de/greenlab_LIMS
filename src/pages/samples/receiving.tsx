@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { 
-  mockSamples, 
-  mockClients, 
-  sampleTypes 
+import {
+  mockSamples,
+  mockClients,
+  sampleTypes,
 } from "@/mock-data";
+import { generateSampleId } from "@/lib/sample-id";
 import { Button } from "@/components/ui/button";
 import { 
   Plus, 
@@ -78,7 +79,8 @@ export default function SampleReceiving() {
 
   useEffect(() => {
     if (!formData.sampleNo) {
-      const nextId = `SAM/${new Date().getFullYear()}/${String(samples.length + 1).padStart(4, '0')}`;
+      const tentativeType = formData.productName || "Product";
+      const nextId = generateSampleId(tentativeType, samples);
       setFormData(prev => ({ ...prev, sampleNo: nextId }));
     }
   }, [samples, open]);
@@ -95,7 +97,7 @@ export default function SampleReceiving() {
     const newSample = {
       id: formData.sampleNo,
       clientName: client ? (isRtl ? client.nameAr : client.nameEn) : "Unknown Client",
-      sampleType: "Product", // Default for receptionist
+      sampleType: formData.productName || "Product", // Default for receptionist
       status: "Received",
       receivedDate: formData.receivingDate,
       ...formData

@@ -78,8 +78,13 @@ function Router() {
       <Route path="/dashboard/marketing"><LayoutWrapper component={MarketingReportsPage} /></Route>
       <Route path="/samples"><LayoutWrapper component={SamplesList} /></Route>
       <Route path="/samples/receiving"><LayoutWrapper component={SampleReceiving} /></Route>
-      <Route path="/samples/:id/report"><LayoutWrapper component={SampleReportPage} /></Route>
-      <Route path="/samples/:id"><LayoutWrapper component={SampleDetail} /></Route>
+      {/*
+        Sample IDs contain slashes (e.g. "FD/2024/0001") so wouter's `:id`
+        (single-segment matcher) can't capture them. Use a splat (*) and
+        let the page read the full id from `useParams()["*"]`.
+      */}
+      <Route path="/samples/*/report"><LayoutWrapper component={SampleReportPage} /></Route>
+      <Route path="/samples/*"><LayoutWrapper component={SampleDetail} /></Route>
       <Route path="/workflow"><LayoutWrapper component={WorkflowBoard} /></Route>
       <Route path="/clients"><LayoutWrapper component={ClientsList} /></Route>
       <Route path="/reports"><LayoutWrapper component={ReportsList} /></Route>
