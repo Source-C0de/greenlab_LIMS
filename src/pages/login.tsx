@@ -4,17 +4,46 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, ShieldCheck } from "lucide-react";
 import { useAppContext, Role } from "@/context/AppContext";
+import { useRolePermissions } from "@/hooks/useRolePermissions";
+import type { ToggleableRole } from "@/mock-data/rolePermissions";
+
+interface DemoRoleButton {
+  role: ToggleableRole;
+  labelEn: string;
+  email: string;
+}
+
+const DEMO_ROLES: DemoRoleButton[] = [
+  { role: "admin", labelEn: "System Admin", email: "admin@greenlablims.sa" },
+  { role: "lab_manager", labelEn: "Lab Manager", email: "manager@greenlablims.sa" },
+  { role: "analyst", labelEn: "Analyst", email: "analyst@greenlablims.sa" },
+  { role: "receptionist", labelEn: "Receptionist", email: "reception@greenlablims.sa" },
+  { role: "client", labelEn: "Client", email: "client@company.sa" },
+  { role: "accountant", labelEn: "Accountant", email: "finance@greenlablims.sa" },
+];
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { currentRole, setCurrentRole } = useAppContext();
+  const rolePerms = useRolePermissions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError(null);
+
+    // If the currently selected demo role was disabled by superadmin, block login.
+    if (currentRole !== "superadmin" && !rolePerms.isEnabled(currentRole as ToggleableRole)) {
+      setLoginError(
+        `The "${currentRole.replace("_", " ")}" role has been disabled by your platform administrator.`
+      );
+      return;
+    }
+
     // Normally authenticate here
     if (currentRole === "client") {
       setLocation("/otp-verify");
@@ -28,6 +57,9 @@ export default function Login() {
     setPassword("demo123");
     setCurrentRole(role);
   };
+
+  const visibleDemoRoles = DEMO_ROLES.filter((d) => rolePerms.isEnabled(d.role));
+  const noRolesAvailable = visibleDemoRoles.length === 0;
 
   return (
     <div className="min-h-screen w-full flex flex-col md:flex-row bg-background">
@@ -102,34 +134,51 @@ export default function Login() {
             <Button type="submit" className="w-full h-11 text-base font-medium">
               Sign In
             </Button>
+
+            {loginError && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 text-destructive px-3 py-2 text-sm"
+              >
+                <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{loginError}</span>
+              </div>
+            )}
           </form>
 
           <div className="mt-8 border-t pt-8">
             <h3 className="text-sm font-medium text-muted-foreground mb-4 text-center">Quick Login (Demo Roles)</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("admin", "admin@greenlablims.sa")}>
-                System Admin
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("lab_manager", "manager@greenlablims.sa")}>
-                Lab Manager
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("analyst", "analyst@greenlablims.sa")}>
-                Analyst
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("receptionist", "reception@greenlablims.sa")}>
-                Receptionist
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("client", "client@company.sa")}>
-                Client
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleDemoLogin("accountant", "finance@greenlablims.sa")}>
-                Accountant
-              </Button>
-            </div>
+            {noRolesAvailable ? (
+              <p className="text-center text-sm text-muted-foreground border rounded-md py-4">
+                No demo roles are currently enabled. Contact your platform administrator.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {visibleDemoRoles.map((d) => (
+                  <Button
+                    key={d.role}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDemoLogin(d.role, d.email)}
+                  >
+                    {d.labelEn}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
           
           <p className="text-center text-sm text-muted-foreground">
             Don't have an account? <Link href="/register" className="font-medium text-primary hover:underline">Request access</Link>
+          </p>
+
+          <p className="text-center">
+            <Link
+              href="/superadmin"
+              className="text-xs font-medium text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+            >
+              <ShieldCheck className="h-3 w-3" /> Superadmin login
+            </Link>
           </p>
         </div>
       </div>

@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { mockSamples, mockInvoices, mockReports } from "@/mock-data";
 import { KpiCard } from "@/components/shared/KpiCard";
-import { FlaskConical, FileText, Receipt, CheckCircle, Activity, ArrowRight, Calendar } from "lucide-react";
+import { FlaskConical, Receipt, CheckCircle, Activity, ArrowRight, Calendar, FileSpreadsheet } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell, Legend
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "wouter";
@@ -271,6 +272,30 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <FileSpreadsheet className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Marketing Reports</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Manage & generate marketing reports — filter by client, status, and type, with CSV / Excel exports.
+                </p>
+              </div>
+            </div>
+            <Link href="/dashboard/marketing">
+              <Button>
+                Open Marketing Reports
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,32 +1,67 @@
-import { 
-  Table, 
-  TableBody, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import { useState } from "react";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { 
-  Users, 
-  CheckCircle, 
-  MoreHorizontal, 
-  Filter, 
-  Search,
-  LayoutGrid
-} from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { TestRowExpandable } from "./TestRowExpandable";
+import {
+  Users,
+  CheckCircle,
+  Filter,
+  Search,
+  LayoutGrid,
+  UserCircle,
+  Check,
+} from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { TestRowExpandable, type TestTableTest } from "./TestRowExpandable";
+import { mockAnalysts } from "@/mock-data";
 import { useAppContext } from "@/context/AppContext";
+import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+export type { TestTableTest };
 
 interface TestTableProps {
-  tests: any[];
+  tests: TestTableTest[];
   onViewTest: (id: string) => void;
+  onUpdateTest?: (testId: string, patch: Partial<TestTableTest>) => void;
+  onEditTest?: (testId: string) => void;
+  onDeleteTest?: (testId: string) => void;
 }
 
-export function TestTable({ tests, onViewTest }: TestTableProps) {
-  const { language } = useAppContext();
+export function TestTable({
+  tests,
+  onViewTest,
+  onUpdateTest,
+  onEditTest,
+  onDeleteTest,
+}: TestTableProps) {
+  const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
+  const [analystPickerFor, setAnalystPickerFor] = useState<string | null>(null);
+  const [analystSearch, setAnalystSearch] = useState("");
+
+  // Edit / Delete buttons show only for admins / lab managers / superadmin.
+  const canModifyTest =
+    currentRole === "admin" ||
+    currentRole === "lab_manager" ||
+    currentRole === "superadmin";
+
+  const filteredAnalysts = mockAnalysts.filter(
+    (a) =>
+      a.name.toLowerCase().includes(analystSearch.toLowerCase()) ||
+      a.nameAr.includes(analystSearch)
+  );
 
   return (
     <div className="space-y-4">
@@ -35,8 +70,8 @@ export function TestTable({ tests, onViewTest }: TestTableProps) {
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <div className="relative w-full sm:w-64">
             <Search className={`absolute h-4 w-4 text-muted-foreground top-1/2 -translate-y-1/2 ${isRtl ? 'right-3' : 'left-3'}`} />
-            <Input 
-              placeholder={isRtl ? "البحث عن اختبار..." : "Filter tests..."} 
+            <Input
+              placeholder={isRtl ? "البحث عن اختبار..." : "Filter tests..."}
               className={`${isRtl ? 'pr-9' : 'pl-9'} h-9`}
             />
           </div>
@@ -44,7 +79,7 @@ export function TestTable({ tests, onViewTest }: TestTableProps) {
             <Filter className="mr-2 h-4 w-4" /> {isRtl ? "تصفية" : "Filter"}
           </Button>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" className="text-muted-foreground h-9">
             <Users className="mr-2 h-4 w-4" /> {isRtl ? "تعيين جماعي" : "Bulk Assign"}
@@ -60,26 +95,60 @@ export function TestTable({ tests, onViewTest }: TestTableProps) {
       </div>
 
       <div className="rounded-xl border shadow-sm overflow-hidden bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead className="w-10">
-                <Checkbox />
-              </TableHead>
-              <TableHead className="w-[250px]">{isRtl ? "الاختبار" : "Test Name"}</TableHead>
-              <TableHead>{isRtl ? "الفئة" : "Category"}</TableHead>
-              <TableHead>{isRtl ? "الطريقة" : "Method"}</TableHead>
-              <TableHead>{isRtl ? "المحلل" : "Technical Assistant"}</TableHead>
-              <TableHead>{isRtl ? "الحالة" : "Status"}</TableHead>
-              <TableHead className="text-right w-20"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tests.map((test) => (
-              <TestRowExpandable key={test.id} test={test} onView={onViewTest} />
-            ))}
-          </TableBody>
-        </Table>
+        <div className="max-h-[640px] overflow-auto">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-muted/50">
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="w-10">
+                  <Checkbox />
+                </TableHead>
+                <TableHead className="w-[260px]">{isRtl ? "الاختبار / المعامل" : "Test / Parameter"}</TableHead>
+                <TableHead className="w-[140px]">{isRtl ? "الحد" : "Limit"}</TableHead>
+                <TableHead className="w-[120px]">{isRtl ? "النتيجة" : "Result"}</TableHead>
+                <TableHead className="w-[90px]">{isRtl ? "الوحدة" : "Unit"}</TableHead>
+                <TableHead className="w-[90px]">{isRtl ? "MU" : "MU"}</TableHead>
+                <TableHead className="w-[140px]">{isRtl ? "المرجع" : "Reference"}</TableHead>
+                <TableHead className="w-[120px]">{isRtl ? "الحالة" : "Status"}</TableHead>
+                <TableHead className="text-right w-16"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tests.flatMap((test) =>
+                (test.parameters ?? []).map((param) => (
+                  <TestRowExpandable
+                    key={`${test.id}-${param.id}`}
+                    test={test}
+                    parameter={param}
+                    onView={onViewTest}
+                    onEdit={canModifyTest ? onEditTest : undefined}
+                    onDelete={canModifyTest ? onDeleteTest : undefined}
+                    canModifyTest={canModifyTest}
+                    onAssignAnalyst={
+                      onUpdateTest
+                        ? (analyst) => {
+                            if (analyst === null) {
+                              onUpdateTest(test.id, { assignedTo: null });
+                            } else {
+                              onUpdateTest(test.id, { assignedTo: analyst.name });
+                            }
+                          }
+                        : undefined
+                    }
+                    analystPickerOpen={analystPickerFor === test.id}
+                    onAnalystPickerOpenChange={(open) => {
+                      setAnalystPickerFor(open ? test.id : null);
+                      if (!open) setAnalystSearch("");
+                    }}
+                    analystSearch={analystSearch}
+                    onAnalystSearchChange={setAnalystSearch}
+                    filteredAnalysts={filteredAnalysts}
+                    canEditAnalyst={currentRole !== "client"}
+                  />
+                )),
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </div>
   );

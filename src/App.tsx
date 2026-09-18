@@ -16,11 +16,14 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import ForgotPassword from "@/pages/forgot-password";
 import OtpVerify from "@/pages/otp-verify";
+import SuperadminLogin from "@/pages/superadmin-login";
 
 // App Pages
 import Dashboard from "@/pages/dashboard";
+import MarketingReportsPage from "@/pages/dashboard/marketing";
 import SamplesList from "@/pages/samples/index";
 import SampleDetail from "@/pages/samples/[id]";
+import SampleReportPage from "@/pages/samples/report";
 import WorkflowBoard from "@/pages/workflow";
 import ClientsList from "@/pages/clients";
 import ReportsList from "@/pages/reports/index";
@@ -44,6 +47,8 @@ import ApprovalQueue from "@/pages/specifications/approval";
 import VersionHistory from "@/pages/specifications/history";
 import TestMasterPage from "@/pages/specifications/test-master";
 import SampleReceiving from "@/pages/samples/receiving";
+import ApprovalsQueue from "@/pages/approvals/queue";
+import MySubmissions from "@/pages/approvals/my-submissions";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -63,14 +68,17 @@ function Router() {
       {/* Auth routes without sidebar */}
       <Route path="/" component={() => <Redirect to="/login" />} />
       <Route path="/login" component={Login} />
+      <Route path="/superadmin" component={SuperadminLogin} />
       <Route path="/register" component={Register} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/otp-verify" component={OtpVerify} />
 
       {/* App routes wrapped in layout */}
       <Route path="/dashboard"><LayoutWrapper component={Dashboard} /></Route>
+      <Route path="/dashboard/marketing"><LayoutWrapper component={MarketingReportsPage} /></Route>
       <Route path="/samples"><LayoutWrapper component={SamplesList} /></Route>
       <Route path="/samples/receiving"><LayoutWrapper component={SampleReceiving} /></Route>
+      <Route path="/samples/:id/report"><LayoutWrapper component={SampleReportPage} /></Route>
       <Route path="/samples/:id"><LayoutWrapper component={SampleDetail} /></Route>
       <Route path="/workflow"><LayoutWrapper component={WorkflowBoard} /></Route>
       <Route path="/clients"><LayoutWrapper component={ClientsList} /></Route>
@@ -98,6 +106,10 @@ function Router() {
       <Route path="/specifications/approval"><LayoutWrapper component={ApprovalQueue} /></Route>
       <Route path="/specifications/history"><LayoutWrapper component={VersionHistory} /></Route>
       <Route path="/specifications/test-master"><LayoutWrapper component={TestMasterPage} /></Route>
+
+      {/* Approval Routes */}
+      <Route path="/approvals"><LayoutWrapper component={ApprovalsQueue} /></Route>
+      <Route path="/approvals/my-submissions"><LayoutWrapper component={MySubmissions} /></Route>
 
       {/* 404 */}
       <Route component={NotFound} />
