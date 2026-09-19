@@ -112,6 +112,23 @@ export interface MockSample {
   completedDate: string | null;
   priority: "Normal" | "High" | "Urgent";
   tests: Test[];
+
+  // Extended metadata shown on the COA Sample Details card.
+  // All optional — older samples without these fields fall back to "—".
+  /** Commercial or generic product name (e.g. "Metformin Hydrochloride"). */
+  sampleName?: string;
+  /** Manufacturer's batch / lot number. */
+  batchNumber?: string;
+  /** Date of manufacture ("YYYY-MM-DD" or "NA"). */
+  mfgDate?: string;
+  /** Expiry date ("YYYY-MM-DD" or "NA"). */
+  expiryDate?: string;
+  /** Date lab work started on this sample. */
+  testStartDate?: string;
+  /** Date lab work finished — usually just before report issuance. */
+  testCompletionDate?: string;
+  /** Storage / testing environment notes (e.g. "Room Temperature"). */
+  environmentalConditions?: string;
 }
 
 // =========================================================================
@@ -171,6 +188,13 @@ export const mockSamples: MockSample[] = [
     receivedDate: "2024-01-15",
     completedDate: "2024-01-18",
     priority: "Normal",
+    sampleName: "Full Cream Milk (3.5% Fat)",
+    batchNumber: "FM-2024-089",
+    mfgDate: "2024-01-10",
+    expiryDate: "2024-01-25",
+    testStartDate: "2024-01-16",
+    testCompletionDate: "2024-01-18",
+    environmentalConditions: "Refrigerated (2–8°C)",
     tests: [
       {
         id: "T-001",
@@ -317,6 +341,13 @@ export const mockSamples: MockSample[] = [
     receivedDate: "2024-01-16",
     completedDate: null,
     priority: "High",
+    sampleName: "Desalinated Potable Water",
+    batchNumber: "SWCC-P3-20240116",
+    mfgDate: "2024-01-16",
+    expiryDate: "NA",
+    testStartDate: "2024-01-17",
+    testCompletionDate: "NA",
+    environmentalConditions: "Room Temperature (20–25°C)",
     tests: [
       {
         id: "T-003",
@@ -349,6 +380,13 @@ export const mockSamples: MockSample[] = [
     receivedDate: "2024-01-16",
     completedDate: null,
     priority: "Normal",
+    sampleName: "Oud Al-Layl Eau de Parfum",
+    batchNumber: "OL-089",
+    mfgDate: "2024-01-10",
+    expiryDate: "2027-01-10",
+    testStartDate: "2024-01-17",
+    testCompletionDate: "NA",
+    environmentalConditions: "Room Temperature (20–25°C)",
     tests: [
       {
         id: "T-004",
@@ -381,6 +419,13 @@ export const mockSamples: MockSample[] = [
     receivedDate: "2024-01-17",
     completedDate: null,
     priority: "Urgent",
+    sampleName: "Amoxicillin 500mg Capsules",
+    batchNumber: "AMX-2024-0117",
+    mfgDate: "NA",
+    expiryDate: "2026-12-31",
+    testStartDate: "2024-01-18",
+    testCompletionDate: "2024-01-19",
+    environmentalConditions: "Room Temperature (20–25°C)",
     tests: [
       {
         id: "T-005",
@@ -414,6 +459,73 @@ export const mockSamples: MockSample[] = [
     ],
   },
   {
+    id: "DR/2024/0002",
+    clientId: "C005",
+    clientName: "Tabuk Pharmaceuticals",
+    sampleType: "Drugs",
+    description: "Metformin Hydrochloride Tablets 500mg",
+    status: "Approved",
+    assignedAnalyst: "Shahjahan",
+    receivedDate: "2026-09-16",
+    completedDate: "2026-09-17",
+    priority: "Urgent",
+    sampleName: "Metformin Hydrochloride",
+    batchNumber: "MTF0265002",
+    mfgDate: "NA",
+    expiryDate: "NA",
+    testStartDate: "2026-09-17",
+    testCompletionDate: "2026-09-17",
+    environmentalConditions: "Room Temperature",
+    tests: [
+      {
+        id: "T-005b",
+        sampleId: "DR/2024/0002",
+        name: "Assay of Metformin",
+        category: "Drugs",
+        method: "USP 42",
+        assignedTo: "A004",
+        reviewStatus: "qa_approved",
+        submittedAt: "2026-09-17T08:00:00Z",
+        qaApprovedAt: "2026-09-17T18:00:00Z",
+        parameters: [
+          { id: "P-M01", name: "Active Ingredient", value: "498", unit: "mg", min: 475, max: 525, mu: "±5", reference: "USP 42 <621>", status: "pass" },
+        ],
+        approvals: {
+          lab_supervisor: {
+            stage: "lab_supervisor",
+            approverRole: "lab_manager",
+            approverId: "LS-001",
+            approverName: "Ahmed Al-Otaibi",
+            approverEmail: "lab.supervisor@greenlablims.sa",
+            approvedAt: "2026-09-17T10:00:00Z",
+            comment: "Verified.",
+          },
+          tech_manager: {
+            stage: "tech_manager",
+            approverRole: "admin",
+            approverId: "TM-001",
+            approverName: "Sara Al-Mutairi",
+            approverEmail: "tech.manager@greenlablims.sa",
+            approvedAt: "2026-09-17T12:00:00Z",
+            comment: "Confirmed.",
+          },
+          qa: {
+            stage: "qa",
+            approverRole: "admin",
+            approverId: "QA-001",
+            approverName: "Mansour Al-Harbi",
+            approverEmail: "qa@greenlablims.sa",
+            approvedAt: "2026-09-17T18:00:00Z",
+            comment: "Released.",
+          },
+        },
+        reviewHistory: [],
+        createdAt: "2026-09-16T09:00:00Z",
+        updatedAt: "2026-09-17T18:00:00Z",
+      },
+    ],
+  },
+  {
     id: "WT/2024/0002",
     clientId: "C002",
     clientName: "Saudi Aramco",
@@ -424,6 +536,13 @@ export const mockSamples: MockSample[] = [
     receivedDate: "2024-01-14",
     completedDate: null,
     priority: "High",
+    sampleName: "Refinery Process Water (Cooling Loop B)",
+    batchNumber: "RT-CLB-20240114",
+    mfgDate: "2024-01-14",
+    expiryDate: "NA",
+    testStartDate: "2024-01-15",
+    testCompletionDate: "NA",
+    environmentalConditions: "Refrigerated (2–8°C)",
     tests: [
       {
         id: "T-006",
@@ -455,6 +574,13 @@ export const mockSamples: MockSample[] = [
     receivedDate: "2024-01-15",
     completedDate: null,
     priority: "Normal",
+    sampleName: "Polyethylene Resin (LDPE)",
+    batchNumber: "PE-789",
+    mfgDate: "2024-01-12",
+    expiryDate: "NA",
+    testStartDate: "2024-01-16",
+    testCompletionDate: "NA",
+    environmentalConditions: "Room Temperature (20–25°C)",
     tests: [
       {
         id: "T-007",

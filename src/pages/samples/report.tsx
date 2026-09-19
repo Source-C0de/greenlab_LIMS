@@ -9,7 +9,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Printer,
@@ -22,9 +21,9 @@ import {
 } from "lucide-react";
 import { QrCode } from "@/components/shared/QrCode";
 import { APP_VERSION, DOC_CODE_NO, DOC_LAST_MODIFIED } from "@/lib/app-meta";
+import { mockClients } from "@/mock-data";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import { buildAndDownloadPdf, type PdfSection } from "@/lib/pdf-report";
 import {
   findSample,
   getStoreSnapshot,
@@ -33,6 +32,29 @@ import {
 } from "@/hooks/test-approvals/store";
 import { useSyncExternalStore } from "react";
 import { useAppContext } from "@/context/AppContext";
+
+/**
+ * A single key:value row where the label sits in a fixed-width column so the
+ * trailing colon aligns vertically across rows even when labels have very
+ * different lengths ("Customer" vs "Customer Address").
+ */
+function FieldRow({
+  label,
+  value,
+  valueClassName = "",
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className="w-[170px] shrink-0 text-gray-500 font-medium">{label}</span>
+      <span className="text-gray-500 shrink-0">:</span>
+      <span className={`flex-1 text-gray-900 ${valueClassName}`}>{value}</span>
+    </div>
+  );
+}
 
 /** Format the spec range in a compact way, e.g. "6.5 - 8.5" or "< 0.01". */
 function formatSpec(min: number | null, max: number | null, limitType?: string) {
@@ -70,6 +92,14 @@ export default function SampleReportPage() {
 
   const reportRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Section refs — each becomes exactly one A4 page in the downloaded PDF.
+  // Splitting the COA across multiple section refs (instead of capturing the
+  // whole report as one giant canvas) avoids html2canvas OOM and produces
+  // natural page breaks at logical report boundaries.
+  const pageOneRef = useRef<HTMLDivElement>(null); // Header + Report Info + Customer + Sample Details
+  const pageTwoRef = useRef<HTMLDivElement>(null); // Results Table + Statement of Conformity
+  const pageThreeRef = useRef<HTMLDivElement>(null); // Remarks + Signatures + Disclaimer
 
   // Collect every parameter from every test on this sample.
   const rows = useMemo(() => {
@@ -125,6 +155,11 @@ export default function SampleReportPage() {
   // QR target — current origin so LAN devices can scan and view the report.
   const qrUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/samples/${sample?.id ?? ""}/report`;
 
+  // Resolve the source client by matching the denormalized clientName on the
+  // sample against mockClients.nameEn. Used to populate the Customer Details
+  // block (contact person, phone, email, address).
+  const client = sample ? mockClients.find(c => c.nameEn === sample.clientName) : undefined;
+
   if (!sample) {
     return (
       <div className="space-y-4 max-w-3xl mx-auto text-center py-16">
@@ -160,38 +195,48 @@ export default function SampleReportPage() {
   }
 
   const handleDownloadPDF = async () => {
-    if (!reportRef.current) return;
+    if (!sample) return;
     setIsDownloading(true);
     const downloadToast = toast.loading(
       isRtl ? "جاري إنشاء ملف PDF..." : "Generating PDF report...",
     );
     try {
-      const element = reportRef.current;
-      const canvas = await html2canvas(element, {
+      const sections: PdfSection[] = [
+        { label: "Header + Details", ref: pageOneRef },
+        { label: "Analytical Results", ref: pageTwoRef },
+        { label: "Remarks + Signatures", ref: pageThreeRef },
+      ];
+
+      const reportId = sample.id;
+      const pages = await buildAndDownloadPdf({
+        sections,
+        meta: {
+          reportId,
+          title: `Certificate of Analysis — ${reportId}`,
+          author: "Green Lab KSA",
+          subject: `COA for sample ${reportId} (${sample.sampleName ?? sample.description})`,
+        },
         scale: 2,
-        logging: false,
-        useCORS: true,
-        backgroundColor: "#ffffff",
       });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Certificate_of_Analysis_${sample.id}.pdf`);
+
       toast.dismiss(downloadToast);
       toast.success(
-        isRtl ? "تم تنزيل ملف PDF بنجاح" : "PDF report downloaded successfully",
+        isRtl
+          ? `تم تنزيل ملف PDF بنجاح (${pages} صفحة)`
+          : `PDF report downloaded (${pages} page${pages === 1 ? "" : "s"})`,
       );
     } catch (error) {
       console.error("PDF generation error:", error);
       toast.dismiss(downloadToast);
-      toast.error(isRtl ? "فشل إنشاء ملف PDF" : "Failed to generate PDF");
+      toast.error(
+        isRtl
+          ? error instanceof Error
+            ? error.message
+            : "فشل إنشاء ملف PDF"
+          : error instanceof Error
+            ? error.message
+            : "Failed to generate PDF",
+      );
     } finally {
       setIsDownloading(false);
     }
@@ -233,11 +278,15 @@ export default function SampleReportPage() {
         </div>
       </div>
 
-      {/* The actual COA document layout */}
-      <div ref={reportRef}>
-        <Card className="bg-white text-black print:shadow-none print:border-none shadow-lg border-2">
-          <CardContent className="p-8 sm:p-12">
-            {/* Header */}
+      {/* The actual COA document layout — split into 3 sections, each one becomes
+          a separate A4 page in the downloaded PDF.
+          NOTE: each page section uses plain <div> wrappers (NOT <Card>) because
+          shadcn <Card> uses CSS variables + box-shadow that html2canvas can't
+          reliably capture. */}
+      <div ref={reportRef} className="bg-white">
+        {/* Page 1 — Header + Report Info + Customer + Sample Details */}
+        <div ref={pageOneRef} style={{ backgroundColor: "#ffffff", color: "#000000" }} className="p-8 sm:p-12 mb-6 print:mb-0 print-break-after-page">
+          {/* Header */}
             <div className="grid grid-cols-3 items-center gap-6 border-b-2 border-gray-300 pb-4 mb-8">
               <div className="text-sm leading-snug text-gray-800">
                 <p>Version No: <span className="font-bold">{APP_VERSION}</span></p>
@@ -303,62 +352,87 @@ export default function SampleReportPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-8 mb-8">
-              {/* Client Info */}
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h4 className="font-bold text-emerald-800 mb-3 text-sm uppercase tracking-wider">
-                  Client Information
+            <div className="space-y-3 mb-6">
+              {/* Customer Details */}
+              <div style={{ backgroundColor: "#f9fafb", borderColor: "#e5e7eb" }} className="p-4 rounded-lg border">
+                <h4 style={{ color: "#065f46" }} className="font-bold mb-2 text-sm uppercase tracking-wider">
+                  Customer Details
                 </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="grid grid-cols-3">
-                    <span className="text-gray-500">Name:</span>{" "}
-                    <span className="col-span-2 font-medium">
-                      {sample.clientName}
-                    </span>
+                <div className="grid grid-cols-2 gap-x-8 text-sm">
+                  <div className="space-y-1">
+                    <FieldRow
+                      label="Customer"
+                      value={sample.clientName}
+                      valueClassName="font-medium"
+                    />
+                    <FieldRow
+                      label="Customer Address"
+                      value={client?.address ?? "—"}
+                    />
                   </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-gray-500">Sample ID:</span>{" "}
-                    <span className="col-span-2 font-mono font-medium">
-                      {sample.id}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-gray-500">Description:</span>{" "}
-                    <span className="col-span-2">{sample.description}</span>
+                  <div className="space-y-1">
+                    <FieldRow
+                      label="Contact Person"
+                      value={client?.contactPerson ?? "—"}
+                    />
+                    <FieldRow
+                      label="Phone"
+                      value={client?.contactPhone ?? "—"}
+                      valueClassName="font-mono"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Sample Info */}
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h4 className="font-bold text-emerald-800 mb-3 text-sm uppercase tracking-wider">
+              {/* Sample Details */}
+              <div style={{ backgroundColor: "#f9fafb", borderColor: "#e5e7eb" }} className="p-4 rounded-lg border">
+                <h4 style={{ color: "#065f46" }} className="font-bold mb-2 text-sm uppercase tracking-wider">
                   Sample Details
                 </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="grid grid-cols-3">
-                    <span className="text-gray-500">Matrix:</span>{" "}
-                    <span className="col-span-2">{sample.sampleType}</span>
+                <div className="grid grid-cols-[1fr_1fr_80px] gap-x-6 items-start text-sm">
+                  <div className="space-y-1">
+                    <FieldRow
+                      label="Sample Name"
+                      value={sample.sampleName ?? "—"}
+                      valueClassName="font-medium"
+                    />
+                    <FieldRow
+                      label="Sample ID"
+                      value={sample.id}
+                      valueClassName="font-mono font-medium"
+                    />
+                    <FieldRow label="Batch Number" value={sample.batchNumber ?? "—"} />
+                    <FieldRow label="Exp. Date" value={sample.expiryDate ?? "NA"} />
+                    <FieldRow label="Mfg. Date" value={sample.mfgDate ?? "NA"} />
                   </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-gray-500">Rec. Date:</span>{" "}
-                    <span className="col-span-2">{sample.receivedDate}</span>
+                  <div className="space-y-1">
+                    <FieldRow
+                      label="Sample Description"
+                      value={sample.description}
+                    />
+                    <FieldRow label="Receiving Date" value={sample.receivedDate} />
+                    <FieldRow label="Test Start Date" value={sample.testStartDate ?? "NA"} />
+                    <FieldRow label="Test Completion Date" value={sample.testCompletionDate ?? "NA"} />
+                    <FieldRow
+                      label="Environmental Conditions"
+                      value={sample.environmentalConditions ?? "NA"}
+                    />
                   </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-gray-500">Comp. Date:</span>{" "}
-                    <span className="col-span-2">
-                      {sample.completedDate ?? "—"}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3">
-                    <span className="text-gray-500">Analyst:</span>{" "}
-                    <span className="col-span-2">
-                      {sample.assignedAnalyst ?? "—"}
-                    </span>
+                  <div className="row-span-2 flex flex-col items-center gap-1">
+                    <img
+                      src="/images/sample-placeholder.svg"
+                      alt="Sample"
+                      className="h-20 w-20 object-contain border border-gray-200 rounded-md bg-white"
+                    />
+                    <p className="text-[10px] text-gray-500">Photo</p>
                   </div>
                 </div>
               </div>
             </div>
+        </div>
 
+        {/* Page 2 — Analytical Results + Statement of Conformity */}
+        <div ref={pageTwoRef} style={{ backgroundColor: "#ffffff", color: "#000000" }} className="p-8 sm:p-12 mb-6 print:mb-0 print-break-before-page print-break-after-page">
             {/* Results Table */}
             <div className="mb-12">
               <h4 className="font-bold text-emerald-800 mb-4 text-sm uppercase tracking-wider">
@@ -370,7 +444,7 @@ export default function SampleReportPage() {
                 </p>
               ) : (
                 <Table className="border">
-                  <TableHeader className="bg-gray-100">
+                  <TableHeader style={{ backgroundColor: "#f3f4f6" }}>
                     <TableRow>
                       <TableHead className="text-black font-bold">
                         Parameter
@@ -435,29 +509,26 @@ export default function SampleReportPage() {
               )}
 
               <div
-                className={`mt-4 p-4 border rounded-lg flex items-start gap-3 ${
-                  overallPass
-                    ? "bg-emerald-50 border-emerald-100"
-                    : "bg-amber-50 border-amber-100"
-                }`}
+                style={overallPass
+                  ? { backgroundColor: "#ecfdf5", borderColor: "#d1fae5" }
+                  : { backgroundColor: "#fffbeb", borderColor: "#fef3c7" }
+                }
+                className="mt-4 p-4 border rounded-lg flex items-start gap-3"
               >
                 <CheckCircle2
-                  className={`h-5 w-5 mt-0.5 shrink-0 ${
-                    overallPass ? "text-emerald-600" : "text-amber-600"
-                  }`}
+                  style={{ color: overallPass ? "#059669" : "#d97706" }}
+                  className="h-5 w-5 mt-0.5 shrink-0"
                 />
                 <div>
                   <p
-                    className={`font-bold text-sm ${
-                      overallPass ? "text-emerald-900" : "text-amber-900"
-                    }`}
+                    style={{ color: overallPass ? "#064e3b" : "#78350f" }}
+                    className="font-bold text-sm"
                   >
                     Statement of Conformity
                   </p>
                   <p
-                    className={`text-sm mt-1 ${
-                      overallPass ? "text-emerald-800" : "text-amber-800"
-                    }`}
+                    style={{ color: overallPass ? "#065f46" : "#92400e" }}
+                    className="text-sm mt-1"
                   >
                     {overallPass
                       ? "Green Lab is responsible for Reporting Statement of Conformity Upon Customer Request. The tested parameters comply with the specified limits; the sample is considered satisfactory."
@@ -466,7 +537,10 @@ export default function SampleReportPage() {
                 </div>
               </div>
             </div>
+        </div>
 
+        {/* Page 3 — Remarks + Signatures + QR verification + Disclaimer */}
+        <div ref={pageThreeRef} style={{ backgroundColor: "#ffffff", color: "#000000" }} className="p-8 sm:p-12 print-break-before-page">
             {/* Remarks */}
             <div className="mb-8 text-xs text-gray-600 leading-relaxed">
               <p className="font-bold text-emerald-800 mb-2 uppercase tracking-wider text-sm">
@@ -558,7 +632,7 @@ export default function SampleReportPage() {
             </div>
 
             {/* QR + verify */}
-            <div className="flex flex-col items-center justify-center mt-12 pt-4 border-t border-gray-100">
+            {/* <div className="flex flex-col items-center justify-center mt-12 pt-4 border-t border-gray-100">
               <QrCode
                 value={`https://verify.greenlablims.sa/${sample.id}`}
                 size={90}
@@ -567,7 +641,7 @@ export default function SampleReportPage() {
               <p className="text-[10px] text-gray-500 mt-2 text-center w-[120px]">
                 Scan to verify authenticity
               </p>
-            </div>
+            </div> */}
 
             <div className="text-center text-[10px] text-gray-400 mt-6 pt-4 border-t border-gray-100">
               <p>
@@ -576,8 +650,7 @@ export default function SampleReportPage() {
               </p>
               <p>The results apply only to the sample tested as received.</p>
             </div>
-          </CardContent>
-        </Card>
+        </div>
       </div>
     </div>
   );

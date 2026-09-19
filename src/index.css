@@ -247,6 +247,45 @@
   }
 }
 
+/* ===========================================================================
+ * Print / PDF CSS — used by browser "Print" and our html2canvas+jsPDF pipeline
+ *
+ * - `.no-print` hides elements (toolbars, action buttons) when printing.
+ * - `.print-break-before-page` / `.print-break-after-page` force logical page
+ *   breaks so multi-page reports (e.g. lab COAs) don't split tables mid-row.
+ * - `.print-a4` sizes a section to fit exactly one A4 portrait page so
+ *   html2canvas captures a known-aspect element for the PDF builder.
+ * =========================================================================== */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .print-break-before-page {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .print-break-after-page {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  /* Preserve background colors (QR codes, logos, status pills) when printed
+     or saved to PDF via the browser. Without this, Chrome strips background
+     fills and the QR ends up transparent. */
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* When printing, constrain the page to A4 portrait. */
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+}
+
 /**
  * Using the elevate system.
  * Automatic contrast adjustment.
@@ -357,4 +396,14 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+}
+
+/* Form-error shake (used by login, reusable elsewhere). */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+  20%, 40%, 60%, 80%      { transform: translateX(6px); }
+}
+.animate-shake {
+  animation: shake 0.4s cubic-bezier(.36, .07, .19, .97) both;
 }

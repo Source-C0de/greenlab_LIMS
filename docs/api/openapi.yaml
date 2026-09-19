@@ -1,0 +1,3408 @@
+openapi: 3.1.0
+info:
+  title: GreenLabLIMS KSA API
+  version: 1.0.0
+  summary: REST + JSON contract for the GreenLabLIMS KSA single-tenant LIMS backend.
+  description: |
+    Backend API contract for the GreenLabLIMS KSA React SPA.
+
+    - All paths are prefixed with `/api/v1`.
+    - Auth is via httpOnly cookie `glims_session` (see README.md#auth).
+    - State-changing requests must include `X-CSRF-Token` header
+      echoing the non-HttpOnly `glims_csrf` cookie (see README.md#csrf).
+    - Single-tenant deployment in v1; the `tenants` table exists as a
+      one-row singleton (`id = "default"`). Optional `tenant_id`
+      column is included on domain tables for forward compatibility
+      (see gaps.md#g7).
+    - Field-level shapes mirror the TypeScript types in
+      `src/mock-data/*.ts`. See data-model.md for the full field
+      reference.
+
+    Out of scope for v1: audit log UI, server-side PDF generation,
+    WebSocket/SSE notifications, multi-tenant scoping.
+  contact:
+    name: GreenLabLIMS Backend Team
+    email: backend@greenlablims.example
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.greenlablims.example.com/api/v1
+    description: Production
+  - url: http://localhost:8000/api/v1
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Login, logout, session, password reset, OTP.
+  - name: Tenants
+    description: Tenant CRUD (superadmin only). v1 ships as a single-row singleton.
+  - name: SaaS Admin
+    description: Plans, feature flags, permissions matrix (superadmin only).
+  - name: Clients
+    description: Customer/client CRUD.
+  - name: Samples
+    description: Sample lifecycle — receive, status, report, timeline.
+  - name: Tests
+    description: Per-sample tests, parameters, approval workflow.
+  - name: Reports
+    description: Reports generated from fully-approved samples.
+  - name: Invoices
+    description: Invoicing + ZATCA FATOORA reporting.
+  - name: Accounting
+    description: Chart of accounts, journal entries, ledger, financial reports.
+  - name: Specifications
+    description: Reusable test bundles (parameters + ranges).
+  - name: Inventory
+    description: Reagents and inventory alerts.
+  - name: Analysts
+    description: Lab staff who perform tests.
+  - name: Notifications
+    description: In-app notifications.
+  - name: Health
+    description: Liveness, readiness, version.
+
+# ============================================================================
+# SECURITY
+# ============================================================================
+security:
+  - cookieAuth: []
+
+# ============================================================================
+# PATHS
+# ============================================================================
+paths:
+
+  # --------------------------------------------------------------------------
+  # Auth
+  # --------------------------------------------------------------------------
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Username + password login (sets `glims_session` cookie)
+      security: []
+      x-csrf: false
+      operationId: authLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Login successful. Set-Cookie header carries `glims_session` + `glims_csrf`.
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: |
+                Two cookies:
+                `glims_session=<JWT>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400`
+                `glims_csrf=<token>; Secure; SameSite=Lax; Path=/; Max-Age=86400`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/LoginResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/superadmin/login:
+    post:
+      tags: [Auth]
+      summary: Superadmin-scope login (separate cookie `glims_sa_session`)
+      security: []
+      x-csrf: false
+      operationId: authSuperadminLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Superadmin login successful.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/LoginResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout (clears `glims_session`)
+      operationId: authLogout
+      x-csrf: true
+      responses:
+        "204":
+          description: Logged out.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/superadmin/logout:
+    post:
+      tags: [Auth]
+      summary: Logout of the superadmin session
+      operationId: authSuperadminLogout
+      x-csrf: true
+      responses:
+        "204":
+          description: Logged out.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user (called by SPA on mount and after auth events)
+      operationId: authMe
+      responses:
+        "200":
+          description: Current user.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: New tenant/lab access request
+      security: []
+      x-csrf: false
+      operationId: authRegister
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Request accepted. Admin will review.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/password/forgot:
+    post:
+      tags: [Auth]
+      summary: Initiate password reset (triggers email with OTP)
+      security: []
+      x-csrf: false
+      operationId: authPasswordForgot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202":
+          description: Email sent if account exists. Never confirms existence.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/otp/verify:
+    post:
+      tags: [Auth]
+      summary: Verify OTP code → session cookie
+      security: []
+      x-csrf: false
+      operationId: authOtpVerify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, otp]
+              properties:
+                email: { type: string, format: email }
+                otp: { type: string, minLength: 4, maxLength: 8 }
+      responses:
+        "200":
+          description: OTP verified; session cookie set.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/LoginResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/otp/resend:
+    post:
+      tags: [Auth]
+      summary: Resend OTP code
+      security: []
+      x-csrf: false
+      operationId: authOtpResend
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202":
+          description: Resent (or silently no-op if account doesn't exist).
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  # --------------------------------------------------------------------------
+  # Tenants (superadmin)
+  # --------------------------------------------------------------------------
+  /admin/tenants:
+    get:
+      tags: [Tenants]
+      summary: List tenants
+      operationId: tenantsList
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: plan
+          schema: { $ref: "#/components/schemas/PlanCode" }
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/TenantStatus" }
+        - in: query
+          name: includeDeleted
+          schema: { type: boolean, default: false }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated tenants.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Tenant" }
+    post:
+      tags: [Tenants]
+      summary: Create a tenant
+      operationId: tenantsCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantCreateRequest" }
+      responses:
+        "201":
+          description: Tenant created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Tenant" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /admin/tenants/export:
+    get:
+      tags: [Tenants]
+      summary: Export tenants as CSV or JSON
+      operationId: tenantsExport
+      parameters:
+        - in: query
+          name: format
+          required: true
+          schema: { type: string, enum: [csv, json] }
+      responses:
+        "200":
+          description: File download.
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Tenant" }
+
+  /admin/tenants/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Tenants]
+      summary: Get one tenant
+      operationId: tenantsGet
+      responses:
+        "200":
+          description: Tenant.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Tenant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Tenants]
+      summary: Replace tenant fields
+      operationId: tenantsReplace
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantUpdateRequest" }
+      responses:
+        "200":
+          description: Tenant updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Tenant" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Tenants]
+      summary: Soft-delete a tenant
+      operationId: tenantsDelete
+      x-csrf: true
+      responses:
+        "204": { description: Soft-deleted. }
+
+  /admin/tenants/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Tenants]
+      summary: Lifecycle change (active | trial | suspended | cancelled)
+      operationId: tenantsChangeStatus
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: "#/components/schemas/TenantStatus" }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Status changed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Tenant" }
+
+  /admin/tenants/{id}/plan:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Tenants]
+      summary: Change plan (optionally prorated)
+      operationId: tenantsChangePlan
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planCode]
+              properties:
+                planCode: { $ref: "#/components/schemas/PlanCode" }
+                prorated: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Plan changed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Tenant" }
+
+  # --------------------------------------------------------------------------
+  # SaaS admin — plans, feature flags, permissions
+  # --------------------------------------------------------------------------
+  /admin/plans:
+    get:
+      tags: [SaaS Admin]
+      summary: List pricing plans
+      operationId: plansList
+      responses:
+        "200":
+          description: All active plans.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Plan" }
+
+  /admin/feature-flags:
+    get:
+      tags: [SaaS Admin]
+      summary: List feature flags
+      operationId: featureFlagsList
+      responses:
+        "200":
+          description: All feature flags.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/FeatureFlag" }
+
+  /admin/feature-flags/{key}:
+    parameters:
+      - in: path
+        name: key
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [SaaS Admin]
+      summary: Toggle a feature flag
+      operationId: featureFlagsUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Flag updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/FeatureFlag" }
+
+  /admin/permissions/matrix:
+    get:
+      tags: [SaaS Admin]
+      summary: Full role × menu-item permission matrix
+      operationId: permissionsMatrix
+      responses:
+        "200":
+          description: The matrix.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/PermissionMatrix" }
+
+  /admin/permissions/menu-items/{menuItemId}:
+    parameters:
+      - in: path
+        name: menuItemId
+        required: true
+        schema: { type: string }
+    put:
+      tags: [SaaS Admin]
+      summary: Replace which roles see this menu item (atomic)
+      operationId: permissionsReplaceForMenuItem
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleCodes]
+              properties:
+                roleCodes:
+                  type: array
+                  items: { $ref: "#/components/schemas/Role" }
+                applyToChildren:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/PermissionMatrix" }
+
+  /admin/permissions/bulk:
+    post:
+      tags: [SaaS Admin]
+      summary: Bulk toggle matrix cells (one transaction)
+      operationId: permissionsBulkUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [changes]
+              properties:
+                changes:
+                  type: array
+                  items:
+                    type: object
+                    required: [menuItemId, roleCode, enabled]
+                    properties:
+                      menuItemId: { type: string }
+                      roleCode: { $ref: "#/components/schemas/Role" }
+                      enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/PermissionMatrix" }
+
+  # --------------------------------------------------------------------------
+  # Clients
+  # --------------------------------------------------------------------------
+  /clients:
+    get:
+      tags: [Clients]
+      summary: List clients (paginated, filterable)
+      operationId: clientsList
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: type
+          schema: { type: string }
+        - in: query
+          name: city
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated clients.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Client" }
+    post:
+      tags: [Clients]
+      summary: Create a client
+      operationId: clientsCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientCreateRequest" }
+      responses:
+        "201":
+          description: Client created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Client" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /clients/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Clients]
+      summary: Get one client
+      operationId: clientsGet
+      responses:
+        "200":
+          description: Client.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Client" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Clients]
+      summary: Partial update
+      operationId: clientsUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClientUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Client" }
+    delete:
+      tags: [Clients]
+      summary: Soft-delete
+      operationId: clientsDelete
+      x-csrf: true
+      responses:
+        "204": { description: Soft-deleted. }
+
+  # --------------------------------------------------------------------------
+  # Samples
+  # --------------------------------------------------------------------------
+  /samples:
+    get:
+      tags: [Samples]
+      summary: List samples
+      operationId: samplesList
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/SampleStatus" }
+        - in: query
+          name: priority
+          schema: { $ref: "#/components/schemas/Priority" }
+        - in: query
+          name: clientId
+          schema: { type: string }
+        - in: query
+          name: sortBy
+          schema: { type: string, enum: [receivedDate, priority, status, id], default: receivedDate }
+        - in: query
+          name: sortOrder
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated samples.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/SampleSummary" }
+    post:
+      tags: [Samples]
+      summary: Receive a new sample (server mints `<PREFIX>/<YYYY>/<NNNN>` id)
+      operationId: samplesCreate
+      x-csrf: true
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+          description: Client-generated UUID to prevent double-submit on retry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SampleCreateRequest" }
+      responses:
+        "201":
+          description: Sample received.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Sample" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /samples/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Samples]
+      summary: Get a sample with its tests
+      operationId: samplesGet
+      responses:
+        "200":
+          description: Full sample.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Sample" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Samples]
+      summary: Partial update (metadata)
+      operationId: samplesUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SampleUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Sample" }
+    delete:
+      tags: [Samples]
+      summary: Soft-delete
+      operationId: samplesDelete
+      x-csrf: true
+      responses:
+        "204": { description: Soft-deleted. }
+
+  /samples/{id}/status:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Samples]
+      summary: Move a sample between Kanban columns
+      operationId: samplesChangeStatus
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: "#/components/schemas/SampleStatus" }
+                assignedAnalyst: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Status changed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Sample" }
+
+  /samples/{id}/report:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Samples]
+      summary: Render-ready sample for COA
+      operationId: samplesGetReport
+      responses:
+        "200":
+          description: COA-ready sample view.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/SampleReport" }
+
+  /samples/{id}/timeline:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Samples]
+      summary: Stage history for the sample
+      operationId: samplesGetTimeline
+      responses:
+        "200":
+          description: Timeline events.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/TimelineEvent" }
+
+  /samples/{id}/receiving-label.pdf:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Samples]
+      summary: Generate printable receiving label (server-side, optional)
+      operationId: samplesGenerateReceivingLabel
+      x-csrf: true
+      responses:
+        "200":
+          description: PDF.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  # --------------------------------------------------------------------------
+  # Tests (under a sample)
+  # --------------------------------------------------------------------------
+  /samples/{sampleId}/tests:
+    parameters:
+      - in: path
+        name: sampleId
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Tests]
+      summary: Add a test to a sample
+      operationId: testsAdd
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TestCreateRequest" }
+      responses:
+        "201":
+          description: Test added.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Test" }
+    get:
+      tags: [Tests]
+      summary: List tests for a sample
+      operationId: testsListForSample
+      parameters:
+        - in: query
+          name: reviewStatus
+          schema: { $ref: "#/components/schemas/TestReviewStatus" }
+        - in: query
+          name: assignedTo
+          schema: { type: string }
+      responses:
+        "200":
+          description: Tests.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Test" }
+
+  /samples/{sampleId}/tests/replicate:
+    parameters:
+      - in: path
+        name: sampleId
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Tests]
+      summary: Clone existing tests into this sample
+      operationId: testsReplicate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromTestIds]
+              properties:
+                fromTestIds:
+                  type: array
+                  items: { type: string }
+                  maxItems: 100
+      responses:
+        "200":
+          description: Cloned tests.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Test" }
+
+  /tests/queue:
+    get:
+      tags: [Tests]
+      summary: Reviewer queue
+      operationId: testsQueue
+      parameters:
+        - in: query
+          name: priority
+          schema: { $ref: "#/components/schemas/Priority" }
+        - in: query
+          name: assignedTo
+          schema: { type: string }
+        - in: query
+          name: sampleType
+          schema: { type: string }
+        - in: query
+          name: sortBy
+          schema: { type: string, enum: [submittedAt, priority, receivedDate], default: submittedAt }
+        - in: query
+          name: sortOrder
+          schema: { type: string, enum: [asc, desc], default: asc }
+        - in: query
+          name: pageSize
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      responses:
+        "200":
+          description: Queue items.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/TestQueueItem" }
+
+  /tests/bulk-approve:
+    post:
+      tags: [Tests]
+      summary: Bulk approve tests (single transaction)
+      operationId: testsBulkApprove
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [testIds, stage]
+              properties:
+                testIds:
+                  type: array
+                  items: { type: string }
+                  maxItems: 100
+                stage: { $ref: "#/components/schemas/ApprovalStage" }
+                comment: { type: string }
+      responses:
+        "200":
+          description: Updated tests.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          updated:
+                            type: integer
+
+  /tests/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Tests]
+      summary: Get one test
+      operationId: testsGet
+      responses:
+        "200":
+          description: Test.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Test" }
+    patch:
+      tags: [Tests]
+      summary: Edit test metadata
+      operationId: testsUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TestUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Test" }
+    delete:
+      tags: [Tests]
+      summary: Remove a test
+      operationId: testsDelete
+      x-csrf: true
+      responses:
+        "204": { description: Deleted. }
+
+  /tests/{id}/parameters:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Tests]
+      summary: Bulk-upsert parameter values; server recomputes per-parameter Pass/Fail
+      operationId: testsUpdateParameters
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parameters]
+              properties:
+                parameters:
+                  type: array
+                  items: { $ref: "#/components/schemas/ParameterValueInput" }
+      responses:
+        "200":
+          description: Updated test (server recomputed statuses).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Test" }
+
+  /tests/{id}/submit:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Tests]
+      summary: Analyst submits for review (422 if any parameter is blank)
+      operationId: testsSubmit
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string }
+      responses:
+        "200":
+          description: Submitted.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Test" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /tests/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Tests]
+      summary: Approve at the given stage (advance reviewStatus)
+      operationId: testsApprove
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage]
+              properties:
+                stage: { $ref: "#/components/schemas/ApprovalStage" }
+                comment: { type: string }
+                signaturePng: { type: string, description: "Optional base64-encoded PNG signature." }
+      responses:
+        "200":
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Test" }
+
+  /tests/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Tests]
+      summary: Reject at the given stage (requires `reason`)
+      operationId: testsReject
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage, reason]
+              properties:
+                stage: { $ref: "#/components/schemas/ApprovalStage" }
+                reason: { type: string, minLength: 1 }
+                comment: { type: string }
+      responses:
+        "200":
+          description: Rejected; status → `changes_requested`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Test" }
+
+  /tests/{id}/history:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Tests]
+      summary: Full audit trail of approval actions on one test
+      operationId: testsHistory
+      responses:
+        "200":
+          description: History.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/TestReviewEntry" }
+
+  # --------------------------------------------------------------------------
+  # Reports
+  # --------------------------------------------------------------------------
+  /reports:
+    get:
+      tags: [Reports]
+      summary: List reports
+      operationId: reportsList
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/ReportStatus" }
+        - in: query
+          name: analyst
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated reports.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Report" }
+    post:
+      tags: [Reports]
+      summary: Publish a report from a fully-approved sample
+      operationId: reportsCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sampleId]
+              properties:
+                sampleId: { type: string }
+      responses:
+        "201":
+          description: Report created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Report" }
+
+  /reports/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Reports]
+      summary: Get one report
+      operationId: reportsGet
+      parameters:
+        - in: query
+          name: expand
+          schema: { type: array, items: { type: string, enum: [sample, client] } }
+      responses:
+        "200":
+          description: Report.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Report" }
+    patch:
+      tags: [Reports]
+      summary: Status transition (Draft → Final / Re-issued / Supplement)
+      operationId: reportsUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReportUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Report" }
+
+  # --------------------------------------------------------------------------
+  # Invoices
+  # --------------------------------------------------------------------------
+  /invoices:
+    get:
+      tags: [Invoices]
+      summary: List invoices
+      operationId: invoicesList
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/InvoiceStatus" }
+        - in: query
+          name: clientId
+          schema: { type: string }
+        - in: query
+          name: isReported
+          schema: { type: boolean }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated invoices.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Invoice" }
+    post:
+      tags: [Invoices]
+      summary: Create invoice (auto-posts AR + Revenue + Output VAT journal entry)
+      operationId: invoicesCreate
+      x-csrf: true
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvoiceCreateRequest" }
+      responses:
+        "201":
+          description: Invoice created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Invoice" }
+
+  /invoices/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Invoices]
+      summary: Get one invoice
+      operationId: invoicesGet
+      responses:
+        "200":
+          description: Invoice.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Invoice" }
+    patch:
+      tags: [Invoices]
+      summary: Edit metadata (Draft only)
+      operationId: invoicesUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InvoiceUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Invoice" }
+    delete:
+      tags: [Invoices]
+      summary: Soft-delete (Draft only)
+      operationId: invoicesDelete
+      x-csrf: true
+      responses:
+        "204": { description: Soft-deleted. }
+
+  /invoices/{id}/report-zatca:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Invoices]
+      summary: Server calls ZATCA FATOORA; returns `{ irn }`
+      operationId: invoicesReportZatca
+      x-csrf: true
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+          description: Required to prevent double-reporting on retry.
+      responses:
+        "200":
+          description: Reported. Body has IRN.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: object
+                        required: [irn]
+                        properties:
+                          irn: { type: string }
+        "409":
+          description: Already reported or invoice not in a reportable state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /invoices/{id}/payment:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Invoices]
+      summary: Record payment (auto-posts Cash + AR journal entry)
+      operationId: invoicesRecordPayment
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, paidAt]
+              properties:
+                amount: { type: number, format: float, minimum: 0 }
+                paidAt: { type: string, format: date }
+                method: { type: string, enum: [bank_transfer, cash, card, check] }
+                reference: { type: string }
+      responses:
+        "200":
+          description: Payment recorded.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Invoice" }
+
+  # --------------------------------------------------------------------------
+  # Accounting
+  # --------------------------------------------------------------------------
+  /chart-of-accounts:
+    get:
+      tags: [Accounting]
+      summary: List chart of accounts
+      operationId: accountsList
+      parameters:
+        - in: query
+          name: type
+          schema: { $ref: "#/components/schemas/AccountType" }
+      responses:
+        "200":
+          description: Accounts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Account" }
+    post:
+      tags: [Accounting]
+      summary: Create account
+      operationId: accountsCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AccountCreateRequest" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Account" }
+
+  /journals:
+    get:
+      tags: [Accounting]
+      summary: List journal entries
+      operationId: journalsList
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: dateFrom
+          schema: { type: string, format: date }
+        - in: query
+          name: dateTo
+          schema: { type: string, format: date }
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/JournalStatus" }
+        - in: query
+          name: sourceType
+          schema: { $ref: "#/components/schemas/JournalSourceType" }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated journals.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/JournalEntry" }
+    post:
+      tags: [Accounting]
+      summary: Manual journal entry (debits must equal credits)
+      operationId: journalsCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JournalCreateRequest" }
+      responses:
+        "201":
+          description: Created (Draft).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/JournalEntry" }
+        "422":
+          description: Lines don't balance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /journals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Accounting]
+      summary: Edit a Draft entry
+      operationId: journalsUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/JournalUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/JournalEntry" }
+    delete:
+      tags: [Accounting]
+      summary: Soft-delete (Draft only; Posted → reverse instead)
+      operationId: journalsDelete
+      x-csrf: true
+      responses:
+        "204": { description: Soft-deleted. }
+
+  /journals/{id}/post:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Accounting]
+      summary: Draft → Posted (locks the entry)
+      operationId: journalsPost
+      x-csrf: true
+      responses:
+        "200":
+          description: Posted.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/JournalEntry" }
+        "409":
+          description: Already posted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /ledger:
+    get:
+      tags: [Accounting]
+      summary: Account ledger (lines for one account over a date range)
+      operationId: ledgerGet
+      parameters:
+        - in: query
+          name: accountCode
+          required: true
+          schema: { type: string }
+        - in: query
+          name: dateFrom
+          schema: { type: string, format: date }
+        - in: query
+          name: dateTo
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Ledger lines.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/LedgerLine" }
+
+  /expenses:
+    get:
+      tags: [Accounting]
+      summary: List expenses
+      operationId: expensesList
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated expenses.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Expense" }
+    post:
+      tags: [Accounting]
+      summary: Create expense (auto-posts Input VAT + Cash journal)
+      operationId: expensesCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ExpenseCreateRequest" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Expense" }
+
+  /accounting/reports/pnl:
+    get:
+      tags: [Accounting]
+      summary: Profit & Loss for a period
+      operationId: pnlReport
+      parameters:
+        - in: query
+          name: period
+          required: true
+          schema: { type: string, pattern: "^[0-9]{4}-[0-9]{2}$", example: "2026-09" }
+      responses:
+        "200":
+          description: P&L.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/PnlReport" }
+
+  /accounting/reports/balance-sheet:
+    get:
+      tags: [Accounting]
+      summary: Balance Sheet as of a date
+      operationId: balanceSheetReport
+      parameters:
+        - in: query
+          name: asOf
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Balance Sheet.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/BalanceSheet" }
+
+  /accounting/reports/cash-flow:
+    get:
+      tags: [Accounting]
+      summary: Cash Flow for a period
+      operationId: cashFlowReport
+      parameters:
+        - in: query
+          name: period
+          required: true
+          schema: { type: string, pattern: "^[0-9]{4}-[0-9]{2}$" }
+      responses:
+        "200":
+          description: Cash Flow.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/CashFlowReport" }
+
+  # --------------------------------------------------------------------------
+  # Specifications
+  # --------------------------------------------------------------------------
+  /specifications:
+    get:
+      tags: [Specifications]
+      summary: List specifications
+      operationId: specificationsList
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/SpecificationStatus" }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated specifications.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Specification" }
+    post:
+      tags: [Specifications]
+      summary: Create a draft specification
+      operationId: specificationsCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpecificationCreateRequest" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Specification" }
+
+  /specifications/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Specifications]
+      summary: Get one specification
+      operationId: specificationsGet
+      responses:
+        "200":
+          description: Specification.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Specification" }
+    patch:
+      tags: [Specifications]
+      summary: Update a Draft
+      operationId: specificationsUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpecificationUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Specification" }
+
+  /specifications/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Specifications]
+      summary: Approve a Pending specification
+      operationId: specificationsApprove
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: { type: string }
+      responses:
+        "200":
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Specification" }
+
+  /specifications/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Specifications]
+      summary: Reject a Pending specification (reason required)
+      operationId: specificationsReject
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1 }
+                comment: { type: string }
+      responses:
+        "200":
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Specification" }
+
+  /specifications/{id}/versions:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Specifications]
+      summary: Full version history
+      operationId: specificationsHistory
+      responses:
+        "200":
+          description: Versions.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Specification" }
+
+  # --------------------------------------------------------------------------
+  # Inventory — reagents
+  # --------------------------------------------------------------------------
+  /reagents:
+    get:
+      tags: [Inventory]
+      summary: List reagents
+      operationId: reagentsList
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/ReagentStatus" }
+        - in: query
+          name: supplier
+          schema: { type: string }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated reagents.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Reagent" }
+    post:
+      tags: [Inventory]
+      summary: Add a new reagent
+      operationId: reagentsCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReagentCreateRequest" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Reagent" }
+
+  /reagents/alerts:
+    get:
+      tags: [Inventory]
+      summary: Low-stock + expired reagents (powers banner)
+      operationId: reagentsAlerts
+      responses:
+        "200":
+          description: Alert list.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Reagent" }
+
+  /reagents/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Inventory]
+      summary: Edit non-quantity fields
+      operationId: reagentsUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReagentUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Reagent" }
+
+  /reagents/{id}/quantity:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Inventory]
+      summary: Adjust quantity (status recomputed server-side)
+      operationId: reagentsAdjustQuantity
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: number }
+                reason: { type: string, description: "Free-form note for audit log." }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Reagent" }
+
+  # --------------------------------------------------------------------------
+  # Analysts
+  # --------------------------------------------------------------------------
+  /analysts:
+    get:
+      tags: [Analysts]
+      summary: List analysts
+      operationId: analystsList
+      responses:
+        "200":
+          description: Analysts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Analyst" }
+    post:
+      tags: [Analysts]
+      summary: Add an analyst
+      operationId: analystsCreate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnalystCreateRequest" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Analyst" }
+
+  /analysts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Analysts]
+      summary: Edit analyst fields
+      operationId: analystsUpdate
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnalystUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Analyst" }
+
+  /analysts/{id}/signature:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Analysts]
+      summary: Upload signature PNG (multipart)
+      operationId: analystsUploadSignature
+      x-csrf: true
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Uploaded; signatureUrl populated.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/Analyst" }
+
+  # --------------------------------------------------------------------------
+  # Notifications
+  # --------------------------------------------------------------------------
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications for the current user
+      operationId: notificationsList
+      parameters:
+        - in: query
+          name: unreadOnly
+          schema: { type: boolean, default: false }
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated notifications.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedEnvelope"
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Notification" }
+
+  /notifications/{id}/read:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    patch:
+      tags: [Notifications]
+      summary: Mark notification as read
+      operationId: notificationsMarkRead
+      x-csrf: true
+      responses:
+        "204":
+          description: Marked read.
+
+  # --------------------------------------------------------------------------
+  # Health & meta
+  # --------------------------------------------------------------------------
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe (always 200 if process is alive)
+      security: []
+      operationId: healthLiveness
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok] }
+
+  /ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe (DB + Redis reachable)
+      security: []
+      operationId: healthReadiness
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok] }
+                  checks:
+                    type: object
+                    additionalProperties: { type: boolean }
+        "503":
+          description: Not ready.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /version:
+    get:
+      tags: [Health]
+      summary: Backend build version
+      security: []
+      operationId: healthVersion
+      responses:
+        "200":
+          description: Version info.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: string }
+                  commit: { type: string }
+                  builtAt: { type: string, format: date-time }
+
+# ============================================================================
+# COMPONENTS
+# ============================================================================
+components:
+
+  # ---------- Security ----------
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: glims_session
+      description: HttpOnly session cookie. See README.md#auth.
+
+  # ---------- Common parameters ----------
+  parameters:
+    Id:
+      in: path
+      name: id
+      required: true
+      schema: { type: string }
+      description: ULID/UUID resource id.
+    Q:
+      in: query
+      name: q
+      schema: { type: string }
+      description: Free-text search across the entity's indexed fields.
+    Page:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      in: query
+      name: pageSize
+      schema: { type: integer, minimum: 1, maximum: 200, default: 25 }
+
+  # ---------- Common responses ----------
+  responses:
+    Unauthorized:
+      description: Missing/expired cookie, or wrong scope.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated but not authorized.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: State conflict (duplicate, invalid transition).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Input validation failed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  # ---------- Common envelopes ----------
+  schemas:
+
+    # The standard `{ data: ... }` envelope.
+    DataEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: {}
+
+    # The `{ data: T[], pagination: { ... } }` envelope.
+    PaginatedEnvelope:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items: {}
+        pagination:
+          type: object
+          required: [page, pageSize, total, totalPages]
+          properties:
+            page: { type: integer, minimum: 1 }
+            pageSize: { type: integer, minimum: 1, maximum: 200 }
+            total: { type: integer, minimum: 0 }
+            totalPages: { type: integer, minimum: 0 }
+
+    # The standard error envelope.
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [unauthorized, forbidden, not_found, validation, conflict, rate_limited, internal]
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true
+            requestId: { type: string }
+
+    # ---------- Shared enums ----------
+    Role:
+      type: string
+      enum: [superadmin, admin, lab_manager, analyst, client, accountant, receptionist]
+      description: Seven-role enum. `superadmin` is just a role — no separate path scope.
+
+    Priority:
+      type: string
+      enum: [Normal, High, Urgent]
+
+    # ---------- Auth ----------
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+
+    LoginResponse:
+      type: object
+      required: [user, expiresAt]
+      properties:
+        user: { $ref: "#/components/schemas/User" }
+        expiresAt: { type: string, format: date-time }
+
+    RegisterRequest:
+      type: object
+      required: [labName, contactEmail, contactName]
+      properties:
+        labName: { type: string }
+        labNameAr: { type: string }
+        contactName: { type: string }
+        contactEmail: { type: string, format: email }
+        contactPhone: { type: string }
+        message: { type: string }
+
+    User:
+      type: object
+      required: [id, username, fullName, role, isActive]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        email: { type: string, format: email, nullable: true }
+        fullName: { type: string }
+        fullNameAr: { type: string, nullable: true }
+        role: { $ref: "#/components/schemas/Role" }
+        isActive: { type: boolean }
+        clientId: { type: string, nullable: true, description: "Set when role === 'client'." }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # ---------- Clients ----------
+    Client:
+      type: object
+      required: [id, nameEn, nameAr, type, vatNo, isActive]
+      properties:
+        id: { type: string }
+        nameEn: { type: string }
+        nameAr: { type: string }
+        type: { type: string }
+        vatNo: { type: string, pattern: "^[0-9]{15}$" }
+        email: { type: string, format: email, nullable: true }
+        phone: { type: string, nullable: true }
+        contactPerson: { type: string, nullable: true }
+        contactPhone: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        crNumber: { type: string, nullable: true }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ClientCreateRequest:
+      type: object
+      required: [nameEn, nameAr, type, vatNo]
+      properties:
+        nameEn: { type: string }
+        nameAr: { type: string }
+        type: { type: string }
+        vatNo: { type: string, pattern: "^[0-9]{15}$" }
+        email: { type: string, format: email }
+        phone: { type: string }
+        contactPerson: { type: string }
+        contactPhone: { type: string }
+        address: { type: string }
+        city: { type: string }
+        crNumber: { type: string }
+
+    ClientUpdateRequest:
+      type: object
+      properties:
+        nameEn: { type: string }
+        nameAr: { type: string }
+        type: { type: string }
+        vatNo: { type: string, pattern: "^[0-9]{15}$" }
+        email: { type: string, format: email }
+        phone: { type: string }
+        contactPerson: { type: string }
+        contactPhone: { type: string }
+        address: { type: string }
+        city: { type: string }
+        crNumber: { type: string }
+        isActive: { type: boolean }
+
+    # ---------- Samples ----------
+    SampleStatus:
+      type: string
+      enum: [Received, "In Progress", "Awaiting Approval", Approved, Rejected, "On Hold", Completed]
+
+    Sample:
+      type: object
+      required: [id, clientId, clientName, sampleType, description, status, receivedDate, priority, tests]
+      properties:
+        id:
+          type: string
+          pattern: "^[A-Z]{2,4}/[0-9]{4}/[0-9]{4,6}$"
+          description: 'Format: PREFIX/YYYY/NNNN. Server-minted.'
+        clientId: { type: string }
+        clientName: { type: string, description: "Denormalized from clients.nameEn." }
+        sampleType: { type: string }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/SampleStatus" }
+        assignedAnalyst: { type: string, nullable: true }
+        receivedDate: { type: string, format: date }
+        completedDate: { type: string, format: date, nullable: true }
+        priority: { $ref: "#/components/schemas/Priority" }
+        tests:
+          type: array
+          items: { $ref: "#/components/schemas/Test" }
+        sampleName: { type: string, nullable: true }
+        batchNumber: { type: string, nullable: true }
+        mfgDate: { type: string, format: date, nullable: true }
+        expiryDate: { type: string, format: date, nullable: true }
+        environmentalConditions: { type: string, nullable: true }
+        storageCondition: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SampleSummary:
+      type: object
+      description: Trimmed sample for list views (no nested tests).
+      required: [id, clientId, clientName, sampleType, status, receivedDate, priority]
+      properties:
+        id: { type: string }
+        clientId: { type: string }
+        clientName: { type: string }
+        sampleType: { type: string }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/SampleStatus" }
+        assignedAnalyst: { type: string, nullable: true }
+        receivedDate: { type: string, format: date }
+        priority: { $ref: "#/components/schemas/Priority" }
+        testCount: { type: integer }
+
+    SampleCreateRequest:
+      type: object
+      required: [clientId, sampleType, description, receivedDate, priority]
+      properties:
+        clientId: { type: string }
+        sampleType: { type: string }
+        description: { type: string }
+        priority: { $ref: "#/components/schemas/Priority" }
+        receivedDate: { type: string, format: date }
+        sampleName: { type: string }
+        batchNumber: { type: string }
+        mfgDate: { type: string, format: date }
+        expiryDate: { type: string, format: date }
+        environmentalConditions: { type: string }
+        storageCondition: { type: string }
+        tests:
+          type: array
+          description: Optional initial tests to copy from a specification.
+          items: { $ref: "#/components/schemas/TestCreateRequest" }
+
+    SampleUpdateRequest:
+      type: object
+      properties:
+        description: { type: string }
+        assignedAnalyst: { type: string, nullable: true }
+        priority: { $ref: "#/components/schemas/Priority" }
+        sampleName: { type: string }
+        batchNumber: { type: string }
+        mfgDate: { type: string, format: date }
+        expiryDate: { type: string, format: date }
+        environmentalConditions: { type: string }
+        storageCondition: { type: string }
+
+    SampleReport:
+      allOf:
+        - $ref: "#/components/schemas/Sample"
+        - type: object
+          properties:
+            client:
+              $ref: "#/components/schemas/Client"
+            parametersSnapshot:
+              type: array
+              items: { $ref: "#/components/schemas/ParameterValue" }
+
+    TimelineEvent:
+      type: object
+      required: [id, sampleId, stage, enteredAt, exitedAt, byUserId]
+      properties:
+        id: { type: string }
+        sampleId: { type: string }
+        stage: { type: string }
+        enteredAt: { type: string, format: date-time }
+        exitedAt: { type: string, format: date-time, nullable: true }
+        byUserId: { type: string }
+
+    # ---------- Tests ----------
+    TestReviewStatus:
+      type: string
+      enum: [pending, in_progress, changes_requested, awaiting_lab_supervisor, awaiting_tech_manager, awaiting_qa, qa_approved]
+
+    ApprovalStage:
+      type: string
+      enum: [lab_supervisor, tech_manager, qa]
+
+    ParameterStatus:
+      type: string
+      enum: [pending, pass, fail]
+
+    Test:
+      type: object
+      required: [id, sampleId, name, category, method, reviewStatus, parameters, reviewHistory, approvals, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        sampleId: { type: string }
+        name: { type: string }
+        category: { type: string }
+        method: { type: string }
+        assignedTo: { type: string, nullable: true }
+        reviewStatus: { $ref: "#/components/schemas/TestReviewStatus" }
+        parameters:
+          type: array
+          items: { $ref: "#/components/schemas/ParameterValue" }
+        reviewHistory:
+          type: array
+          items: { $ref: "#/components/schemas/TestReviewEntry" }
+        approvals:
+          type: object
+          properties:
+            lab_supervisor: { $ref: "#/components/schemas/StageApproval", nullable: true }
+            tech_manager: { $ref: "#/components/schemas/StageApproval", nullable: true }
+            qa: { $ref: "#/components/schemas/StageApproval", nullable: true }
+        submittedAt: { type: string, format: date-time, nullable: true }
+        qaApprovedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TestCreateRequest:
+      type: object
+      required: [name, category, method]
+      properties:
+        name: { type: string }
+        category: { type: string }
+        method: { type: string }
+        assignedTo: { type: string }
+        parameters:
+          type: array
+          items: { $ref: "#/components/schemas/ParameterValueInput" }
+
+    TestUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        category: { type: string }
+        method: { type: string }
+        assignedTo: { type: string, nullable: true }
+
+    TestQueueItem:
+      type: object
+      required: [testId, sampleId, sampleType, clientName, name, method, priority, assignedTo, reviewStatus, submittedAt]
+      properties:
+        testId: { type: string }
+        sampleId: { type: string }
+        sampleType: { type: string }
+        clientName: { type: string }
+        name: { type: string }
+        method: { type: string }
+        priority: { $ref: "#/components/schemas/Priority" }
+        assignedTo: { type: string, nullable: true }
+        reviewStatus: { $ref: "#/components/schemas/TestReviewStatus" }
+        submittedAt: { type: string, format: date-time }
+        receivedDate: { type: string, format: date }
+
+    ParameterValue:
+      type: object
+      required: [id, name, value, unit, status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        value:
+          type: string
+          nullable: true
+        unit: { type: string }
+        min: { type: number, nullable: true }
+        max: { type: number, nullable: true }
+        target: { type: number, nullable: true }
+        limitType:
+          type: string
+          nullable: true
+          enum: [Range, "Max Only", "Min Only", "Exact Value", "Pass / Fail", Text, "Not Detected"]
+        reference: { type: string, nullable: true }
+        mu: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/ParameterStatus" }
+        note: { type: string, nullable: true }
+
+    ParameterValueInput:
+      type: object
+      required: [id, value]
+      properties:
+        id: { type: string }
+        value: { type: string, nullable: true }
+        note: { type: string }
+
+    TestReviewEntry:
+      type: object
+      required: [id, testId, reviewerId, reviewerEmail, decision, previousReviewStatus, newReviewStatus, createdAt]
+      properties:
+        id: { type: string }
+        testId: { type: string }
+        reviewerId: { type: string }
+        reviewerEmail: { type: string }
+        reviewerName: { type: string, nullable: true }
+        reviewerRole: { $ref: "#/components/schemas/Role" }
+        decision:
+          type: string
+          enum: [approved, changes_requested]
+        stage: { $ref: "#/components/schemas/ApprovalStage" }
+        reason: { type: string, nullable: true }
+        comment: { type: string, nullable: true }
+        previousReviewStatus: { $ref: "#/components/schemas/TestReviewStatus" }
+        newReviewStatus: { $ref: "#/components/schemas/TestReviewStatus" }
+        createdAt: { type: string, format: date-time }
+
+    StageApproval:
+      type: object
+      required: [stage, approverRole, approverName, approverId, approverEmail, approvedAt]
+      properties:
+        stage: { $ref: "#/components/schemas/ApprovalStage" }
+        approverRole: { $ref: "#/components/schemas/Role" }
+        approverName: { type: string }
+        approverId: { type: string }
+        approverEmail: { type: string }
+        approvedAt: { type: string, format: date-time }
+        comment: { type: string, nullable: true }
+
+    # ---------- Reports ----------
+    ReportStatus:
+      type: string
+      enum: [Draft, Final, Re-issued, Supplement]
+
+    Report:
+      type: object
+      required: [id, sampleId, reportNumber, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        sampleId: { type: string }
+        reportNumber: { type: string }
+        status: { $ref: "#/components/schemas/ReportStatus" }
+        analystId: { type: string, nullable: true }
+        reviewerId: { type: string, nullable: true }
+        analystSignatureUrl: { type: string, nullable: true, format: uri }
+        reviewerSignatureUrl: { type: string, nullable: true, format: uri }
+        issuedAt: { type: string, format: date, nullable: true }
+        pdfUrl: { type: string, nullable: true, format: uri }
+        parametersSnapshot:
+          type: array
+          items: { $ref: "#/components/schemas/ParameterValue" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ReportUpdateRequest:
+      type: object
+      properties:
+        status: { $ref: "#/components/schemas/ReportStatus" }
+        reviewerId: { type: string }
+
+    # ---------- Invoices ----------
+    InvoiceStatus:
+      type: string
+      enum: [Draft, Pending, Paid, Overdue, Cancelled]
+
+    InvoiceType:
+      type: string
+      enum: ["Tax Invoice", "Simplified Tax Invoice"]
+
+    Invoice:
+      type: object
+      required: [id, clientId, clientName, issueDate, dueDate, subtotal, vat, total, status, vatNo, uuid, hash, qrCode, invoiceType, isReported]
+      properties:
+        id: { type: string, pattern: "^INV-[0-9]{4}-[0-9]{4,6}$" }
+        clientId: { type: string }
+        clientName: { type: string }
+        sampleId: { type: string, nullable: true }
+        issueDate: { type: string, format: date }
+        dueDate: { type: string, format: date }
+        subtotal: { type: number }
+        vat: { type: number }
+        total: { type: number }
+        status: { $ref: "#/components/schemas/InvoiceStatus" }
+        vatNo: { type: string, pattern: "^[0-9]{15}$" }
+        uuid: { type: string, format: uuid, description: "ZATCA UUID. Server-generated." }
+        hash: { type: string, description: "ZATCA SHA-256 hash. Server-generated." }
+        qrCode: { type: string, description: "Base64 TLV-encoded QR per ZATCA spec." }
+        invoiceType: { $ref: "#/components/schemas/InvoiceType" }
+        isReported: { type: boolean }
+        reportedAt: { type: string, format: date-time, nullable: true }
+        irn: { type: string, nullable: true, description: "ZATCA Invoice Reference Number." }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    InvoiceCreateRequest:
+      type: object
+      required: [clientId, sampleId, dueDate, lines]
+      properties:
+        clientId: { type: string }
+        sampleId: { type: string, nullable: true }
+        dueDate: { type: string, format: date }
+        invoiceType: { $ref: "#/components/schemas/InvoiceType" }
+        lines:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [description, quantity, unitPrice]
+            properties:
+              description: { type: string }
+              quantity: { type: number }
+              unitPrice: { type: number }
+
+    InvoiceUpdateRequest:
+      type: object
+      properties:
+        dueDate: { type: string, format: date }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [description, quantity, unitPrice]
+            properties:
+              description: { type: string }
+              quantity: { type: number }
+              unitPrice: { type: number }
+
+    # ---------- Accounting ----------
+    AccountType:
+      type: string
+      enum: [Asset, Liability, Equity, Revenue, Expense]
+
+    Account:
+      type: object
+      required: [id, nameEn, nameAr, type, isActive]
+      properties:
+        id: { type: string, description: "Account code, e.g. '1100'." }
+        nameEn: { type: string }
+        nameAr: { type: string }
+        type: { $ref: "#/components/schemas/AccountType" }
+        parentId: { type: string, nullable: true }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AccountCreateRequest:
+      type: object
+      required: [id, nameEn, nameAr, type]
+      properties:
+        id: { type: string }
+        nameEn: { type: string }
+        nameAr: { type: string }
+        type: { $ref: "#/components/schemas/AccountType" }
+        parentId: { type: string }
+
+    JournalStatus:
+      type: string
+      enum: [Draft, Posted, Reversed]
+
+    JournalSourceType:
+      type: string
+      enum: [invoice, payment, expense, manual]
+
+    JournalLine:
+      type: object
+      required: [id, entryId, accountId, debit, credit]
+      properties:
+        id: { type: string }
+        entryId: { type: string }
+        accountId: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+        description: { type: string, nullable: true }
+        costCenter: { type: string, nullable: true }
+
+    JournalEntry:
+      type: object
+      required: [id, date, description, status, sourceType, lines, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        date: { type: string, format: date }
+        description: { type: string }
+        memo: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/JournalStatus" }
+        sourceType: { $ref: "#/components/schemas/JournalSourceType" }
+        sourceId: { type: string, nullable: true }
+        postedById: { type: string, nullable: true }
+        postedAt: { type: string, format: date-time, nullable: true }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/JournalLine" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    JournalCreateRequest:
+      type: object
+      required: [date, description, lines]
+      properties:
+        date: { type: string, format: date }
+        description: { type: string }
+        memo: { type: string }
+        lines:
+          type: array
+          minItems: 2
+          items:
+            type: object
+            required: [accountId, debit, credit]
+            properties:
+              accountId: { type: string }
+              debit: { type: number, default: 0 }
+              credit: { type: number, default: 0 }
+              description: { type: string }
+              costCenter: { type: string }
+
+    JournalUpdateRequest:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        description: { type: string }
+        memo: { type: string }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [accountId, debit, credit]
+            properties:
+              accountId: { type: string }
+              debit: { type: number, default: 0 }
+              credit: { type: number, default: 0 }
+              description: { type: string }
+              costCenter: { type: string }
+
+    LedgerLine:
+      type: object
+      required: [entryId, date, description, debit, credit, balance]
+      properties:
+        entryId: { type: string }
+        date: { type: string, format: date }
+        description: { type: string }
+        debit: { type: number }
+        credit: { type: number }
+        balance: { type: number, description: "Running balance after this line." }
+        journalId: { type: string }
+
+    Expense:
+      type: object
+      required: [id, date, category, description, amount, vatAmount, total, status]
+      properties:
+        id: { type: string }
+        date: { type: string, format: date }
+        category: { type: string }
+        description: { type: string }
+        amount: { type: number }
+        vatAmount: { type: number }
+        total: { type: number }
+        vendor: { type: string, nullable: true }
+        receiptUrl: { type: string, nullable: true, format: uri }
+        status: { type: string, enum: [Draft, Posted, Reimbursed] }
+        createdById: { type: string }
+        journalEntryId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ExpenseCreateRequest:
+      type: object
+      required: [date, category, description, amount]
+      properties:
+        date: { type: string, format: date }
+        category: { type: string }
+        description: { type: string }
+        amount: { type: number }
+        vendor: { type: string }
+        receiptUrl: { type: string, format: uri }
+
+    PnlReport:
+      type: object
+      required: [period, revenue, cogs, grossProfit, operatingExpenses, operatingIncome, netIncome, lines]
+      properties:
+        period: { type: string, example: "2026-09" }
+        revenue: { type: number }
+        cogs: { type: number }
+        grossProfit: { type: number }
+        operatingExpenses: { type: number }
+        operatingIncome: { type: number }
+        netIncome: { type: number }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              accountId: { type: string }
+              accountNameEn: { type: string }
+              amount: { type: number }
+
+    BalanceSheet:
+      type: object
+      required: [asOf, assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity, lines]
+      properties:
+        asOf: { type: string, format: date }
+        assets: { type: number }
+        liabilities: { type: number }
+        equity: { type: number }
+        totalAssets: { type: number }
+        totalLiabilities: { type: number }
+        totalEquity: { type: number }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              accountId: { type: string }
+              accountNameEn: { type: string }
+              type: { $ref: "#/components/schemas/AccountType" }
+              amount: { type: number }
+
+    CashFlowReport:
+      type: object
+      required: [period, operating, investing, financing, netChange, openingCash, closingCash]
+      properties:
+        period: { type: string, example: "2026-09" }
+        operating: { type: number }
+        investing: { type: number }
+        financing: { type: number }
+        netChange: { type: number }
+        openingCash: { type: number }
+        closingCash: { type: number }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              section: { type: string, enum: [operating, investing, financing] }
+              accountId: { type: string }
+              accountNameEn: { type: string }
+              amount: { type: number }
+
+    # ---------- Specifications ----------
+    SpecificationStatus:
+      type: string
+      enum: [Draft, "Pending Approval", Approved, Rejected, Superseded]
+
+    SpecParameter:
+      type: object
+      required: [id, specificationId, name, unit, limitType]
+      properties:
+        id: { type: string }
+        specificationId: { type: string }
+        name: { type: string }
+        method: { type: string, nullable: true }
+        unit: { type: string }
+        min: { type: number, nullable: true }
+        max: { type: number, nullable: true }
+        target: { type: number, nullable: true }
+        limitType:
+          type: string
+          enum: [Range, "Max Only", "Min Only", "Exact Value", "Pass / Fail", Text, "Not Detected"]
+        reference: { type: string, nullable: true }
+        mu: { type: string, nullable: true }
+
+    Specification:
+      type: object
+      required: [id, code, nameEn, nameAr, category, version, status, parameters, tests, issuanceDate]
+      properties:
+        id: { type: string }
+        code: { type: string }
+        nameEn: { type: string }
+        nameAr: { type: string }
+        category: { type: string }
+        version: { type: integer, minimum: 1 }
+        status: { $ref: "#/components/schemas/SpecificationStatus" }
+        parameters:
+          type: array
+          items: { $ref: "#/components/schemas/SpecParameter" }
+        tests:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              testCode: { type: string }
+              testName: { type: string }
+              testParameter: { type: string }
+              methodType: { type: string }
+              methodReference: { type: string }
+              sampleType: { type: string }
+              referenceNo: { type: string }
+              sopCode: { type: string }
+              warehouseItems: { type: string }
+              parameterDetails: { type: string, nullable: true }
+        issuanceDate: { type: string, format: date }
+        createdById: { type: string }
+        approvedById: { type: string, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SpecificationCreateRequest:
+      type: object
+      required: [code, nameEn, nameAr, category, issuanceDate]
+      properties:
+        code: { type: string }
+        nameEn: { type: string }
+        nameAr: { type: string }
+        category: { type: string }
+        issuanceDate: { type: string, format: date }
+        parameters:
+          type: array
+          items: { $ref: "#/components/schemas/SpecParameter" }
+        tests:
+          type: array
+          items:
+            type: object
+            properties:
+              testCode: { type: string }
+              testName: { type: string }
+              testParameter: { type: string }
+              methodType: { type: string }
+              methodReference: { type: string }
+              sampleType: { type: string }
+              referenceNo: { type: string }
+              sopCode: { type: string }
+
+    SpecificationUpdateRequest:
+      type: object
+      properties:
+        code: { type: string }
+        nameEn: { type: string }
+        nameAr: { type: string }
+        category: { type: string }
+        issuanceDate: { type: string, format: date }
+        parameters:
+          type: array
+          items: { $ref: "#/components/schemas/SpecParameter" }
+        tests:
+          type: array
+          items:
+            type: object
+            properties:
+              testCode: { type: string }
+              testName: { type: string }
+              testParameter: { type: string }
+              methodType: { type: string }
+              methodReference: { type: string }
+              sampleType: { type: string }
+              referenceNo: { type: string }
+              sopCode: { type: string }
+
+    # ---------- Inventory ----------
+    ReagentStatus:
+      type: string
+      enum: [OK, "Low Stock", Expired]
+      description: Computed server-side from quantity + expiryDate.
+
+    Reagent:
+      type: object
+      required: [id, nameEn, nameAr, catalogNo, quantity, unit, minQuantity, expiryDate, status]
+      properties:
+        id: { type: string }
+        nameEn: { type: string }
+        nameAr: { type: string }
+        catalogNo: { type: string }
+        supplier: { type: string, nullable: true }
+        quantity: { type: number }
+        unit: { type: string }
+        minQuantity: { type: number }
+        expiryDate: { type: string, format: date }
+        location: { type: string, nullable: true }
+        costPerUnit: { type: number, nullable: true }
+        status: { $ref: "#/components/schemas/ReagentStatus" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ReagentCreateRequest:
+      type: object
+      required: [nameEn, nameAr, catalogNo, quantity, unit, minQuantity, expiryDate]
+      properties:
+        nameEn: { type: string }
+        nameAr: { type: string }
+        catalogNo: { type: string }
+        supplier: { type: string }
+        quantity: { type: number }
+        unit: { type: string }
+        minQuantity: { type: number }
+        expiryDate: { type: string, format: date }
+        location: { type: string }
+        costPerUnit: { type: number }
+
+    ReagentUpdateRequest:
+      type: object
+      properties:
+        nameEn: { type: string }
+        nameAr: { type: string }
+        catalogNo: { type: string }
+        supplier: { type: string }
+        unit: { type: string }
+        minQuantity: { type: number }
+        expiryDate: { type: string, format: date }
+        location: { type: string }
+        costPerUnit: { type: number }
+
+    # ---------- Analysts ----------
+    Analyst:
+      type: object
+      required: [id, fullName, email, isActive]
+      properties:
+        id: { type: string }
+        userId: { type: string, nullable: true }
+        fullName: { type: string }
+        fullNameAr: { type: string, nullable: true }
+        email: { type: string, format: email }
+        signatureUrl: { type: string, nullable: true, format: uri }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AnalystCreateRequest:
+      type: object
+      required: [fullName, email]
+      properties:
+        fullName: { type: string }
+        fullNameAr: { type: string }
+        email: { type: string, format: email }
+        userId: { type: string }
+
+    AnalystUpdateRequest:
+      type: object
+      properties:
+        fullName: { type: string }
+        fullNameAr: { type: string }
+        email: { type: string, format: email }
+        isActive: { type: boolean }
+
+    # ---------- Notifications ----------
+    Notification:
+      type: object
+      required: [id, type, title, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string, nullable: true }
+        role: { $ref: "#/components/schemas/Role" }
+        type: { type: string }
+        title: { type: string }
+        body: { type: string, nullable: true }
+        link: { type: string, nullable: true }
+        readAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    # ---------- Tenants & SaaS ----------
+    TenantStatus:
+      type: string
+      enum: [active, trial, suspended, cancelled]
+
+    PlanCode:
+      type: string
+      enum: [starter, professional, enterprise]
+
+    Tenant:
+      type: object
+      required: [id, name, nameAr, slug, planCode, status, contactEmail, billingCycle]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        nameAr: { type: string }
+        slug: { type: string, pattern: "^[a-z0-9-]+$" }
+        planCode: { $ref: "#/components/schemas/PlanCode" }
+        status: { $ref: "#/components/schemas/TenantStatus" }
+        contactEmail: { type: string, format: email }
+        contactPhone: { type: string, nullable: true }
+        crNumber: { type: string, nullable: true }
+        vatNumber: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        region: { type: string, nullable: true }
+        billingCycle: { type: string, enum: [monthly, yearly] }
+        trialEndsAt: { type: string, format: date-time, nullable: true }
+        suspensionReason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TenantCreateRequest:
+      type: object
+      required: [name, nameAr, slug, planCode, contactEmail, billingCycle]
+      properties:
+        name: { type: string }
+        nameAr: { type: string }
+        slug: { type: string, pattern: "^[a-z0-9-]+$" }
+        planCode: { $ref: "#/components/schemas/PlanCode" }
+        contactEmail: { type: string, format: email }
+        contactPhone: { type: string }
+        crNumber: { type: string }
+        vatNumber: { type: string }
+        city: { type: string }
+        region: { type: string }
+        billingCycle: { type: string, enum: [monthly, yearly] }
+
+    TenantUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        nameAr: { type: string }
+        slug: { type: string }
+        planCode: { $ref: "#/components/schemas/PlanCode" }
+        contactEmail: { type: string, format: email }
+        contactPhone: { type: string }
+        crNumber: { type: string }
+        vatNumber: { type: string }
+        city: { type: string }
+        region: { type: string }
+        billingCycle: { type: string, enum: [monthly, yearly] }
+
+    Plan:
+      type: object
+      required: [code, nameEn, nameAr, priceMonthly, priceYearly, isActive]
+      properties:
+        code: { $ref: "#/components/schemas/PlanCode" }
+        nameEn: { type: string }
+        nameAr: { type: string }
+        priceMonthly: { type: number }
+        priceYearly: { type: number }
+        features:
+          type: array
+          items: { type: string }
+        isActive: { type: boolean }
+
+    FeatureFlag:
+      type: object
+      required: [key, enabled, updatedAt]
+      properties:
+        key: { type: string }
+        enabled: { type: boolean }
+        description: { type: string, nullable: true }
+        updatedAt: { type: string, format: date-time }
+        updatedById: { type: string, nullable: true }
+
+    MenuItem:
+      type: object
+      required: [id, key, href, labelEn, labelAr, section, sortOrder, isEnabled, isSystem]
+      properties:
+        id: { type: string }
+        key: { type: string }
+        href: { type: string }
+        parentKey: { type: string, nullable: true }
+        icon: { type: string, nullable: true, description: "Lucide icon name." }
+        labelEn: { type: string }
+        labelAr: { type: string }
+        section:
+          type: string
+          enum: [main, accounting, specifications, client_portal, settings]
+        sortOrder: { type: integer }
+        isEnabled: { type: boolean }
+        isSystem: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    PermissionMatrix:
+      type: object
+      required: [roles, menuItems, cells]
+      properties:
+        roles:
+          type: array
+          items:
+            type: object
+            required: [code, nameEn, nameAr, isSystem]
+            properties:
+              code: { $ref: "#/components/schemas/Role" }
+              nameEn: { type: string }
+              nameAr: { type: string }
+              descriptionEn: { type: string, nullable: true }
+              descriptionAr: { type: string, nullable: true }
+              isSystem: { type: boolean }
+        menuItems:
+          type: array
+          items: { $ref: "#/components/schemas/MenuItem" }
+        cells:
+          type: array
+          items:
+            type: object
+            required: [roleCode, menuItemKey, enabled]
+            properties:
+              roleCode: { $ref: "#/components/schemas/Role" }
+              menuItemKey: { type: string }
+              enabled: { type: boolean }
