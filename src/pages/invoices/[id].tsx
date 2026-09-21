@@ -2,12 +2,11 @@ import { useParams, Link } from "wouter";
 import { mockInvoices, mockInvoices as allInvoices } from "@/mock-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { 
-  Printer, 
-  Download, 
-  ArrowLeft, 
-  ShieldCheck, 
-  QrCode, 
+import {
+  Printer,
+  Download,
+  ArrowLeft,
+  ShieldCheck,
   FileText,
   Mail,
   Copy,
@@ -17,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAppContext } from "@/context/AppContext";
 import { toast } from "sonner";
-import { QrCodeMock } from "@/components/shared/QrCodeMock";
+import { QrCode } from "@/components/shared/QrCode";
 import { ZatcaService } from "@/lib/accounting-utils";
 
 export default function InvoiceDetail() {
@@ -160,7 +159,7 @@ export default function InvoiceDetail() {
           <div className="flex flex-col md:flex-row justify-between gap-8 pt-8">
              <div className="flex flex-col gap-4">
                 <div className="p-4 bg-muted/50 rounded flex items-center gap-4 border border-dashed border-primary/20">
-                   <QrCodeMock value={ZatcaService.generateQR(invoice)} size={120} />
+                   <QrCode value={ZatcaService.generateQR(invoice)} size={120} level="M" />
                    <div>
                      <p className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground mb-1">{isRtl ? "رمز الاستجابة السريع" : "ZATCA QR Code"}</p>
                      <p className="text-[9px] text-muted-foreground max-w-[150px] leading-tight">

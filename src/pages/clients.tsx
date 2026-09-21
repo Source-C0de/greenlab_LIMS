@@ -34,6 +34,9 @@ const clientSchema = z.object({
   vatNo: z.string().regex(/^\d{15}$/, "VAT number must be exactly 15 digits"),
   email: z.string().email("Invalid email address"),
   phone: z.string().min(10, "Invalid phone number"),
+  contactPerson: z.string().min(2, "Contact person is required"),
+  contactPhone: z.string().min(10, "Invalid contact phone number"),
+  address: z.string().min(5, "Address is required"),
   city: z.string().min(2, "City is required"),
 });
 
@@ -189,6 +192,25 @@ export default function ClientsList() {
                   <Input id="phone" placeholder="+966..." {...register("phone")} />
                   {errors.phone && <p className="text-xs text-destructive">{errors.phone.message}</p>}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="contactPerson">Contact Person</Label>
+                  <Input id="contactPerson" placeholder="e.g. Mr. Khaled Abu" {...register("contactPerson")} />
+                  {errors.contactPerson && <p className="text-xs text-destructive">{errors.contactPerson.message}</p>}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="contactPhone">Contact Phone</Label>
+                  <Input id="contactPhone" placeholder="+966 53 ..." {...register("contactPhone")} />
+                  {errors.contactPhone && <p className="text-xs text-destructive">{errors.contactPhone.message}</p>}
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="address">Address</Label>
+                <Input id="address" placeholder="Street, district, city" {...register("address")} />
+                {errors.address && <p className="text-xs text-destructive">{errors.address.message}</p>}
               </div>
 
               <div className="grid gap-2">
