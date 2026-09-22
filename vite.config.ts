@@ -20,5 +20,14 @@ export default defineConfig({
     watch: {
       ignored: ["**/.puku/**", "**/.puku"],
     },
+    // Forward same-origin /api/* requests to the dev backend on localhost:8000.
+    // Avoids CORS during development; in prod, the app talks to an absolute URL.
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
   },
 });

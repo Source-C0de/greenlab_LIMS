@@ -4,37 +4,34 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ShieldCheck, ArrowLeft, AlertCircle } from "lucide-react";
-import { useAppContext } from "@/context/AppContext";
-
-// Demo credentials (in-memory only; replace with real auth when backend lands).
-const SUPERADMIN_EMAIL = "superadmin@greenlablims.sa";
-const SUPERADMIN_PASSWORD = "super123";
+import { useAuth } from "@/context/AuthContext";
+import { superadminLogin as superadminLoginRequest } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
 
 export default function SuperadminLogin() {
   const [, setLocation] = useLocation();
-  const { setCurrentRole } = useAppContext();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
 
-    // Simulate network latency for a realistic feel.
-    window.setTimeout(() => {
-      const emailOk = email.trim().toLowerCase() === SUPERADMIN_EMAIL;
-      const passwordOk = password === SUPERADMIN_PASSWORD;
-      if (!emailOk || !passwordOk) {
-        setError("Invalid email or password. Please try again.");
-        setSubmitting(false);
-        return;
-      }
-      setCurrentRole("superadmin");
+    try {
+      await superadminLoginRequest({ username: email.trim(), password });
       setLocation("/admin");
-    }, 250);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setError("Invalid email or password. Please try again.");
+      } else {
+        setError(err instanceof Error ? err.message : "Unable to reach the server.");
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -51,15 +48,11 @@ export default function SuperadminLogin() {
           <p className="text-lg opacity-80 mb-8 leading-relaxed">
             Restricted access. Authorized superadmins manage tenants, pricing, feature flags, and menu permissions for the entire GreenLabLIMS KSA platform.
           </p>
-          <div className="grid grid-cols-1 gap-3 text-sm font-medium">
-            <div className="bg-black/20 p-4 rounded-lg border border-white/10 backdrop-blur-sm text-start">
-              <span className="opacity-70">Demo email:</span>{" "}
-              <span className="font-mono">{SUPERADMIN_EMAIL}</span>
-            </div>
-            <div className="bg-black/20 p-4 rounded-lg border border-white/10 backdrop-blur-sm text-start">
-              <span className="opacity-70">Demo password:</span>{" "}
-              <span className="font-mono">{SUPERADMIN_PASSWORD}</span>
-            </div>
+          <div className="bg-black/20 p-4 rounded-lg border border-white/10 backdrop-blur-sm text-start text-sm">
+            <p className="opacity-80 leading-relaxed">
+              Authorized personnel only. All actions are logged and audited.
+              Use your platform-issued credentials to continue.
+            </p>
           </div>
         </div>
       </div>

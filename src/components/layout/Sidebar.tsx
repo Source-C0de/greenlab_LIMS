@@ -18,8 +18,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAppContext, type Role } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import { useMenuPermissions } from "@/hooks/useMenuPermissions";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
+import { RoleAvatar } from "@/components/auth/RoleAvatar";
 import type { MenuKey } from "@/mock-data/menuPermissions";
 import type { ToggleableRole } from "@/mock-data/rolePermissions";
 
@@ -48,6 +50,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen }: SidebarProps) {
   const [location, setLocation] = useLocation();
   const { currentRole, language } = useAppContext();
+  const { user, logout } = useAuth();
   const menuPerms = useMenuPermissions();
   const rolePerms = useRolePermissions();
   const isRtl = language === "ar";
@@ -60,8 +63,16 @@ export function Sidebar({ isOpen }: SidebarProps) {
       : "admin";
   const isSuperadmin = effectiveRole === "superadmin";
 
-  const handleLogout = () => {
-    // Clear any session/state if needed
+  const handleLogout = async () => {
+    // Clear the sandbox permission toggles so a different user (or the same
+    // user, fresh) doesn't inherit them.
+    try {
+      window.localStorage.removeItem("glims_role_permissions_v1");
+      window.localStorage.removeItem("glims_menu_permissions_v1");
+    } catch {
+      // ignore — localStorage may be unavailable
+    }
+    await logout();
     setLocation("/login");
   };
 
@@ -247,14 +258,22 @@ export function Sidebar({ isOpen }: SidebarProps) {
 
       <div className="p-4 border-t border-sidebar-border">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
-              {effectiveRole.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-sidebar-foreground">{effectiveRole.replace("_", " ").toUpperCase()}</span>
-              <span className="text-xs text-muted-foreground">Demo User</span>
-            </div>
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            {user ? (
+              <RoleAvatar user={user} showRole={false} />
+            ) : (
+              <>
+                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0">
+                  {effectiveRole.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-medium text-sidebar-foreground truncate">
+                    {effectiveRole.replace("_", " ").toUpperCase()}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{isRtl ? "وضع تجريبي" : "Demo mode"}</span>
+                </div>
+              </>
+            )}
           </div>
           <button
             onClick={handleLogout}
