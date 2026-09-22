@@ -6,25 +6,18 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FlaskConical, ShieldCheck, AlertCircle } from "lucide-react";
 import { useAppContext, type Role } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/lib/api";
 
-/**
- * Hardcoded demo credentials — single source of truth for the mock login.
- * Replace with a real auth call when the backend lands.
- *
- * Lookup is by username (case-insensitive); password is compared exactly.
- * Each entry knows which role to activate and where to send the user.
- */
-const DEMO_CREDENTIALS: Record<
-  Role,
-  { username: string; password: string; redirect: string }
-> = {
-  superadmin:   { username: "superadmin", password: "super123",   redirect: "/admin" },
-  admin:        { username: "admin",      password: "admin123",    redirect: "/dashboard" },
-  lab_manager:  { username: "manager",    password: "manager123",  redirect: "/dashboard" },
-  analyst:      { username: "analyst",    password: "analyst123",  redirect: "/dashboard" },
-  receptionist: { username: "reception",  password: "recep123",    redirect: "/samples/receiving" },
-  accountant:   { username: "finance",    password: "finance123",  redirect: "/accounting/dashboard" },
-  client:       { username: "client",     password: "client123",   redirect: "/client-portal" },
+/** Where each role lands after a successful login. */
+const ROLE_REDIRECT: Record<Role, string> = {
+  superadmin:   "/admin",
+  admin:        "/dashboard",
+  lab_manager:  "/dashboard",
+  analyst:      "/dashboard",
+  receptionist: "/samples/receiving",
+  accountant:   "/accounting/dashboard",
+  client:       "/client-portal",
 };
 
 // Bilingual label table (Style B per the bilingual-component skill).
@@ -52,6 +45,8 @@ const LABELS = {
   signing:  { en: "Signing in…",       ar: "جارٍ تسجيل الدخول…" } as Label,
   invalid:  { en: "Invalid username or password",
               ar: "اسم المستخدم أو كلمة المرور غير صحيحة" } as Label,
+  network:  { en: "Unable to reach the server. Please try again.",
+              ar: "تعذّر الوصول إلى الخادم. حاول مرة أخرى." } as Label,
   noAccount:{ en: "Don't have an account?",
               ar: "ليس لديك حساب؟" } as Label,
   request:  { en: "Request access",    ar: "طلب وصول" } as Label,
@@ -60,7 +55,8 @@ const LABELS = {
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { language, setCurrentRole } = useAppContext();
+  const { language } = useAppContext();
+  const { login: submitLogin } = useAuth();
   const isRtl = language === "ar";
   const pick = (l: Label) => (isRtl ? l.ar : l.en);
 
@@ -84,30 +80,24 @@ export default function Login() {
     }, 0);
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
     setSubmitting(true);
 
-    // Simulate a brief network round-trip for a realistic feel.
-    window.setTimeout(() => {
-      const entered = username.trim().toLowerCase();
-
-      // Look up by username (case-insensitive).
-      const match = (Object.entries(DEMO_CREDENTIALS) as [Role, typeof DEMO_CREDENTIALS[Role]][])
-        .find(([, cred]) => cred.username.toLowerCase() === entered);
-
-      if (!match || match[1].password !== password) {
+    try {
+      const user = await submitLogin({ username: username.trim(), password });
+      setLocation(ROLE_REDIRECT[user.role] ?? "/dashboard");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
         setLoginError(pick(LABELS.invalid));
-        setSubmitting(false);
         triggerShake();
-        return;
+      } else {
+        setLoginError(err instanceof Error ? err.message : pick(LABELS.network));
       }
-
-      const [role, cred] = match;
-      setCurrentRole(role);
-      setLocation(cred.redirect);
-    }, 250);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -183,12 +173,12 @@ export default function Login() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">{pick(LABELS.password)}</Label>
-                  <a
-                    href="#"
+                  <Link
+                    href="/forgot-password"
                     className="text-sm font-medium text-primary hover:underline"
                   >
                     {pick(LABELS.forgot)}
-                  </a>
+                  </Link>
                 </div>
                 <Input
                   id="password"

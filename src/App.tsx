@@ -6,10 +6,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Context
 import { AppProvider } from "@/context/AppContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 
 // Layout
 import { AppLayout } from "@/components/layout/AppLayout";
+
+// Auth
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 // Auth Pages (No sidebar)
 import Login from "@/pages/login";
@@ -63,62 +67,75 @@ function LayoutWrapper({ component: Component }: { component: any }) {
 }
 
 function Router() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // The / redirect lives outside the Switch so it can read auth state.
+  // While the bootstrap is still in flight, render a tiny placeholder to
+  // avoid flashing /login for an already-logged-in user.
+  const rootRedirect =
+    isLoading ? null : isAuthenticated ? <Redirect to="/dashboard" /> : <Redirect to="/login" />;
+
   return (
-    <Switch>
+    <>
+      {rootRedirect}
+      <Switch>
       {/* Auth routes without sidebar */}
-      <Route path="/" component={() => <Redirect to="/login" />} />
+      <Route path="/" component={() => rootRedirect ?? <Redirect to="/login" />} />
       <Route path="/login" component={Login} />
       <Route path="/superadmin" component={SuperadminLogin} />
       <Route path="/register" component={Register} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/otp-verify" component={OtpVerify} />
 
-      {/* App routes wrapped in layout */}
-      <Route path="/dashboard"><LayoutWrapper component={Dashboard} /></Route>
-      <Route path="/dashboard/marketing"><LayoutWrapper component={MarketingReportsPage} /></Route>
-      <Route path="/samples"><LayoutWrapper component={SamplesList} /></Route>
-      <Route path="/samples/receiving"><LayoutWrapper component={SampleReceiving} /></Route>
+      {/* App routes wrapped in layout + protected. The `roles` prop is
+          intentionally loose in mock mode — ProtectedRoute short-circuits
+          there. In API mode the user is loaded from /me before render. */}
+      <Route path="/dashboard"><ProtectedRoute><LayoutWrapper component={Dashboard} /></ProtectedRoute></Route>
+      <Route path="/dashboard/marketing"><ProtectedRoute><LayoutWrapper component={MarketingReportsPage} /></ProtectedRoute></Route>
+      <Route path="/samples"><ProtectedRoute><LayoutWrapper component={SamplesList} /></ProtectedRoute></Route>
+      <Route path="/samples/receiving"><ProtectedRoute><LayoutWrapper component={SampleReceiving} /></ProtectedRoute></Route>
       {/*
         Sample IDs contain slashes (e.g. "FD/2024/0001") so wouter's `:id`
         (single-segment matcher) can't capture them. Use a splat (*) and
         let the page read the full id from `useParams()["*"]`.
       */}
-      <Route path="/samples/*/report"><LayoutWrapper component={SampleReportPage} /></Route>
-      <Route path="/samples/*"><LayoutWrapper component={SampleDetail} /></Route>
-      <Route path="/workflow"><LayoutWrapper component={WorkflowBoard} /></Route>
-      <Route path="/clients"><LayoutWrapper component={ClientsList} /></Route>
-      <Route path="/reports"><LayoutWrapper component={ReportsList} /></Route>
-      <Route path="/reports/:id"><LayoutWrapper component={ReportDetail} /></Route>
-      <Route path="/inventory"><LayoutWrapper component={InventoryList} /></Route>
-      <Route path="/invoices"><LayoutWrapper component={InvoicesList} /></Route>
-      <Route path="/invoices/:id"><LayoutWrapper component={InvoiceDetail} /></Route>
-      <Route path="/analytics"><LayoutWrapper component={Analytics} /></Route>
-      <Route path="/admin"><LayoutWrapper component={AdminPanel} /></Route>
-      <Route path="/client-portal"><LayoutWrapper component={ClientPortal} /></Route>
-      <Route path="/settings"><LayoutWrapper component={Settings} /></Route>
+      <Route path="/samples/*/report"><ProtectedRoute><LayoutWrapper component={SampleReportPage} /></ProtectedRoute></Route>
+      <Route path="/samples/*"><ProtectedRoute><LayoutWrapper component={SampleDetail} /></ProtectedRoute></Route>
+      <Route path="/workflow"><ProtectedRoute><LayoutWrapper component={WorkflowBoard} /></ProtectedRoute></Route>
+      <Route path="/clients"><ProtectedRoute><LayoutWrapper component={ClientsList} /></ProtectedRoute></Route>
+      <Route path="/reports"><ProtectedRoute><LayoutWrapper component={ReportsList} /></ProtectedRoute></Route>
+      <Route path="/reports/:id"><ProtectedRoute><LayoutWrapper component={ReportDetail} /></ProtectedRoute></Route>
+      <Route path="/inventory"><ProtectedRoute><LayoutWrapper component={InventoryList} /></ProtectedRoute></Route>
+      <Route path="/invoices"><ProtectedRoute><LayoutWrapper component={InvoicesList} /></ProtectedRoute></Route>
+      <Route path="/invoices/:id"><ProtectedRoute><LayoutWrapper component={InvoiceDetail} /></ProtectedRoute></Route>
+      <Route path="/analytics"><ProtectedRoute><LayoutWrapper component={Analytics} /></ProtectedRoute></Route>
+      <Route path="/admin"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={AdminPanel} /></ProtectedRoute></Route>
+      <Route path="/client-portal"><ProtectedRoute roles={["client"]}><LayoutWrapper component={ClientPortal} /></ProtectedRoute></Route>
+      <Route path="/settings"><ProtectedRoute><LayoutWrapper component={Settings} /></ProtectedRoute></Route>
 
       {/* Accounting Routes */}
-      <Route path="/accounting/dashboard"><LayoutWrapper component={AccountingDashboard} /></Route>
-      <Route path="/accounting/journals"><LayoutWrapper component={AccountingJournals} /></Route>
-      <Route path="/accounting/ledger"><LayoutWrapper component={AccountingLedger} /></Route>
-      <Route path="/accounting/reports"><LayoutWrapper component={AccountingReports} /></Route>
-      <Route path="/accounting/chart-of-accounts"><LayoutWrapper component={ChartOfAccounts} /></Route>
+      <Route path="/accounting/dashboard"><ProtectedRoute roles={["admin", "accountant"]}><LayoutWrapper component={AccountingDashboard} /></ProtectedRoute></Route>
+      <Route path="/accounting/journals"><ProtectedRoute roles={["admin", "accountant"]}><LayoutWrapper component={AccountingJournals} /></ProtectedRoute></Route>
+      <Route path="/accounting/ledger"><ProtectedRoute roles={["admin", "accountant"]}><LayoutWrapper component={AccountingLedger} /></ProtectedRoute></Route>
+      <Route path="/accounting/reports"><ProtectedRoute roles={["admin", "accountant"]}><LayoutWrapper component={AccountingReports} /></ProtectedRoute></Route>
+      <Route path="/accounting/chart-of-accounts"><ProtectedRoute roles={["admin", "accountant"]}><LayoutWrapper component={ChartOfAccounts} /></ProtectedRoute></Route>
 
       {/* Specification Routes */}
-      <Route path="/specifications"><LayoutWrapper component={SpecificationList} /></Route>
-      <Route path="/specifications/new"><LayoutWrapper component={NewSpecification} /></Route>
-      <Route path="/specifications/library"><LayoutWrapper component={ParameterLibrary} /></Route>
-      <Route path="/specifications/approval"><LayoutWrapper component={ApprovalQueue} /></Route>
-      <Route path="/specifications/history"><LayoutWrapper component={VersionHistory} /></Route>
-      <Route path="/specifications/test-master"><LayoutWrapper component={TestMasterPage} /></Route>
+      <Route path="/specifications"><ProtectedRoute><LayoutWrapper component={SpecificationList} /></ProtectedRoute></Route>
+      <Route path="/specifications/new"><ProtectedRoute><LayoutWrapper component={NewSpecification} /></ProtectedRoute></Route>
+      <Route path="/specifications/library"><ProtectedRoute><LayoutWrapper component={ParameterLibrary} /></ProtectedRoute></Route>
+      <Route path="/specifications/approval"><ProtectedRoute><LayoutWrapper component={ApprovalQueue} /></ProtectedRoute></Route>
+      <Route path="/specifications/history"><ProtectedRoute><LayoutWrapper component={VersionHistory} /></ProtectedRoute></Route>
+      <Route path="/specifications/test-master"><ProtectedRoute><LayoutWrapper component={TestMasterPage} /></ProtectedRoute></Route>
 
       {/* Approval Routes */}
-      <Route path="/approvals"><LayoutWrapper component={ApprovalsQueue} /></Route>
-      <Route path="/approvals/my-submissions"><LayoutWrapper component={MySubmissions} /></Route>
+      <Route path="/approvals"><ProtectedRoute><LayoutWrapper component={ApprovalsQueue} /></ProtectedRoute></Route>
+      <Route path="/approvals/my-submissions"><ProtectedRoute><LayoutWrapper component={MySubmissions} /></ProtectedRoute></Route>
 
       {/* 404 */}
       <Route component={NotFound} />
     </Switch>
+    </>
   );
 }
 
@@ -129,10 +146,12 @@ function App() {
         <AppProvider>
           <NotificationProvider>
             <TooltipProvider>
-              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-                <Router />
-              </WouterRouter>
-              <Toaster />
+              <AuthProvider>
+                <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                  <Router />
+                </WouterRouter>
+                <Toaster />
+              </AuthProvider>
             </TooltipProvider>
           </NotificationProvider>
         </AppProvider>

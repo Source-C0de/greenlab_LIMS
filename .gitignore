@@ -48,6 +48,11 @@ Thumbs.db
 .cache/
 .local/
 
+# local env files (secrets)
+.env
+.env.local
+.env.*.local
+
 # # Puku (local embeddings DB)
 # .puku/
 
