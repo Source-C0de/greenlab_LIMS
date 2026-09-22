@@ -69,16 +69,16 @@ function LayoutWrapper({ component: Component }: { component: any }) {
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
-  // The / redirect lives outside the Switch so it can read auth state.
-  // While the bootstrap is still in flight, render a tiny placeholder to
-  // avoid flashing /login for an already-logged-in user.
+  // While bootstrap is in flight, render nothing on `/` to avoid flashing
+  // /login for an already-logged-in user. Once known, redirect to the right
+  // landing page. Only ONE <Redirect> renders per render — never outside
+  // the Switch as a sibling, which used to cause a duplicate navigate on
+  // every auth-state change.
   const rootRedirect =
     isLoading ? null : isAuthenticated ? <Redirect to="/dashboard" /> : <Redirect to="/login" />;
 
   return (
-    <>
-      {rootRedirect}
-      <Switch>
+    <Switch>
       {/* Auth routes without sidebar */}
       <Route path="/" component={() => rootRedirect ?? <Redirect to="/login" />} />
       <Route path="/login" component={Login} />
@@ -135,7 +135,6 @@ function Router() {
       {/* 404 */}
       <Route component={NotFound} />
     </Switch>
-    </>
   );
 }
 

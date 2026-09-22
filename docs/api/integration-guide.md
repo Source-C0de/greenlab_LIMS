@@ -147,7 +147,7 @@ and `setTimeout` with a real mutation:
 
 ```tsx
 const login = useMutation({
-  mutationFn: (body: { username: string; password: string }) =>
+  mutationFn: (body: { username?: string; email?: string; password: string }) =>
     api.post<{ user: User; expiresAt: string }>("/auth/login", body),
   onSuccess: ({ user }) => {
     queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
