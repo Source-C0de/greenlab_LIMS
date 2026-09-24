@@ -44,6 +44,9 @@ import AccountingJournals from "@/pages/accounting/journals";
 import AccountingLedger from "@/pages/accounting/ledger";
 import AccountingReports from "@/pages/accounting/reports";
 import ChartOfAccounts from "@/pages/accounting/chart-of-accounts";
+import QuotationsList from "@/pages/quotations/index";
+import NewQuotation from "@/pages/quotations/new";
+import QuotationDetail from "@/pages/quotations/[id]";
 import SpecificationList from "@/pages/specifications/index";
 import NewSpecification from "@/pages/specifications/new";
 import ParameterLibrary from "@/pages/specifications/library";
@@ -108,6 +111,11 @@ function Router() {
       <Route path="/inventory"><ProtectedRoute><LayoutWrapper component={InventoryList} /></ProtectedRoute></Route>
       <Route path="/invoices"><ProtectedRoute><LayoutWrapper component={InvoicesList} /></ProtectedRoute></Route>
       <Route path="/invoices/:id"><ProtectedRoute><LayoutWrapper component={InvoiceDetail} /></ProtectedRoute></Route>
+
+      {/* Quotation Routes — admin + lab_manager (BDM role reuses lab_manager). */}
+      <Route path="/quotations"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={QuotationsList} /></ProtectedRoute></Route>
+      <Route path="/quotations/new"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={NewQuotation} /></ProtectedRoute></Route>
+      <Route path="/quotations/:id"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={QuotationDetail} /></ProtectedRoute></Route>
       <Route path="/analytics"><ProtectedRoute><LayoutWrapper component={Analytics} /></ProtectedRoute></Route>
       <Route path="/admin"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={AdminPanel} /></ProtectedRoute></Route>
       <Route path="/client-portal"><ProtectedRoute roles={["client"]}><LayoutWrapper component={ClientPortal} /></ProtectedRoute></Route>

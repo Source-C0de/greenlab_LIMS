@@ -44,7 +44,8 @@ export type MenuKey =
   | "my_invoices"
   | "test_approvals"
   | "my_submissions"
-  | "marketing_reports";
+  | "marketing_reports"
+  | "quotations";
 
 export type MenuGroup = "lab" | "client" | "accounting" | "admin";
 
@@ -128,6 +129,14 @@ export const MENU_REGISTRY: Record<MenuKey, MenuEntry> = {
     labelAr: "الفوترة",
     icon: Receipt,
     href: "/invoices",
+    group: "lab",
+  },
+  quotations: {
+    key: "quotations",
+    labelEn: "Quotations",
+    labelAr: "عروض الأسعار",
+    icon: FileText,
+    href: "/quotations",
     group: "lab",
   },
   accounting_dashboard: {

@@ -84,6 +84,9 @@ export interface Specification {
   issuanceDate: string;
   parameters: SpecParameter[];
   tests?: SpecTest[];
+  /** Default per-line price in SAR for the Quotation module. Optional so
+   *  older consumers don't have to know about it. */
+  defaultPrice?: number;
 }
 
 export interface SpecTest {
@@ -124,6 +127,7 @@ export const mockSpecifications: Specification[] = [
     name: 'Drinking Water Standard',
     category: 'Water',
     issuanceDate: '2024-01-01',
+    defaultPrice: 350,
     parameters: [
       { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '6.5 - 8.5', min: 6.5, max: 8.5, target: 7.5, limitType: 'Range', mandatory: true },
       { parameterId: 'PM-003', name: 'Chloride', method: 'Titration', unit: 'mg/L', sopCode: 'SOP-PM-003', tests: 'Chloride', referenceNo: 'REF-CH-PM-003', limitRange: '0 - 250', min: null, max: 250, target: null, limitType: 'Max Only', mandatory: true },
@@ -137,6 +141,7 @@ export const mockSpecifications: Specification[] = [
     name: 'Industrial Waste Water',
     category: 'Water',
     issuanceDate: '2024-05-01',
+    defaultPrice: 420,
     parameters: [
       { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '5.5 - 9.5', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
       { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', sopCode: 'SOP-PM-002', tests: 'TDS', referenceNo: 'REF-PH-PM-002', limitRange: '0 - 2000', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
@@ -148,6 +153,7 @@ export const mockSpecifications: Specification[] = [
     name: "Industrial Waste Water 2",
     category: "Water",
     issuanceDate: "2024-05-01",
+    defaultPrice: 480,
     parameters: [
       { parameterId: 'PM-001', name: 'pH', method: 'Electrometric', unit: 'pH', sopCode: 'SOP-PM-001', tests: 'pH', referenceNo: 'REF-CH-PM-001', limitRange: '5.5 - 9.5', min: 5.5, max: 9.5, target: 7.0, limitType: 'Range', mandatory: true },
       { parameterId: 'PM-002', name: 'TDS', method: 'Gravimetric', unit: 'mg/L', sopCode: 'SOP-PM-002', tests: 'TDS', referenceNo: 'REF-PH-PM-002', limitRange: '0 - 2000', min: null, max: 2000, target: null, limitType: 'Max Only', mandatory: true },
