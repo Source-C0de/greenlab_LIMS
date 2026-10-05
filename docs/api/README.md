@@ -163,6 +163,9 @@ Content-Type: application/json
 
 { "username": "admin", "password": "admin123" }
 
+# Or, equivalently, log in by email:
+{ "email": "admin@lab.sa", "password": "admin123" }
+
 → 200 OK
 Set-Cookie: glims_session=<JWT>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=86400
 {

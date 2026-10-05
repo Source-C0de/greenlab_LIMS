@@ -33,8 +33,12 @@ async function fetchEnvelope<T>(
   path: string,
   init?: Parameters<typeof apiFetch>[1],
 ): Promise<T> {
-  const env = await apiFetch<Envelope<T>>(path, init);
-  return env.data;
+  const env = await apiFetch<Envelope<T> | T>(path, init);
+  // Same dual-shape tolerance as `unwrap` in `@/lib/auth` — see comment there.
+  if (env !== null && typeof env === "object" && "data" in env) {
+    return (env as Envelope<T>).data;
+  }
+  return env as T;
 }
 
 /**

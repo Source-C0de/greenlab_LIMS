@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FlaskConical, ShieldCheck, AlertCircle } from "lucide-react";
 import { useAppContext, type Role } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
+import { buildLoginPayload } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 
 /** Where each role lands after a successful login. */
@@ -86,7 +87,7 @@ export default function Login() {
     setSubmitting(true);
 
     try {
-      const user = await submitLogin({ username: username.trim(), password });
+      const user = await submitLogin(buildLoginPayload(username, password));
       setLocation(ROLE_REDIRECT[user.role] ?? "/dashboard");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {

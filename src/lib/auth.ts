@@ -64,8 +64,28 @@ export interface AuthUser {
 }
 
 export interface LoginRequest {
-  username: string;
+  /** Username (canonical short handle). Use this OR `email`, never both. */
+  username?: string;
+  /** Email address. Use this OR `username`, never both. */
+  email?: string;
   password: string;
+}
+
+/**
+ * Routes the login form's single identifier field to the correct payload
+ * shape. Backend authenticates against either `username` or `email` on the
+ * users table. Detection rule: a string containing `@` is treated as an email;
+ * everything else is a username. The form's `required` attribute guarantees
+ * `identifier` is non-empty before this is called.
+ */
+export function buildLoginPayload(
+  identifier: string,
+  password: string,
+): LoginRequest {
+  const trimmed = identifier.trim();
+  return trimmed.includes("@")
+    ? { email: trimmed, password }
+    : { username: trimmed, password };
 }
 
 export interface LoginResponse {
@@ -92,8 +112,15 @@ export interface RegisterRequest {
 interface Envelope<T> { data: T }
 
 async function unwrap<T>(path: string, init?: Parameters<typeof apiFetch>[1]): Promise<T> {
-  const env = await apiFetch<Envelope<T>>(path, init);
-  return env.data;
+  const env = await apiFetch<Envelope<T> | T>(path, init);
+  // Backend contract (docs/api/openapi.yaml §Components §DataEnvelope) wraps
+  // every response in `{ data: T }`, but in practice some endpoints (notably
+  // login) currently return the raw object. Peel the envelope only when it's
+  // actually present so both shapes work.
+  if (env !== null && typeof env === "object" && "data" in env) {
+    return (env as Envelope<T>).data;
+  }
+  return env as T;
 }
 
 // ---------------------------------------------------------------------------

@@ -32,6 +32,7 @@ import {
 } from "@/hooks/test-approvals/store";
 import { useSyncExternalStore } from "react";
 import { useAppContext } from "@/context/AppContext";
+import { signatureFor } from "@/lib/signature";
 
 /**
  * A single key:value row where the label sits in a fixed-width column so the
@@ -577,43 +578,39 @@ export default function SampleReportPage() {
             </div>
 
             {/* Footer & Signatures */}
-            <div className="grid grid-cols-3 gap-8 mt-12 pt-8 border-t border-gray-200">
+            <div className="grid grid-cols-3 gap-8 mt-12 pt-8 border-t border-gray-200 items-end">
+              {/* Cell 1: Reviewed By — Shymaa Ali.
+                  PNG hard-coded because the sample data uses the transliteration
+                  "Shymaa Ali" while the file is named after the alternate
+                  transliteration "Saymaa" — signatureFor()'s exact-name lookup
+                  would miss it. */}
               <div>
                 <div className="h-16 flex items-end mb-2">
-                  <span className="font-serif italic text-2xl text-blue-800">
-                    {sample.assignedAnalyst ?? "—"}
-                  </span>
-                </div>
-                <div className="border-t border-black pt-2">
-                  <p className="font-bold text-sm">Analyzed By</p>
-                  <p className="text-xs text-gray-500">
-                    {sample.assignedAnalyst ?? "Pending"}
-                  </p>
-                  <p className="text-xs text-gray-500">Laboratory Analyst</p>
-                </div>
-              </div>
-
-              <div>
-                <div className="h-16 flex items-end mb-2">
-                  <span className="font-serif italic text-2xl text-blue-800">
-                    {techManager?.approverName ??
-                      labSupervisor?.approverName ??
-                      "—"}
-                  </span>
+                  <img
+                    src="/signatures/sign_saymaa.png"
+                    alt={isRtl ? "توقيع المراجعة" : "Reviewer signature"}
+                    className="h-16 max-w-full object-contain"
+                  />
                 </div>
                 <div className="border-t border-black pt-2">
                   <p className="font-bold text-sm">Reviewed By</p>
-                  <p className="text-xs text-gray-500">
-                    {techManager?.approverName ??
-                      labSupervisor?.approverName ??
-                      "Pending"}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {techManager ? "Technical Manager" : "Lab Supervisor"}
-                  </p>
+                  <p className="text-xs text-gray-500">Shymaa Ali</p>
+                  <p className="text-xs text-gray-500">Reviewer</p>
                 </div>
               </div>
 
+              {/* Cell 2: Lab stamp — white card, 128×128. */}
+              <div className="flex justify-center">
+                <div className="bg-white p-2 rounded-md shadow-sm">
+                  <img
+                    src="/branding/stamp-greenlab.svg"
+                    alt={isRtl ? "ختم المختبر" : "Lab Stamp"}
+                    className="h-32 w-32 object-contain"
+                  />
+                </div>
+              </div>
+
+              {/* Cell 3: Authorized By (QA Manager) — static text fallback. */}
               <div>
                 <div className="h-16 flex items-end mb-2">
                   <span className="font-serif italic text-2xl text-blue-800">

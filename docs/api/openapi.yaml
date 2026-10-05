@@ -79,7 +79,7 @@ paths:
   /auth/login:
     post:
       tags: [Auth]
-      summary: Username + password login (sets `glims_session` cookie)
+      summary: Username or email + password login (sets `glims_session` cookie)
       security: []
       x-csrf: false
       operationId: authLogin
@@ -111,7 +111,7 @@ paths:
   /auth/superadmin/login:
     post:
       tags: [Auth]
-      summary: Superadmin-scope login (separate cookie `glims_sa_session`)
+      summary: Superadmin-scope login (username or email + password; separate cookie `glims_sa_session`)
       security: []
       x-csrf: false
       operationId: authSuperadminLogin
@@ -2418,9 +2418,13 @@ components:
     # ---------- Auth ----------
     LoginRequest:
       type: object
-      required: [username, password]
+      required: [password]
+      description: |
+        Send exactly one of `username` or `email`. The backend authenticates
+        against either column on the users table.
       properties:
         username: { type: string }
+        email: { type: string, format: email }
         password: { type: string, format: password }
 
     LoginResponse:

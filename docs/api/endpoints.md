@@ -23,7 +23,7 @@
 
 | # | Method | Path | Auth | Purpose | SPA location | Response type |
 |---|---|---|---|---|---|---|
-| 1 | POST | `/auth/login` | 🔓 | Username + password → sets `glims_session` cookie | `src/pages/login.tsx:87-111` | `{ data: { user, expiresAt } }` |
+| 1 | POST | `/auth/login` | 🔓 | Username or email + password → sets `glims_session` cookie | `src/pages/login.tsx:87-111` | `{ data: { user, expiresAt } }` |
 | 2 | POST | `/auth/superadmin/login` | 🔓 | Superadmin scope login (separate cookie `glims_sa_session`) | `src/pages/superadmin-login.tsx:21-38` | `{ data: { user, expiresAt } }` |
 | 3 | POST | `/auth/logout` | 🔒🛡️ | Clears the session cookie | (no UI today) | `204` |
 | 4 | POST | `/auth/superadmin/logout` | 🔒🛡️ | Clears the superadmin session | (no UI today) | `204` |

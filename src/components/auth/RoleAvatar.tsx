@@ -20,11 +20,15 @@ const ROLE_LABEL: Record<Role, { en: string; ar: string }> = {
   receptionist: { en: "Receptionist",        ar: "موظف استقبال" },
 };
 
-function initialsOf(name: string, fallback: string): string {
-  const trimmed = name?.trim();
-  if (!trimmed) return fallback.slice(0, 1).toUpperCase();
-  // Use the first letter of the first whitespace-separated word.
-  return trimmed.split(/\s+/)[0].slice(0, 1).toUpperCase();
+function initialsOf(name: string | undefined | null, fallback: string | undefined | null): string {
+  const trimmed = (name ?? "").trim();
+  if (trimmed) {
+    // Use the first letter of the first whitespace-separated word.
+    return trimmed.split(/\s+/)[0].slice(0, 1).toUpperCase();
+  }
+  // Both inputs may be missing on a partial user object — fall back to "?".
+  const fb = (fallback ?? "").trim();
+  return (fb.slice(0, 1) || "?").toUpperCase();
 }
 
 /**
@@ -37,7 +41,11 @@ export function RoleAvatar({ user, size = "md", showRole = true, className }: Ro
   const t = (en: string, ar: string) => (isRtl ? ar : en);
 
   const displayName = isRtl && user.fullNameAr ? user.fullNameAr : user.fullName || user.username;
-  const roleLabel = ROLE_LABEL[user.role] ?? { en: user.role, ar: user.role };
+  // Backend may return a role value the frontend hasn't enumerated (e.g. a new
+  // role added server-side). Fall back to the raw role string so the page
+  // stays renderable.
+  const roleLabel =
+    ROLE_LABEL[user.role as Role] ?? { en: user.role ?? "—", ar: user.role ?? "—" };
   const initial = initialsOf(displayName, user.username);
 
   const circle =

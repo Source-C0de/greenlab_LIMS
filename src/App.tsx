@@ -44,6 +44,9 @@ import AccountingJournals from "@/pages/accounting/journals";
 import AccountingLedger from "@/pages/accounting/ledger";
 import AccountingReports from "@/pages/accounting/reports";
 import ChartOfAccounts from "@/pages/accounting/chart-of-accounts";
+import QuotationsList from "@/pages/quotations/index";
+import NewQuotation from "@/pages/quotations/new";
+import QuotationDetail from "@/pages/quotations/[id]";
 import SpecificationList from "@/pages/specifications/index";
 import NewSpecification from "@/pages/specifications/new";
 import ParameterLibrary from "@/pages/specifications/library";
@@ -69,16 +72,16 @@ function LayoutWrapper({ component: Component }: { component: any }) {
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
-  // The / redirect lives outside the Switch so it can read auth state.
-  // While the bootstrap is still in flight, render a tiny placeholder to
-  // avoid flashing /login for an already-logged-in user.
+  // While bootstrap is in flight, render nothing on `/` to avoid flashing
+  // /login for an already-logged-in user. Once known, redirect to the right
+  // landing page. Only ONE <Redirect> renders per render — never outside
+  // the Switch as a sibling, which used to cause a duplicate navigate on
+  // every auth-state change.
   const rootRedirect =
     isLoading ? null : isAuthenticated ? <Redirect to="/dashboard" /> : <Redirect to="/login" />;
 
   return (
-    <>
-      {rootRedirect}
-      <Switch>
+    <Switch>
       {/* Auth routes without sidebar */}
       <Route path="/" component={() => rootRedirect ?? <Redirect to="/login" />} />
       <Route path="/login" component={Login} />
@@ -108,6 +111,11 @@ function Router() {
       <Route path="/inventory"><ProtectedRoute><LayoutWrapper component={InventoryList} /></ProtectedRoute></Route>
       <Route path="/invoices"><ProtectedRoute><LayoutWrapper component={InvoicesList} /></ProtectedRoute></Route>
       <Route path="/invoices/:id"><ProtectedRoute><LayoutWrapper component={InvoiceDetail} /></ProtectedRoute></Route>
+
+      {/* Quotation Routes — admin + lab_manager (BDM role reuses lab_manager). */}
+      <Route path="/quotations"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={QuotationsList} /></ProtectedRoute></Route>
+      <Route path="/quotations/new"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={NewQuotation} /></ProtectedRoute></Route>
+      <Route path="/quotations/:id"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={QuotationDetail} /></ProtectedRoute></Route>
       <Route path="/analytics"><ProtectedRoute><LayoutWrapper component={Analytics} /></ProtectedRoute></Route>
       <Route path="/admin"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={AdminPanel} /></ProtectedRoute></Route>
       <Route path="/client-portal"><ProtectedRoute roles={["client"]}><LayoutWrapper component={ClientPortal} /></ProtectedRoute></Route>
@@ -135,7 +143,6 @@ function Router() {
       {/* 404 */}
       <Route component={NotFound} />
     </Switch>
-    </>
   );
 }
 

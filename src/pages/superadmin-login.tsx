@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ShieldCheck, ArrowLeft, AlertCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { superadminLogin as superadminLoginRequest } from "@/lib/auth";
+import { superadminLogin as superadminLoginRequest, buildLoginPayload } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 
 export default function SuperadminLogin() {
@@ -21,7 +21,7 @@ export default function SuperadminLogin() {
     setSubmitting(true);
 
     try {
-      await superadminLoginRequest({ username: email.trim(), password });
+      await superadminLoginRequest(buildLoginPayload(email, password));
       setLocation("/admin");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {

@@ -135,6 +135,7 @@ export function Sidebar({ isOpen }: SidebarProps) {
           ]
         },
         { href: "/workflow", labelEn: "Workflow", labelAr: "سير العمل", icon: FolderKanban, roles: ["admin", "lab_manager", "analyst"], key: "workflow" },
+        { href: "/quotations", labelEn: "Quotations", labelAr: "عروض الأسعار", icon: FileText, roles: ["admin", "lab_manager"], key: "quotations" },
         { href: "/clients", labelEn: "Clients", labelAr: "العملاء", icon: Users, roles: ["admin", "lab_manager", "receptionist"], key: "clients" },
         { href: "/reports", labelEn: "Reports", labelAr: "التقارير", icon: FileText, roles: ["admin", "lab_manager", "analyst", "receptionist"], key: "reports" },
         { href: "/inventory", labelEn: "Inventory", labelAr: "المخزون", icon: Package, roles: ["admin", "lab_manager", "receptionist"], key: "inventory" },

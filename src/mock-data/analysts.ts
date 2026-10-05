@@ -4,4 +4,5 @@ export const mockAnalysts = [
   { id: "A003", name: "Khaled", nameAr: "خالد", specialization: "Cosmetics & Perfume", activeSamples: 2, email: "khaled@greenlablims.sa" },
   { id: "A004", name: "Nazmul Alam", nameAr: "ناظم العلم", specialization: "Drugs", activeSamples: 3, email: "nazmul.alam@greenlablims.sa" },
   { id: "A005", name: "Tariq masum", nameAr: "طارق معصوم", specialization: "Microbiology", activeSamples: 3, email: "khalid.rashidi@greenlablims.sa" },
+  { id: "A006", name: "Saymaa Ali", nameAr: "شيماء علي", specialization: "Reviewer / QA", activeSamples: 0, email: "saymaa.ali@greenlablims.sa", signatureUrl: "/signatures/sign_saymaa.png" },
 ];

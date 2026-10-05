@@ -554,3 +554,4 @@ rename, or delete them**:
 
 When making changes that touch either file, update both cross-references so
 future sessions discover the convention.
+include test case.
