@@ -1,5 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { useParams } from "wouter";
+import { Link, useParams } from "wouter";
+import { Info } from "lucide-react";
 import { mockSamples } from "@/mock-data";
 import { SampleHeader } from "@/components/samples/SampleHeader";
 import { SampleTabs } from "@/components/samples/SampleTabs";
@@ -25,6 +26,12 @@ export default function SampleDetail() {
   const id = (params["*"] ?? "").replace(/\/$/, "");
   const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
+
+  // Reissue lineage: if the current id ends in -R\d+, this sample is a
+  // reissued copy of `<base>`. Expose the base so the banner can link
+  // back to the source. Handles ids containing `/` (e.g. FD/2024/0001-R1).
+  const reissueMatch = /^(.+)-R(\d+)$/.exec(id ?? "");
+  const sourceId = reissueMatch?.[1];
 
   // Keep this page in sync with the approval store so any decision made from
   // the TestReviewDrawer (or any other source) is reflected immediately.
@@ -174,6 +181,26 @@ export default function SampleDetail() {
   return (
     <div className="flex flex-col h-full overflow-visible">
       <div className="md:px-2">
+        {sourceId && (
+          <div
+            role="note"
+            data-testid="reissued-from-banner"
+            className="mb-3 rounded-md border border-blue-200 bg-blue-50 text-blue-900 dark:bg-blue-950/30 dark:text-blue-200 dark:border-blue-800 px-4 py-2 flex items-center gap-2 text-sm"
+          >
+            <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1">
+              {isRtl
+                ? `أُعيد إصداره من ${sourceId}`
+                : `Reissued from ${sourceId}`}
+            </span>
+            <Link
+              to={`/samples/${sourceId}`}
+              className="underline underline-offset-2 hover:no-underline font-medium"
+            >
+              {isRtl ? "عرض المصدر ←" : "View source →"}
+            </Link>
+          </div>
+        )}
         <SampleHeader
           sample={{
             id: sample.id,

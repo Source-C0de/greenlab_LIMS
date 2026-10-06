@@ -8,6 +8,8 @@ import {
 } from "@/mock-data";
 import { generateSampleId } from "@/lib/sample-id";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { useReissueSample } from "@/hooks/test-approvals/useReissueSample";
+import { samplesStore } from "@/hooks/test-approvals/store";
 import { Button } from "@/components/ui/button";
 import {
   Plus,
@@ -80,6 +82,8 @@ type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
 export default function SamplesList() {
   const { currentRole, language } = useAppContext();
   const isRtl = language === "ar";
+
+  const { reissue } = useReissueSample();
 
   const [samples, setSamples] = useState(mockSamples);
   const [isAdding, setIsAdding] = useState(false);
@@ -839,13 +843,40 @@ export default function SamplesList() {
                                 title={
                                   isRtl ? "إعادة إصدار" : "Reissue report"
                                 }
-                                onClick={() =>
-                                  toast.info(
-                                    isRtl
-                                      ? `إعادة إصدار التقرير لـ ${s.id}`
-                                      : `Reissue report for ${s.id}`,
-                                  )
+                                aria-label={
+                                  isRtl
+                                    ? `إعادة إصدار لـ ${s.id}`
+                                    : `Reissue for ${s.id}`
                                 }
+                                disabled={
+                                  currentRole !== "admin" &&
+                                  currentRole !== "lab_manager"
+                                }
+                                onClick={() => {
+                                  const result = reissue({
+                                    sourceSampleId: s.id,
+                                  });
+                                  if (result) {
+                                    toast.success(
+                                      isRtl
+                                        ? `تم إعادة الإصدار باسم ${result.newId}`
+                                        : `Reissued as ${result.newId}`,
+                                    );
+                                    // Force the list to reflect the new row.
+                                    // (This page uses a local useState —
+                                    // samplesStore is the canonical source
+                                    // of truth, so we re-sync from it.)
+                                    setSamples([
+                                      ...(samplesStore as typeof samples),
+                                    ]);
+                                  } else {
+                                    toast.error(
+                                      isRtl
+                                        ? "فشل إعادة الإصدار"
+                                        : "Reissue failed",
+                                    );
+                                  }
+                                }}
                               >
                                 <FileText className="h-3.5 w-3.5" />
                               </Button>

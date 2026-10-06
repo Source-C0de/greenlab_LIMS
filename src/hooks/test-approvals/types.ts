@@ -4,7 +4,7 @@
 // Mirrors the backend OpenAPI spec (section K).
 
 import type { Role } from "@/context/AppContext";
-import type { Test, TestQueueItem } from "@/mock-data";
+import type { MockSample, Test, TestQueueItem } from "@/mock-data";
 
 export interface ListTestsQuery {
   page?: number;
@@ -80,6 +80,23 @@ export interface BulkApproveInput {
 export interface BulkApproveResult {
   approved: Test[];
   failed: Array<{ testId: string; reason: string }>;
+}
+
+// =========================================================================
+// Reissue — clone an approved sample into a new one with id `<base>-R<n>`.
+// The copy keeps every byte of the source's test work (approvals, review
+// history, parameter values, etc.) intact — only the wrapper fields
+// (id, status, a handful of dates) are refreshed.
+// =========================================================================
+export interface ReissueSampleInput {
+  sourceSampleId: string;
+  /** Optional human reason — captured for future audit; not stored today. */
+  reason?: string;
+}
+
+export interface ReissueSampleResult {
+  newSample: MockSample;
+  newId: string;
 }
 
 /** Mock "current user id" — used to scope the analyst "my submissions" view. */

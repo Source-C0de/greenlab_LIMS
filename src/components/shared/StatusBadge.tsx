@@ -64,6 +64,10 @@ export function StatusBadge({ status, className = "" }: StatusBadgeProps) {
       colorClass =
         "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/25";
       break;
+    case "reissue":
+      colorClass =
+        "bg-violet-500/15 text-violet-700 dark:text-violet-400 border-violet-500/30 hover:bg-violet-500/25";
+      break;
     case "rejected":
     case "overdue":
     case "expired":
