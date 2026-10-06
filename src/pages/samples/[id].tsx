@@ -33,6 +33,12 @@ export default function SampleDetail() {
   const reissueMatch = /^(.+)-R(\d+)$/.exec(id ?? "");
   const sourceId = reissueMatch?.[1];
 
+  // Supplementary lineage: parallel to reissue but with -S\d+ suffix.
+  // The new sample's status is "Supplementary" and the user is expected
+  // to add additional tests/parameters via the existing "Add Test" flow.
+  const supplementaryMatch = /^(.+)-S(\d+)$/.exec(id ?? "");
+  const supplementarySourceId = supplementaryMatch?.[1];
+
   // Keep this page in sync with the approval store so any decision made from
   // the TestReviewDrawer (or any other source) is reflected immediately.
   useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);
@@ -195,6 +201,26 @@ export default function SampleDetail() {
             </span>
             <Link
               to={`/samples/${sourceId}`}
+              className="underline underline-offset-2 hover:no-underline font-medium"
+            >
+              {isRtl ? "عرض المصدر ←" : "View source →"}
+            </Link>
+          </div>
+        )}
+        {supplementarySourceId && (
+          <div
+            role="note"
+            data-testid="supplementary-to-banner"
+            className="mb-3 rounded-md border border-sky-200 bg-sky-50 text-sky-900 dark:bg-sky-950/30 dark:text-sky-200 dark:border-sky-800 px-4 py-2 flex items-center gap-2 text-sm"
+          >
+            <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1">
+              {isRtl
+                ? `عينة تكميلية لـ ${supplementarySourceId}`
+                : `Supplementary to ${supplementarySourceId}`}
+            </span>
+            <Link
+              to={`/samples/${supplementarySourceId}`}
               className="underline underline-offset-2 hover:no-underline font-medium"
             >
               {isRtl ? "عرض المصدر ←" : "View source →"}

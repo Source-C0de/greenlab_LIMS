@@ -83,6 +83,22 @@ export interface BulkApproveResult {
 }
 
 // =========================================================================
+// Supplementary — same clone + id-continuation as Reissue, but with the
+// `isSupplementary` flag on the result so callers can route the user into
+// the existing "Add Test" flow on the detail page.
+// =========================================================================
+export interface SupplementarySampleInput {
+  sourceSampleId: string;
+  /** Optional human reason — captured for future audit; not stored today. */
+  reason?: string;
+}
+
+export interface SupplementarySampleResult {
+  newSample: MockSample;
+  newId: string;
+}
+
+// =========================================================================
 // Reissue — clone an approved sample into a new one with id `<base>-R<n>`.
 // The copy keeps every byte of the source's test work (approvals, review
 // history, parameter values, etc.) intact — only the wrapper fields

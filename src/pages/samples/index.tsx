@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   mockSamples,
   mockClients,
@@ -9,6 +9,7 @@ import {
 import { generateSampleId } from "@/lib/sample-id";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useReissueSample } from "@/hooks/test-approvals/useReissueSample";
+import { useSupplementarySample } from "@/hooks/test-approvals/useSupplementarySample";
 import { samplesStore } from "@/hooks/test-approvals/store";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,7 @@ import {
   Edit,
   Trash2,
   X,
+  Layers,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -84,6 +86,8 @@ export default function SamplesList() {
   const isRtl = language === "ar";
 
   const { reissue } = useReissueSample();
+  const { supplementary } = useSupplementarySample();
+  const [, setLocation] = useLocation();
 
   const [samples, setSamples] = useState(mockSamples);
   const [isAdding, setIsAdding] = useState(false);
@@ -879,6 +883,53 @@ export default function SamplesList() {
                                 }}
                               >
                                 <FileText className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            {isApproved && (
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7 text-sky-700 border-sky-200 bg-sky-50 hover:bg-sky-100 hover:text-sky-800"
+                                title={
+                                  isRtl ? "عينة تكميلية" : "Supplementary sample"
+                                }
+                                aria-label={
+                                  isRtl
+                                    ? `عينة تكميلية لـ ${s.id}`
+                                    : `Supplementary for ${s.id}`
+                                }
+                                disabled={
+                                  currentRole !== "admin" &&
+                                  currentRole !== "lab_manager"
+                                }
+                                onClick={() => {
+                                  const result = supplementary({
+                                    sourceSampleId: s.id,
+                                  });
+                                  if (result) {
+                                    toast.success(
+                                      isRtl
+                                        ? `تم إنشاء عينة تكميلية: ${result.newId}`
+                                        : `Supplementary sample created: ${result.newId}`,
+                                    );
+                                    setSamples([
+                                      ...(samplesStore as typeof samples),
+                                    ]);
+                                    // Land on the new sample's detail page
+                                    // so the user can use the existing
+                                    // "Add Test" dialog to attach new
+                                    // tests/parameters.
+                                    setLocation(`/samples/${result.newId}`);
+                                  } else {
+                                    toast.error(
+                                      isRtl
+                                        ? "فشل إنشاء العينة التكميلية"
+                                        : "Failed to create supplementary",
+                                    );
+                                  }
+                                }}
+                              >
+                                <Layers className="h-3.5 w-3.5" />
                               </Button>
                             )}
                           </div>
