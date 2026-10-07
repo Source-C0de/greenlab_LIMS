@@ -72,6 +72,31 @@ export function StatusBadge({ status, className = "" }: StatusBadgeProps) {
       colorClass =
         "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30 hover:bg-sky-500/25";
       break;
+    case "client_requested":
+      colorClass =
+        "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/25";
+      break;
+    case "csr_drafting":
+    case "quotation_drafting":
+      colorClass =
+        "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25";
+      break;
+    case "te_pending":
+    case "sales_order_pending":
+      colorClass =
+        "bg-violet-500/15 text-violet-700 dark:text-violet-400 border-violet-500/30 hover:bg-violet-500/25";
+      break;
+    case "te_approved":
+    case "sales_order_confirmed":
+    case "ready_for_receiving":
+      colorClass =
+        "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/25";
+      break;
+    case "te_rejected":
+      colorClass =
+        "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30 hover:bg-red-500/25";
+      variant = "destructive";
+      break;
     case "rejected":
     case "overdue":
     case "expired":

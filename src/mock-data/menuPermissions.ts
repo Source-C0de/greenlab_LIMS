@@ -13,6 +13,7 @@ import {
   FolderKanban,
   Calculator,
   ClipboardCheck,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 
@@ -45,7 +46,9 @@ export type MenuKey =
   | "test_approvals"
   | "my_submissions"
   | "marketing_reports"
-  | "quotations";
+  | "quotations"
+  | "client_requests"
+  | "technical_evaluation";
 
 export type MenuGroup = "lab" | "client" | "accounting" | "admin";
 
@@ -137,6 +140,22 @@ export const MENU_REGISTRY: Record<MenuKey, MenuEntry> = {
     labelAr: "عروض الأسعار",
     icon: FileText,
     href: "/quotations",
+    group: "lab",
+  },
+  client_requests: {
+    key: "client_requests",
+    labelEn: "Client Requests",
+    labelAr: "طلبات العملاء",
+    icon: ClipboardList,
+    href: "/client-requests",
+    group: "lab",
+  },
+  technical_evaluation: {
+    key: "technical_evaluation",
+    labelEn: "Technical Evaluation",
+    labelAr: "التقييم الفني",
+    icon: ClipboardCheck,
+    href: "/technical-evaluation",
     group: "lab",
   },
   accounting_dashboard: {

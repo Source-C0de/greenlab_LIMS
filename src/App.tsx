@@ -56,6 +56,11 @@ import TestMasterPage from "@/pages/specifications/test-master";
 import SampleReceiving from "@/pages/samples/receiving";
 import ApprovalsQueue from "@/pages/approvals/queue";
 import MySubmissions from "@/pages/approvals/my-submissions";
+import ClientRequestsList from "@/pages/client-requests/index";
+import NewClientRequest from "@/pages/client-requests/new";
+import ClientRequestDetail from "@/pages/client-requests/[id]";
+import TechnicalEvaluationList from "@/pages/technical-evaluation/index";
+import TechnicalEvaluationDetail from "@/pages/technical-evaluation/[id]";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -139,6 +144,14 @@ function Router() {
       {/* Approval Routes */}
       <Route path="/approvals"><ProtectedRoute><LayoutWrapper component={ApprovalsQueue} /></ProtectedRoute></Route>
       <Route path="/approvals/my-submissions"><ProtectedRoute><LayoutWrapper component={MySubmissions} /></ProtectedRoute></Route>
+
+      {/* Pre-sample pipeline: Client Requests + Technical Evaluation.
+          Splats handle the slash-bearing ids if we add them later. */}
+      <Route path="/client-requests"><ProtectedRoute roles={["admin", "lab_manager", "receptionist"]}><LayoutWrapper component={ClientRequestsList} /></ProtectedRoute></Route>
+      <Route path="/client-requests/new"><ProtectedRoute roles={["admin", "lab_manager", "receptionist"]}><LayoutWrapper component={NewClientRequest} /></ProtectedRoute></Route>
+      <Route path="/client-requests/*"><ProtectedRoute roles={["admin", "lab_manager", "receptionist"]}><LayoutWrapper component={ClientRequestDetail} /></ProtectedRoute></Route>
+      <Route path="/technical-evaluation"><ProtectedRoute roles={["admin", "lab_manager"]}><LayoutWrapper component={TechnicalEvaluationList} /></ProtectedRoute></Route>
+      <Route path="/technical-evaluation/*"><ProtectedRoute roles={["admin", "lab_manager"]}><LayoutWrapper component={TechnicalEvaluationDetail} /></ProtectedRoute></Route>
 
       {/* 404 */}
       <Route component={NotFound} />
