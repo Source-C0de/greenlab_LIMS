@@ -8,10 +8,12 @@ import {
   Activity,
   Plus,
   Copy,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TestTable, type TestTableTest } from "@/components/tests/TestTable";
 import { AddTestToSampleDialog, type NewSampleTest } from "@/components/samples/AddTestToSampleDialog";
+import { AddTestFromTeDialog } from "@/components/samples/AddTestFromTeDialog";
 import { ReplicateTestsDialog } from "@/components/samples/ReplicateTestsDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppContext } from "@/context/AppContext";
@@ -38,6 +40,7 @@ export function SampleTabs({
   const { language, currentRole } = useAppContext();
   const isRtl = language === "ar";
   const [isAddTestOpen, setIsAddTestOpen] = useState(false);
+  const [isAddFromTeOpen, setIsAddFromTeOpen] = useState(false);
   const [isReplicateOpen, setIsReplicateOpen] = useState(false);
 
   const timelineSteps = [
@@ -99,6 +102,19 @@ export function SampleTabs({
                 >
                   <Copy className="mr-2 h-4 w-4" />
                   {isRtl ? "تكرار إلى عينات أخرى" : "Replicate to Samples"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsAddFromTeOpen(true)}
+                  title={
+                    isRtl
+                      ? "إضافة اختبار من تقييم فني"
+                      : "Add test from Technical Evaluation"
+                  }
+                >
+                  <ClipboardList className="mr-2 h-4 w-4" />
+                  {isRtl ? "إضافة من تقييم فني" : "Add from TE"}
                 </Button>
                 <Button size="sm" onClick={() => setIsAddTestOpen(true)}>
                   <Plus className="mr-2 h-4 w-4" />
@@ -193,6 +209,16 @@ export function SampleTabs({
         onAdd={(newTests) => {
           onAddTest(newTests);
           setIsAddTestOpen(false);
+        }}
+        sampleId={sample.id}
+      />
+
+      <AddTestFromTeDialog
+        isOpen={isAddFromTeOpen}
+        onClose={() => setIsAddFromTeOpen(false)}
+        onAdd={(newTests) => {
+          onAddTest(newTests);
+          setIsAddFromTeOpen(false);
         }}
         sampleId={sample.id}
       />

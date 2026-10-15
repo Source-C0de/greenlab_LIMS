@@ -43,13 +43,15 @@ export default function SampleDetail() {
   // the TestReviewDrawer (or any other source) is reflected immediately.
   useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);
 
-  const sample: MockSample = useMemo(
-    () =>
-      findSample(id ?? "") ??
-      mockSamples.find((s) => s.id === id) ??
-      mockSamples[0],
-    [id],
-  );
+  // Read the live sample from the store on every render. The
+  // useSyncExternalStore above re-fires on every store mutation, so this
+  // picks up newly-added tests (e.g. from AddTestFromTeDialog /
+  // AddTestToSampleDialog) without a stale useMemo caching the old
+  // reference. Falls back to mockSamples for IDs not in the live store.
+  const sample: MockSample =
+    findSample(id ?? "") ??
+    mockSamples.find((s) => s.id === id) ??
+    mockSamples[0];
 
   // Dialog States
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);

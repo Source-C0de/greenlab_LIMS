@@ -113,8 +113,56 @@ export function TestTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tests.flatMap((test) =>
-                (test.parameters ?? []).map((param) => (
+              {tests.flatMap((test) => {
+                const params = test.parameters ?? [];
+                if (params.length === 0) {
+                  // Render a single placeholder row so the test itself stays
+                  // visible and editable. This covers tests imported from a
+                  // Technical Evaluation (which arrive with parameters=[]).
+                  const placeholder = {
+                    id: `${test.id}--placeholder`,
+                    name: "—",
+                    value: "",
+                    unit: "",
+                    min: null,
+                    max: null,
+                    status: "pending" as const,
+                  };
+                  return [
+                    <TestRowExpandable
+                      key={`${test.id}-placeholder`}
+                      test={test}
+                      parameter={placeholder as any}
+                      onView={onViewTest}
+                      onEdit={canModifyTest ? onEditTest : undefined}
+                      onDelete={canModifyTest ? onDeleteTest : undefined}
+                      canModifyTest={canModifyTest}
+                      onAssignAnalyst={
+                        onUpdateTest
+                          ? (analyst) => {
+                              if (analyst === null) {
+                                onUpdateTest(test.id, { assignedTo: null });
+                              } else {
+                                onUpdateTest(test.id, {
+                                  assignedTo: analyst.name,
+                                });
+                              }
+                            }
+                          : undefined
+                      }
+                      analystPickerOpen={analystPickerFor === test.id}
+                      onAnalystPickerOpenChange={(open) => {
+                        setAnalystPickerFor(open ? test.id : null);
+                        if (!open) setAnalystSearch("");
+                      }}
+                      analystSearch={analystSearch}
+                      onAnalystSearchChange={setAnalystSearch}
+                      filteredAnalysts={filteredAnalysts}
+                      canEditAnalyst={currentRole !== "client"}
+                    />,
+                  ];
+                }
+                return params.map((param) => (
                   <TestRowExpandable
                     key={`${test.id}-${param.id}`}
                     test={test}
@@ -144,8 +192,8 @@ export function TestTable({
                     filteredAnalysts={filteredAnalysts}
                     canEditAnalyst={currentRole !== "client"}
                   />
-                )),
-              )}
+                ));
+              })}
             </TableBody>
           </Table>
         </div>
