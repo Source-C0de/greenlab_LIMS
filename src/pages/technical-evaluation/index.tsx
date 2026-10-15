@@ -5,13 +5,15 @@
 // Role-gated: admin, lab_manager.
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { toast } from "sonner";
 import {
   workOrdersStore,
   subscribeWorkOrders,
   getWorkOrdersSnapshot,
 } from "@/mock-data/workOrderStore";
 import { useAppContext } from "@/context/AppContext";
+import { useDuplicateWorkOrder } from "@/hooks/technical-evaluation/useDuplicateWorkOrder";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ClipboardCheck, Search, Eye } from "lucide-react";
+import { ClipboardCheck, Search, Eye, Copy } from "lucide-react";
 import type { WorkOrder, WorkOrderStage } from "@/mock-data/workOrders";
 
 const ALLOWED_ROLES = new Set(["admin", "lab_manager"]);
@@ -38,6 +40,8 @@ const ALLOWED_ROLES = new Set(["admin", "lab_manager"]);
 export default function TechnicalEvaluationList() {
   const { currentRole, language } = useAppContext();
   const isRtl = language === "ar";
+  const [, setLocation] = useLocation();
+  const { duplicate } = useDuplicateWorkOrder();
 
   useSyncExternalStore(
     subscribeWorkOrders,
@@ -178,11 +182,42 @@ export default function TechnicalEvaluationList() {
                     {submittedAt(wo)}
                   </TableCell>
                   <TableCell className="text-end">
-                    <Button asChild variant="outline" size="icon">
-                      <Link to={`/technical-evaluation/${wo.id}`}>
-                        <Eye className="h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
+                    <div className="flex justify-end gap-1">
+                      <Button asChild variant="outline" size="icon">
+                        <Link to={`/technical-evaluation/${wo.id}`}>
+                          <Eye className="h-3.5 w-3.5" />
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7 text-sky-700 border-sky-200 hover:bg-sky-50"
+                        title={isRtl ? "تكرار" : "Duplicate"}
+                        aria-label={
+                          isRtl ? `تكرار ${wo.id}` : `Duplicate ${wo.id}`
+                        }
+                        disabled={!ALLOWED_ROLES.has(currentRole)}
+                        onClick={() => {
+                          const result = duplicate(wo.id);
+                          if (result) {
+                            toast.success(
+                              isRtl
+                                ? `تم التكرار باسم ${result.newId}`
+                                : `Duplicated as ${result.newId}`,
+                            );
+                            setLocation(
+                              `/technical-evaluation/${result.newId}`,
+                            );
+                          } else {
+                            toast.error(
+                              isRtl ? "فشل التكرار" : "Duplicate failed",
+                            );
+                          }
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

@@ -50,6 +50,45 @@ export function nextWorkOrderId(): string {
   return `${prefix}${String(next).padStart(4, "0")}`;
 }
 
+/**
+ * Pure — exported for testability.
+ *
+ * Deep-clone an existing work order into a new pending TE. The clone
+ * preserves every field (client, sample, test rows, preparedBy/checkedBy
+ * signatures) but resets:
+ *   - id          → fresh `WO-YYYY-NNNN` via `nextWorkOrderId()`
+ *   - stage       → `te_pending`
+ *   - requestedAt → now
+ *   - stageHistory → single entry recording the duplication
+ *   - rejectionReason → removed (stale from a prior rejection)
+ *
+ * The clone is **not** pushed onto the store and no notification is fired
+ * here; callers are responsible for `workOrdersStore.push(clone)` and
+ * `notifyWorkOrdersChanged()`.
+ */
+export function cloneWorkOrder(sourceId: string): WorkOrder | null {
+  const source = findWorkOrder(sourceId);
+  if (!source) return null;
+
+  const cloned: WorkOrder = structuredClone(source);
+  const now = new Date().toISOString();
+  cloned.id = nextWorkOrderId();
+  cloned.stage = "te_pending";
+  cloned.requestedAt = now;
+  cloned.stageHistory = [
+    {
+      stage: "te_pending",
+      byUserId: "current-user",
+      byUserName: "current-user",
+      byUserRole: "lab_manager",
+      at: now,
+      note: `Duplicated from ${source.id}`,
+    },
+  ];
+  delete cloned.rejectionReason;
+  return cloned;
+}
+
 export function resetWorkOrdersStore() {
   workOrdersStore.length = 0;
   workOrdersStore.push(
