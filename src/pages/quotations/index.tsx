@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, Link } from "wouter";
-import { Plus, Eye, Pencil, Trash2, FileText } from "lucide-react";
+import { Plus, Eye, Pencil, Trash2, FileText, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 import { SAR } from "@/lib/quotation-utils";
 import { deleteDraft, listDrafts } from "@/lib/quotation-storage";
 import { mockQuotations, type Quotation, type QuotationStatus } from "@/mock-data";
+import { CreateQuotationFromTeDialog } from "@/components/quotations/CreateQuotationFromTeDialog";
 import { toast } from "sonner";
 
 const STATUS_LABELS: Record<QuotationStatus, { en: string; ar: string }> = {
@@ -68,6 +69,7 @@ export default function QuotationsList() {
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [statusFilter, setStatusFilter] = useState<QuotationStatus | "all">("all");
+  const [isFromTeOpen, setIsFromTeOpen] = useState(false);
 
   // Re-read drafts from localStorage on mount + after returning to this page.
   useEffect(() => {
@@ -224,10 +226,24 @@ export default function QuotationsList() {
           <h1 className="text-3xl font-bold tracking-tight">{pick(LABELS.title)}</h1>
           <p className="text-muted-foreground mt-1">{pick(LABELS.subtitle)}</p>
         </div>
-        <Button onClick={() => navigate("/quotations/new")}>
-          <Plus className="h-4 w-4 me-2" />
-          {pick(LABELS.newBtn)}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <Button
+            variant="outline"
+            onClick={() => setIsFromTeOpen(true)}
+            title={
+              isRtl
+                ? "إنشاء عرض سعر من تقييم فني معتمد"
+                : "Create quotation from an approved Technical Evaluation"
+            }
+          >
+            <ClipboardList className="h-4 w-4 me-2" />
+            {isRtl ? "جديد من تقييم فني" : "New from TE"}
+          </Button>
+          <Button onClick={() => navigate("/quotations/new")}>
+            <Plus className="h-4 w-4 me-2" />
+            {pick(LABELS.newBtn)}
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -267,6 +283,17 @@ export default function QuotationsList() {
           }
         />
       )}
+
+      <CreateQuotationFromTeDialog
+        isOpen={isFromTeOpen}
+        onClose={() => setIsFromTeOpen(false)}
+        onPick={(wo) => {
+          setIsFromTeOpen(false);
+          navigate(
+            `/quotations/new?fromTe=${encodeURIComponent(wo.id)}`,
+          );
+        }}
+      />
     </div>
   );
 }

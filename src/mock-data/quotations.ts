@@ -57,6 +57,13 @@ export interface Quotation {
   /** Frozen at issue time so the printout is stable. */
   clientSnapshot: QuotationClientSnapshot;
 
+  /**
+   * Source work order (Technical Evaluation) id, when the quotation was
+   * created from an approved TE via the "New from TE" entry point.
+   * Optional — quotations created blank don't have one.
+   */
+  workOrderId?: string;
+
   lineItems: QuotationLineItem[];
 
   /** Sum of all lineTotals. */

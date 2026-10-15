@@ -7,6 +7,7 @@
  */
 
 import type { Quotation, QuotationLineItem } from "@/mock-data/quotations";
+import { mockSpecifications } from "@/mock-data";
 
 /** ZATCA standard output VAT rate. */
 export const VAT_RATE = 0.15;
@@ -125,3 +126,15 @@ export const DEFAULT_TERMS_EN =
 /** Arabic counterpart for the bilingual default terms. */
 export const DEFAULT_TERMS_AR =
   "هذا العرض صالح حتى التاريخ المذكور أعلاه. الأسعار بالريال السعودي وتشمل ضريبة القيمة المضافة ١٥٪ ما لم يُذكر خلاف ذلك. تبدأ مدة التنفيذ في المختبر من تاريخ استلام العينة وقبول أمر الشراء. شروط الدفع: صافي ٣٠ يومًا من تاريخ الفاتورة.";
+
+/**
+ * Look up a specification's defaultPrice by case-insensitive name match.
+ * Returns 0 if no match. Used when seeding a quotation from a TE's
+ * testRequired list (which carries a name but no price).
+ */
+export function lookupSpecPrice(name: string): number {
+  const n = name.trim().toLowerCase();
+  if (!n) return 0;
+  const hit = mockSpecifications.find((s) => s.name.toLowerCase() === n);
+  return hit?.defaultPrice ?? 0;
+}

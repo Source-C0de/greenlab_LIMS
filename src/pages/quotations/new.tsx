@@ -49,7 +49,10 @@ import {
   mockQuotations,
   mockSpecifications,
   type Quotation,
+  type QuotationLineItem,
 } from "@/mock-data";
+import { workOrdersStore } from "@/mock-data/workOrderStore";
+import { lookupSpecPrice } from "@/lib/quotation-utils";
 
 // Mutable local copy of mockClients so inline-added clients persist within
 // the session (consistent with how other pages treat mock-data as mutable).
@@ -134,15 +137,69 @@ export default function NewQuotation() {
   const [q, setQ] = useState<Quotation>(() => blankQuotation(createdBy));
   const [issued, setIssued] = useState(false);
 
-  // Resume from ?draft=<id> if present.
+  // Resume from ?draft=<id>, or seed from ?fromTe=<woId>, if present.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+
+    // Resume from a saved draft.
     const draftId = params.get("draft");
-    if (!draftId) return;
-    const loaded = loadDraft(draftId);
-    if (loaded) {
-      setQ(recalc(loaded));
+    if (draftId) {
+      const loaded = loadDraft(draftId);
+      if (loaded) setQ(recalc(loaded));
+      return;
+    }
+
+    // Seed from an approved Technical Evaluation.
+    const fromTe = params.get("fromTe");
+    if (fromTe) {
+      const wo = workOrdersStore.find((w) => w.id === fromTe);
+      if (!wo) {
+        toast.error(
+          isRtl ? "التقييم الفني غير موجود" : "Source TE not found.",
+        );
+        return;
+      }
+      const client = mockClients.find((c) => c.id === wo.clientId);
+      const lineItems: QuotationLineItem[] = wo.testRows
+        .map((r) => (r.testRequired ?? "").trim())
+        .filter(Boolean)
+        .map((name) => {
+          const price = lookupSpecPrice(name);
+          return {
+            id: localUid(),
+            source: "catalog" as const,
+            specificationId: null,
+            name,
+            quantity: 1,
+            unitPrice: price,
+            lineTotal: price,
+          };
+        });
+      const seeded: Quotation = {
+        ...blankQuotation(createdBy),
+        clientId: client?.id ?? "",
+        clientSnapshot: client
+          ? {
+              nameEn: client.nameEn,
+              nameAr: client.nameAr,
+              vatNo: client.vatNo,
+              contactPerson: client.contactPerson,
+              email: client.email,
+              phone: client.phone,
+            }
+          : { nameEn: wo.clientName, nameAr: "" },
+        workOrderId: wo.id,
+        lineItems,
+      };
+      setQ(recalc(seeded));
+      // Skip the client step when the client is known.
+      if (client) setStep("tests");
+      toast.success(
+        isRtl
+          ? `تم تحميل ${lineItems.length} اختبار من ${wo.id}`
+          : `Loaded ${lineItems.length} test${lineItems.length === 1 ? "" : "s"} from ${wo.id}`,
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
