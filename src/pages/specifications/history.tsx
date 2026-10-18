@@ -3,7 +3,7 @@ import { useState } from "react";
 import { mockSpecifications } from "@/mock-data/specifications";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
-import { History, Eye, RotateCcw } from "lucide-react";
+import { Eye, RotateCcw } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { Badge } from "@/components/ui/badge";
 
@@ -46,16 +46,13 @@ export default function VersionHistory() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <History className="h-8 w-8 text-primary" />
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            {isRtl ? "سجل الإصدارات" : "Version Control & History"}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {isRtl ? "تتبع جميع التغييرات والمراجعات في مواصفات المختبر" : "Track all changes and revisions in laboratory specifications"}
-          </p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {isRtl ? "سجل الإصدارات" : "Version Control & History"}
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          {isRtl ? "تتبع جميع التغييرات والمراجعات في مواصفات المختبر" : "Track all changes and revisions in laboratory specifications"}
+        </p>
       </div>
 
       <DataTable 

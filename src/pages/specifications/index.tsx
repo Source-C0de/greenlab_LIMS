@@ -7,14 +7,9 @@ import {
   Plus,
   Filter,
   Download,
-  History,
-  CheckCircle2,
-  BookOpen,
-  TestTube2,
   Pencil,
   Trash2,
   Eye,
-  ListChecks
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { Badge } from "@/components/ui/badge";
@@ -101,10 +96,7 @@ export default function SpecificationList() {
       render: (item: any) => {
         const count = item.parameters?.length || 0;
         return (
-          <span className="inline-flex items-center gap-1 text-xs">
-            <ListChecks className="h-3 w-3 text-muted-foreground" />
-            <span className="font-medium">{count}</span>
-          </span>
+          <span className="text-xs font-medium">{count}</span>
         );
       },
     },
@@ -114,10 +106,7 @@ export default function SpecificationList() {
       render: (item: any) => {
         const count = item.tests?.length || 0;
         return (
-          <span className="inline-flex items-center gap-1 text-xs">
-            <TestTube2 className="h-3 w-3 text-muted-foreground" />
-            <span className="font-medium">{count}</span>
-          </span>
+          <span className="text-xs font-medium">{count}</span>
         );
       },
     },
@@ -189,49 +178,29 @@ export default function SpecificationList() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-card p-4 rounded-xl border shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600">
-            <BookOpen className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {isRtl ? "إجمالي المواصفات" : "Total Specs"}
-            </p>
-            <p className="text-2xl font-bold">{specs.length}</p>
-          </div>
+        <div className="bg-card p-4 rounded-xl border shadow-sm">
+          <p className="text-sm text-muted-foreground">
+            {isRtl ? "إجمالي المواصفات" : "Total Specs"}
+          </p>
+          <p className="text-2xl font-bold">{specs.length}</p>
         </div>
-        <div className="bg-card p-4 rounded-xl border shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-lg bg-green-500/10 flex items-center justify-center text-green-600">
-            <ListChecks className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {isRtl ? "إجمالي المعلمات" : "Total Parameters"}
-            </p>
-            <p className="text-2xl font-bold">{totalParameters}</p>
-          </div>
+        <div className="bg-card p-4 rounded-xl border shadow-sm">
+          <p className="text-sm text-muted-foreground">
+            {isRtl ? "إجمالي المعلمات" : "Total Parameters"}
+          </p>
+          <p className="text-2xl font-bold">{totalParameters}</p>
         </div>
-        <div className="bg-card p-4 rounded-xl border shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-600">
-            <TestTube2 className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {isRtl ? "إجمالي الاختبارات" : "Total Tests"}
-            </p>
-            <p className="text-2xl font-bold">{totalTests}</p>
-          </div>
+        <div className="bg-card p-4 rounded-xl border shadow-sm">
+          <p className="text-sm text-muted-foreground">
+            {isRtl ? "إجمالي الاختبارات" : "Total Tests"}
+          </p>
+          <p className="text-2xl font-bold">{totalTests}</p>
         </div>
-        <div className="bg-card p-4 rounded-xl border shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-600">
-            <CheckCircle2 className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {isRtl ? "الفئات" : "Categories"}
-            </p>
-            <p className="text-2xl font-bold">{uniqueCategories}</p>
-          </div>
+        <div className="bg-card p-4 rounded-xl border shadow-sm">
+          <p className="text-sm text-muted-foreground">
+            {isRtl ? "الفئات" : "Categories"}
+          </p>
+          <p className="text-2xl font-bold">{uniqueCategories}</p>
         </div>
       </div>
 
@@ -246,10 +215,7 @@ export default function SpecificationList() {
       <Dialog open={!!viewTarget} onOpenChange={(o) => !o && setViewTarget(null)}>
         <DialogContent className="sm:max-w-[640px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-primary" />
-              {viewTarget?.name}
-            </DialogTitle>
+            <DialogTitle>{viewTarget?.name}</DialogTitle>
             <DialogDescription className="font-mono text-xs">
               {viewTarget?.code} · {viewTarget?.id}
             </DialogDescription>

@@ -13,13 +13,10 @@ import {
   Plus,
   Download,
   Loader2,
-  TestTube2,
   Eye,
   Pencil,
   Trash2,
   X,
-  Check,
-  BookOpen,
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import {
@@ -39,7 +36,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
 type FormState = {
   testName: string;
@@ -385,8 +381,7 @@ export default function TestMasterPage() {
           const spec = mockSpecifications.find(s => s.id === item.specificationId);
           if (!spec) {
             return (
-              <Badge variant="outline" className="text-[10px] font-mono gap-1">
-                <BookOpen className="h-3 w-3" />
+              <Badge variant="outline" className="text-[10px] font-mono">
                 {item.specificationId}
               </Badge>
             );
@@ -394,10 +389,9 @@ export default function TestMasterPage() {
           return (
             <Badge
               variant="outline"
-              className="text-[10px] font-mono gap-1"
+              className="text-[10px] font-mono"
               title={spec.name}
             >
-              <BookOpen className="h-3 w-3" />
               {spec.code}
             </Badge>
           );
@@ -446,8 +440,7 @@ export default function TestMasterPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <TestTube2 className="h-8 w-8 text-primary" />
+          <h1 className="text-3xl font-bold tracking-tight">
             {isRtl ? "معلمات الاختبار" : "Test Methods"}
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -588,12 +581,6 @@ export default function TestMasterPage() {
                                         }}
                                         disabled={selected}
                                       >
-                                        <Check
-                                          className={cn(
-                                            "mr-2 h-4 w-4",
-                                            selected ? "opacity-100" : "opacity-0"
-                                          )}
-                                        />
                                         <div className="flex flex-col">
                                           <span className="text-sm font-medium">{p.name}</span>
                                           <span className="text-[10px] text-muted-foreground">
@@ -787,7 +774,6 @@ export default function TestMasterPage() {
                         {mockSpecifications.map(spec => (
                           <SelectItem key={spec.id} value={spec.id}>
                             <div className="flex items-center gap-2">
-                              <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
                               <span className="font-mono text-xs">{spec.code}</span>
                               <span className="text-muted-foreground">·</span>
                               <span>{spec.name}</span>

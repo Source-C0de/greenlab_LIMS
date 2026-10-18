@@ -19,12 +19,7 @@ import {
   CardTitle,
   CardDescription
 } from "@/components/ui/card";
-import {
-  Save,
-  ArrowLeft,
-  CheckCircle2,
-  Info
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import { toast } from "sonner";
 
@@ -138,8 +133,7 @@ export default function NewSpecification() {
 
       <Card className="lg:col-span-3 border-primary/10 shadow-sm overflow-hidden">
         <CardHeader className="bg-primary/5 border-b py-4">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-primary" />
+          <CardTitle className="text-lg">
             {isRtl ? "المعلومات الأساسية" : "Basic Information"}
           </CardTitle>
           <CardDescription>
@@ -197,8 +191,7 @@ export default function NewSpecification() {
       </Card>
 
       <Card className="border-dashed border-2 bg-muted/20">
-        <CardContent className="py-6 flex items-start gap-3 text-sm text-muted-foreground">
-          <Info className="h-5 w-5 mt-0.5 shrink-0 text-muted-foreground/70" />
+        <CardContent className="py-6 text-sm text-muted-foreground">
           <div className="space-y-1">
             <p className="font-medium text-foreground">
               {isRtl ? "معلمات الاختبار والاختبارات" : "Test Parameters and Tests"}
@@ -217,11 +210,9 @@ export default function NewSpecification() {
           {isRtl ? "إلغاء" : "Cancel"}
         </Button>
         <Button variant="secondary" onClick={handleSave}>
-          <Save className="mr-2 h-4 w-4" />
           {isRtl ? "حفظ كمسودة" : "Save as Draft"}
         </Button>
         <Button onClick={handleSave} className="bg-primary">
-          <Save className="mr-2 h-4 w-4" />
           {editingSpec
             ? isRtl
               ? "حفظ التغييرات"

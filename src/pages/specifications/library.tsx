@@ -2,13 +2,10 @@ import { useState } from "react";
 import { parameterLibrary, ParameterMaster } from "@/mock-data/specifications";
 import { DataTable } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
-import { 
-  Plus, 
-  Filter, 
-  Download, 
-  BookOpen, 
+import {
+  Plus,
+  Download,
   Loader2,
-  Database
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
 import {
@@ -94,8 +91,7 @@ export default function ParameterLibrary() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Database className="h-8 w-8 text-primary" />
+          <h1 className="text-3xl font-bold tracking-tight">
             {isRtl ? "معلمات الاختبار" : "Test Parameters"}
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -107,7 +103,7 @@ export default function ParameterLibrary() {
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button>
-                <Plus className="mr-2 h-4 w-4" /> {isRtl ? "إضافة معلمة" : "New Parameter"}
+                <Plus className="me-2 h-4 w-4" /> {isRtl ? "إضافة معلمة" : "New Parameter"}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
@@ -188,7 +184,7 @@ export default function ParameterLibrary() {
           </Dialog>
           
           <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" /> {isRtl ? "تصدير" : "Export"}
+            <Download className="me-2 h-4 w-4" /> {isRtl ? "تصدير" : "Export"}
           </Button>
         </div>
       </div>
