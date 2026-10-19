@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAppContext, type Role } from "@/context/AppContext";
 import { DataTable } from "@/components/shared/DataTable";
@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Pencil, KeyRound, Ban, CheckCircle2, Trash2 } from "lucide-react";
+import { Plus, Pencil, KeyRound, Ban, CheckCircle2, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import {
   mockUsers,
@@ -34,8 +34,35 @@ import {
   type ToggleableRole,
 } from "@/mock-data/rolePermissions";
 import { useRoleAdmin } from "@/hooks/useRoleAdmin";
+import { isApiEnabled } from "@/lib/api";
+import {
+  useUsers,
+  useCreateUser,
+  useUpdateUser,
+  useDeleteUser,
+  useResetUserPassword,
+  useSuspendUser,
+  useActivateUser,
+} from "@/lib/queries";
+import { describeApiError } from "@/lib/apiErrors";
+import type { User, UserRole } from "@/lib/usersApi";
 
 const STATUS_VALUES: UserStatus[] = ["active", "trial", "suspended", "disabled"];
+
+/** Normalize a backend `User` to the row shape the table expects. */
+function apiUserToRow(u: User): SaaSUser {
+  return {
+    id: u.id,
+    email: u.email,
+    username: u.username,
+    fullNameEn: u.fullName,
+    fullNameAr: u.fullNameAr ?? "",
+    role: u.role as Role,
+    status: u.status,
+    lastLoginAt: u.lastLoginAt ?? undefined,
+    createdAt: u.createdAt,
+  };
+}
 
 function formatLastLogin(iso: string | undefined, isRtl: boolean): string {
   if (!iso) return isRtl ? "—" : "—";
@@ -85,10 +112,32 @@ export default function UsersAdmin() {
   const isRtl = language === "ar";
   const [, setLocation] = useLocation();
   const roleAdmin = useRoleAdmin();
+  const t = (en: string, ar: string) => (isRtl ? ar : en);
 
-  const [users, setUsers] = useState<SaaSUser[]>(mockUsers);
+  // ---------------------------------------------------------------------
+  // Data layer — API or mock, depending on VITE_USE_API.
+  // ---------------------------------------------------------------------
+  const api = isApiEnabled();
+  const usersQuery = useUsers();
+  const createMut = useCreateUser();
+  const updateMut = useUpdateUser();
+  const deleteMut = useDeleteUser();
+  const resetMut = useResetUserPassword();
+  const suspendMut = useSuspendUser();
+  const activateMut = useActivateUser();
+
+  // Local (mock) state — used only when the API is disabled.
+  const [mockList, setMockList] = useState<SaaSUser[]>(mockUsers);
+
+  // In API mode the source of truth is the server.
+  const users: SaaSUser[] = api
+    ? (usersQuery.data?.data ?? []).map(apiUserToRow)
+    : mockList;
+
+  // Dialog + form state (shared by both modes).
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingUpdatedAt, setEditingUpdatedAt] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState<
     Partial<Record<keyof FormState, string>>
@@ -98,8 +147,20 @@ export default function UsersAdmin() {
   const [deleteTarget, setDeleteTarget] = useState<SaaSUser | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
-  const t = (en: string, ar: string) => (isRtl ? ar : en);
+  // One-time tempPassword dialog (POST 201 surfaces a generated password).
+  const [tempPassword, setTempPassword] = useState<{
+    username: string;
+    password: string;
+  } | null>(null);
 
+  // Refetch after a successful mutation so the table reflects the server.
+  useEffect(() => {
+    if (!api) return;
+  }, [api]);
+
+  // ---------------------------------------------------------------------
+  // Table columns.
+  // ---------------------------------------------------------------------
   const columns = useMemo(
     () => [
       {
@@ -125,7 +186,6 @@ export default function UsersAdmin() {
         key: "role",
         header: t("Role", "الدور"),
         render: (u: SaaSUser) => {
-          // superadmin isn't in the toggleable registry.
           if (u.role === "superadmin") {
             return (
               <span className="text-sm font-medium">
@@ -224,11 +284,16 @@ export default function UsersAdmin() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isRtl],
+    [isRtl, api],
   );
+
+  // ---------------------------------------------------------------------
+  // Action handlers.
+  // ---------------------------------------------------------------------
 
   function openCreate() {
     setEditingId(null);
+    setEditingUpdatedAt(null);
     setForm(EMPTY_FORM);
     setFormErrors({});
     setDialogOpen(true);
@@ -245,6 +310,9 @@ export default function UsersAdmin() {
       status: u.status,
     });
     setFormErrors({});
+    // Capture updatedAt for If-Match when in API mode.
+    const serverRow = usersQuery.data?.data.find((r) => r.id === u.id);
+    setEditingUpdatedAt(serverRow?.updatedAt ?? null);
     setDialogOpen(true);
   }
 
@@ -254,60 +322,153 @@ export default function UsersAdmin() {
       setFormErrors(errors);
       return;
     }
+
     if (editingId) {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === editingId
-            ? {
-                ...u,
-                email: form.email,
-                username: form.username,
-                fullNameEn: form.fullNameEn,
-                fullNameAr: form.fullNameAr,
-                role: form.role,
-                status: form.status,
-              }
-            : u,
-        ),
-      );
-      toast.success(t("User updated", "تم تحديث المستخدم"));
+      if (api) {
+        updateMut.mutate(
+          {
+            id: editingId,
+            body: {
+              email: form.email,
+              username: form.username,
+              fullName: form.fullNameEn,
+              fullNameAr: form.fullNameAr || null,
+              role: form.role as UserRole,
+              status: form.status,
+            },
+            updatedAt: editingUpdatedAt ?? undefined,
+          },
+          {
+            onSuccess: () => {
+              toast.success(t("User updated", "تم تحديث المستخدم"));
+              setDialogOpen(false);
+            },
+            onError: (e) => {
+              const m = describeApiError(e, isRtl ? "ar" : "en");
+              toast.error(isRtl ? m.ar : m.en);
+            },
+          },
+        );
+      } else {
+        setMockList((prev) =>
+          prev.map((u) =>
+            u.id === editingId
+              ? {
+                  ...u,
+                  email: form.email,
+                  username: form.username,
+                  fullNameEn: form.fullNameEn,
+                  fullNameAr: form.fullNameAr,
+                  role: form.role,
+                  status: form.status,
+                }
+              : u,
+          ),
+        );
+        toast.success(t("User updated", "تم تحديث المستخدم"));
+        setDialogOpen(false);
+      }
     } else {
-      const nextId = `U${String(users.length + 1).padStart(3, "0")}`;
-      const newUser: SaaSUser = {
-        id: nextId,
-        email: form.email,
-        username: form.username,
-        fullNameEn: form.fullNameEn,
-        fullNameAr: form.fullNameAr,
-        role: form.role,
-        status: form.status,
-        createdAt: new Date().toISOString(),
-      };
-      setUsers((prev) => [newUser, ...prev]);
-      toast.success(t("User created", "تم إنشاء المستخدم"));
+      if (api) {
+        createMut.mutate(
+          {
+            email: form.email,
+            username: form.username,
+            fullName: form.fullNameEn,
+            fullNameAr: form.fullNameAr || null,
+            role: form.role as UserRole,
+            isActive: true,
+          },
+          {
+            onSuccess: (row) => {
+              toast.success(t("User created", "تم إنشاء المستخدم"));
+              if (row.tempPassword) {
+                setTempPassword({
+                  username: row.username,
+                  password: row.tempPassword,
+                });
+              }
+              setDialogOpen(false);
+            },
+            onError: (e) => {
+              const m = describeApiError(e, isRtl ? "ar" : "en");
+              toast.error(isRtl ? m.ar : m.en);
+            },
+          },
+        );
+      } else {
+        const nextId = `U${String(mockList.length + 1).padStart(3, "0")}`;
+        const newUser: SaaSUser = {
+          id: nextId,
+          email: form.email,
+          username: form.username,
+          fullNameEn: form.fullNameEn,
+          fullNameAr: form.fullNameAr,
+          role: form.role,
+          status: form.status,
+          createdAt: new Date().toISOString(),
+        };
+        setMockList((prev) => [newUser, ...prev]);
+        toast.success(t("User created", "تم إنشاء المستخدم"));
+        setDialogOpen(false);
+      }
     }
-    setDialogOpen(false);
   }
 
   function handleResetPassword(u: SaaSUser) {
-    // Stub: in real API mode, this would call POST /admin/users/{id}/reset-password.
-    toast.success(
-      t(
-        `Password reset link sent to ${u.email}`,
-        `تم إرسال رابط إعادة التعيين إلى ${u.email}`,
-      ),
-    );
+    if (api) {
+      resetMut.mutate(u.id, {
+        onSuccess: (resp) => {
+          setTempPassword({
+            username: u.username,
+            // Surface the reset link instead of a raw password — the spec
+            // says the endpoint returns a link (24h expiry).
+            password: resp.resetLink,
+          });
+        },
+        onError: (e) => {
+          const m = describeApiError(e, isRtl ? "ar" : "en");
+          toast.error(isRtl ? m.ar : m.en);
+        },
+      });
+    } else {
+      toast.success(
+        t(
+          `Password reset link sent to ${u.email}`,
+          `تم إرسال رابط إعادة التعيين إلى ${u.email}`,
+        ),
+      );
+    }
   }
 
   function handleStatus(u: SaaSUser, target: UserStatus) {
-    setUsers((prev) =>
-      prev.map((x) => (x.id === u.id ? { ...x, status: target } : x)),
-    );
-    toast.success(
-      target === "active"
-        ? t(`${u.username} activated`, `تم تفعيل ${u.username}`)
-        : t(`${u.username} suspended`, `تم تعليق ${u.username}`),
-    );
+    if (api) {
+      const serverRow = usersQuery.data?.data.find((r) => r.id === u.id);
+      const vars = { id: u.id, updatedAt: serverRow?.updatedAt };
+      const mut = target === "active" ? activateMut : suspendMut;
+      mut.mutate(vars, {
+        onSuccess: () => {
+          toast.success(
+            target === "active"
+              ? t(`${u.username} activated`, `تم تفعيل ${u.username}`)
+              : t(`${u.username} suspended`, `تم تعليق ${u.username}`),
+          );
+        },
+        onError: (e) => {
+          const m = describeApiError(e, isRtl ? "ar" : "en");
+          toast.error(isRtl ? m.ar : m.en);
+        },
+      });
+    } else {
+      setMockList((prev) =>
+        prev.map((x) => (x.id === u.id ? { ...x, status: target } : x)),
+      );
+      toast.success(
+        target === "active"
+          ? t(`${u.username} activated`, `تم تفعيل ${u.username}`)
+          : t(`${u.username} suspended`, `تم تعليق ${u.username}`),
+      );
+    }
   }
 
   function openDelete(u: SaaSUser) {
@@ -322,18 +483,47 @@ export default function UsersAdmin() {
 
   function handleDelete() {
     if (!deleteTarget) return;
-    // Typed-confirmation guard — UI mirror of the backend's
-    // hard-delete endpoint. Backend must also enforce the
-    // `?confirm=<username>` query param to prevent accidental
-    // deletes from mis-clicks or automation.
     if (deleteConfirm !== deleteTarget.username) return;
-    const target = deleteTarget;
-    setUsers((prev) => prev.filter((x) => x.id !== target.id));
-    toast.success(
-      t(`User ${target.username} deleted`, `تم حذف المستخدم ${target.username}`),
-    );
-    closeDelete();
+
+    if (api) {
+      deleteMut.mutate(
+        { id: deleteTarget.id, confirm: deleteConfirm },
+        {
+          onSuccess: () => {
+            toast.success(
+              t(
+                `User ${deleteTarget.username} deleted`,
+                `تم حذف المستخدم ${deleteTarget.username}`,
+              ),
+            );
+            closeDelete();
+          },
+          onError: (e) => {
+            const m = describeApiError(e, isRtl ? "ar" : "en");
+            toast.error(isRtl ? m.ar : m.en);
+          },
+        },
+      );
+    } else {
+      const target = deleteTarget;
+      setMockList((prev) => prev.filter((x) => x.id !== target.id));
+      toast.success(
+        t(`User ${target.username} deleted`, `تم حذف المستخدم ${target.username}`),
+      );
+      closeDelete();
+    }
   }
+
+  function copyToClipboard(text: string) {
+    try {
+      navigator.clipboard?.writeText(text);
+      toast.success(t("Copied to clipboard", "تم النسخ إلى الحافظة"));
+    } catch {
+      toast.error(t("Copy failed", "فشل النسخ"));
+    }
+  }
+
+  const loading = api && usersQuery.isLoading;
 
   return (
     <div className="space-y-6">
@@ -360,17 +550,26 @@ export default function UsersAdmin() {
           <CardTitle>
             {t("All Users", "كل المستخدمين")}{" "}
             <span className="text-muted-foreground text-base font-normal">
-              ({users.length})
+              ({loading ? "…" : users.length})
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <DataTable<SaaSUser>
-            data={users}
-            columns={columns}
-            searchKey="fullNameEn"
-            searchPlaceholder={t("Search by name…", "ابحث بالاسم…")}
-          />
+          {api && usersQuery.isError ? (
+            <div className="text-sm text-destructive py-4">
+              {(() => {
+                const m = describeApiError(usersQuery.error, isRtl ? "ar" : "en");
+                return isRtl ? m.ar : m.en;
+              })()}
+            </div>
+          ) : (
+            <DataTable<SaaSUser>
+              data={users}
+              columns={columns}
+              searchKey="fullNameEn"
+              searchPlaceholder={t("Search by name…", "ابحث بالاسم…")}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -508,16 +707,67 @@ export default function UsersAdmin() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               {t("Cancel", "إلغاء")}
             </Button>
-            <Button onClick={handleSubmit}>
+            <Button
+              onClick={handleSubmit}
+              disabled={api && (createMut.isPending || updateMut.isPending)}
+            >
               {editingId ? t("Save", "حفظ") : t("Create", "إنشاء")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* One-time credential dialog — surfaces the tempPassword (POST 201)
+          or the reset link (POST .../reset-password) for copy-to-clipboard. */}
+      <Dialog
+        open={tempPassword !== null}
+        onOpenChange={(open) => {
+          if (!open) setTempPassword(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>
+              {t("Save these credentials", "احفظ بيانات الاعتماد هذه")}
+            </DialogTitle>
+            <DialogDescription>
+              {t(
+                "This will only be shown once. Copy the value below and share it securely.",
+                "ستظهر هذه القيمة مرة واحدة فقط. انسخها أدناه وشارِكها بأمان.",
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {tempPassword && (
+            <div className="grid gap-3 py-2">
+              <div className="text-sm text-muted-foreground">
+                {t("Username", "اسم المستخدم")}: <span className="font-mono">{tempPassword.username}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 break-all rounded border bg-muted/40 px-3 py-2 text-sm font-mono">
+                  {tempPassword.password}
+                </code>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyToClipboard(tempPassword.password)}
+                  title={t("Copy", "نسخ")}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setTempPassword(null)}>
+              {t("Done", "تم")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Hard-delete confirmation — requires the caller to type the
-          username. The backend enforces the same check via a
-          `?confirm=<username>` query param (see docs/api/users.md §3.1). */}
+          username. The backend enforces the same check via
+          `?confirm=<username>` (spec §1.5). */}
       <Dialog
         open={deleteTarget !== null}
         onOpenChange={(open) => {
@@ -561,7 +811,10 @@ export default function UsersAdmin() {
             <Button
               variant="destructive"
               onClick={handleDelete}
-              disabled={deleteConfirm !== deleteTarget?.username}
+              disabled={
+                deleteConfirm !== deleteTarget?.username ||
+                (api && deleteMut.isPending)
+              }
             >
               {t("Delete permanently", "حذف نهائي")}
             </Button>

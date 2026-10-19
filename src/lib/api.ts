@@ -11,12 +11,20 @@ import { getToken } from "@/lib/auth";
 export class ApiError extends Error {
   readonly status: number;
   readonly body: unknown;
+  /** `X-Request-ID` response header, if the server set one. */
+  readonly requestId: string | null;
 
-  constructor(status: number, message: string, body: unknown) {
+  constructor(
+    status: number,
+    message: string,
+    body: unknown,
+    requestId: string | null = null,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.body = body;
+    this.requestId = requestId;
   }
 }
 
@@ -110,11 +118,12 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promis
   const parsed: unknown = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
+    const requestId = response.headers.get("X-Request-ID");
     const message =
       isJson && typeof parsed === "object" && parsed !== null && "message" in parsed
         ? String((parsed as { message: unknown }).message)
         : `HTTP ${response.status}`;
-    throw new ApiError(response.status, message, parsed);
+    throw new ApiError(response.status, message, parsed, requestId);
   }
 
   return parsed as T;
