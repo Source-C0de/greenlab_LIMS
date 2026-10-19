@@ -12,9 +12,11 @@ import { useAppContext } from "@/context/AppContext";
 import { isApiEnabled, ApiError } from "@/lib/api";
 import {
   clearToken,
+  getToken,
   login as loginRequest,
   logout as logoutRequest,
   me as meRequest,
+  setRefreshToken,
   setToken,
   type AuthUser,
   type LoginRequest,
@@ -58,6 +60,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const apiOn = isApiEnabled();
 
   // Bootstrap on mount — only when the user opted in to API mode.
+  //
+  // The bootstrap is best-effort and non-blocking. If the backend is
+  // unreachable, the user can still log in from the login form. If
+  // `/me` returns 401 (no session) we just stay anonymous.
+  //
+  // Critically: if the user has *already* logged in (e.g. a previous tab,
+  // a previous mount, or a hard refresh after a successful login), the
+  // `meRequest` race must never clobber the `authenticated` state. The
+  // explicit-mutation timestamp check covers login + OTP + logout.
   useEffect(() => {
     if (!apiOn) {
       setState({ status: "anonymous" });
@@ -69,11 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        const user = await meRequest();
+        const raw = (await meRequest()) as RawAuthUser;
         if (cancelled) return;
         // A login may have happened while /me was in flight. If so, leave
         // the authenticated state alone — the explicit mutation wins.
         if (Date.now() - lastExplicitMutationAt.current < 2000) return;
+        const user = normalizeAuthUser(raw, getToken() ?? "");
         setState({ status: "authenticated", user });
         setCurrentRole(user.role);
       } catch (err) {
@@ -81,14 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // A login may have happened while /me was in flight. Don't clobber
         // the explicit "authenticated" state with a stale 401.
         if (Date.now() - lastExplicitMutationAt.current < 2000) return;
-        // 401 = no session — that's the normal anonymous case.
-        if (err instanceof ApiError && err.status === 401) {
-          setState({ status: "anonymous" });
-        } else {
-          // Network error etc. — treat as anonymous so the UI is usable.
-          // (The Header's API status badge will surface the underlying issue.)
-          setState({ status: "anonymous" });
-        }
+        // Any error (401, network, 5xx) → treat as anonymous so the UI is
+        // usable. The login form will hit the backend directly.
+        setState({ status: "anonymous" });
       }
     })();
 
@@ -102,10 +109,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyLoginResponse = useCallback(
     (response: LoginResponse): AuthUser => {
       lastExplicitMutationAt.current = Date.now();
-      if (response.token) setToken(response.token);
-      setState({ status: "authenticated", user: response.user });
-      setCurrentRole(response.user.role);
-      return response.user;
+      // Persist the bearer token (snake_case per the backend contract) so
+      // subsequent `apiFetch` calls can attach it.
+      if (response.access_token) setToken(response.access_token);
+      if (response.refresh_token) setRefreshToken(response.refresh_token);
+      // Normalize snake_case user fields to the SPA's `AuthUser` shape.
+      const user: AuthUser = normalizeAuthUser(response.user, response.access_token);
+      setState({ status: "authenticated", user });
+      setCurrentRole(user.role);
+      return user;
     },
     [setCurrentRole],
   );
@@ -155,4 +167,40 @@ export function useAuth(): AuthContextValue {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return ctx;
+}
+
+// ---------------------------------------------------------------------------
+// Snake-case → camelCase adapter for the login response.
+// The backend returns `{ access_token, user: { full_name, ... } }`; the SPA
+// stores `AuthUser` with camelCase fields. Tolerate both shapes — if the
+// snake_case field is already absent, fall back to the camelCase one.
+// ---------------------------------------------------------------------------
+
+interface RawAuthUser extends Partial<AuthUser> {
+  full_name?: string;
+  full_name_ar?: string;
+  is_active?: boolean;
+  client_id?: string | null;
+  last_login_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+function normalizeAuthUser(raw: RawAuthUser, token: string): AuthUser {
+  const now = new Date().toISOString();
+  return {
+    id: raw.id ?? "",
+    username: raw.username ?? "",
+    email: raw.email ?? null,
+    fullName: raw.fullName ?? raw.full_name ?? "",
+    fullNameAr: raw.fullNameAr ?? raw.full_name_ar ?? null,
+    role: (raw.role ?? "admin") as AuthUser["role"],
+    isActive: raw.isActive ?? raw.is_active ?? true,
+    clientId: raw.clientId ?? raw.client_id ?? null,
+    lastLoginAt: raw.lastLoginAt ?? raw.last_login_at ?? null,
+    // `createdAt` / `updatedAt` may be missing from the login payload.
+    // Backfill so downstream code never reads `undefined`.
+    createdAt: raw.createdAt ?? raw.created_at ?? now,
+    updatedAt: raw.updatedAt ?? raw.updated_at ?? now,
+  };
 }

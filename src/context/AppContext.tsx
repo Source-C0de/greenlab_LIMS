@@ -65,14 +65,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setCurrentRole = (role: Role) => {
     setCurrentRoleState(role);
-    if (isApiEnabled()) {
-      // In API mode the role is owned by the backend. Logout+login to change it.
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[greenlablims] setCurrentRole is a no-op in API mode — log out and log in as a different user.",
-      );
-      return;
-    }
+    // In both mock and API modes, the SPA keeps a local currentRole for
+    // sidebar / role-gated UI. The backend's `user.role` is the source of
+    // truth for what the user is *actually* allowed to do, but the local
+    // override (when present) determines what the SPA renders.
     writeRoleOverride(role);
   };
 

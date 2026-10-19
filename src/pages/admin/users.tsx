@@ -103,7 +103,8 @@ function validate(form: FormState): Partial<Record<keyof FormState, string>> {
   if (!form.email.includes("@")) errors.email = "Invalid email";
   if (form.username.length < 3) errors.username = "Min 3 characters";
   if (form.fullNameEn.length < 2) errors.fullNameEn = "Required";
-  if (form.fullNameAr.length < 2) errors.fullNameAr = "Required";
+  // fullNameAr is optional — the backend's `UserCreate.fullNameAr` is
+  // nullable per docs/api_frontend/users.md §1.2.
   return errors;
 }
 
@@ -609,8 +610,7 @@ export default function UsersAdmin() {
             </Field>
             <Field
               id="fullNameAr"
-              label={t("Full Name (Arabic)", "الاسم الكامل (عربي)")}
-              error={formErrors.fullNameAr}
+              label={t("Full Name (Arabic, optional)", "الاسم الكامل (عربي، اختياري)")}
               isRtl={isRtl}
             >
               <Input

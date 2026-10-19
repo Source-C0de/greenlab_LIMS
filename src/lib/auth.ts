@@ -12,6 +12,7 @@ import type { Role } from "@/context/AppContext";
 import { apiFetch } from "@/lib/api";
 
 const TOKEN_KEY = "glims_auth_token";
+const REFRESH_KEY = "glims_auth_refresh";
 
 // ---------------------------------------------------------------------------
 // Token storage
@@ -36,10 +37,29 @@ export function setToken(token: string): void {
   }
 }
 
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(REFRESH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setRefreshToken(token: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(REFRESH_KEY, token);
+  } catch {
+    // ignore
+  }
+}
+
 export function clearToken(): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(TOKEN_KEY);
+    window.localStorage.removeItem(REFRESH_KEY);
   } catch {
     // ignore
   }
@@ -89,11 +109,16 @@ export function buildLoginPayload(
 }
 
 export interface LoginResponse {
+  /**
+   * OAuth-style `access_token` (snake_case, JWT). Persisted to localStorage
+   * on successful auth so subsequent `apiFetch` calls can attach it.
+   */
+  access_token: string;
+  /** OAuth refresh token (snake_case). Not consumed by the SPA today —
+   *  the backend re-issues a fresh pair on each successful `/auth/login`. */
+  refresh_token?: string;
+  token_type?: string;
   user: AuthUser;
-  expiresAt: string;
-  /** Optional token field. The spec doesn't currently include one (cookie-only);
-   *  if the backend adds it, we persist it automatically. */
-  token?: string;
 }
 
 export interface RegisterRequest {
@@ -137,11 +162,24 @@ export const superadminLogin = (body: LoginRequest): Promise<LoginResponse> =>
     skipAuth: true,
   });
 
-export const logout = (): Promise<void> =>
-  unwrap<void>("/auth/logout", { method: "POST" });
+/**
+ * Logout. Sends the refresh token (if known) in the body so the server can
+ * revoke it server-side. The `refresh_token` field is omitted when not
+ * available so endpoints that only require an authenticated body still work.
+ *
+ * FastAPI returns 422 when a POST with `Content-Type: application/json` has
+ * an empty body but a declared schema; we always send at least `{}` to
+ * keep the parser happy regardless of the backend's exact schema.
+ */
+export const logout = (): Promise<void> => {
+  const body = getRefreshToken() ? { refresh_token: getRefreshToken() } : {};
+  return unwrap<void>("/auth/logout", { method: "POST", body });
+};
 
-export const superadminLogout = (): Promise<void> =>
-  unwrap<void>("/auth/superadmin/logout", { method: "POST" });
+export const superadminLogout = (): Promise<void> => {
+  const body = getRefreshToken() ? { refresh_token: getRefreshToken() } : {};
+  return unwrap<void>("/auth/superadmin/logout", { method: "POST", body });
+};
 
 export const me = (): Promise<AuthUser> =>
   unwrap<AuthUser>("/auth/me");

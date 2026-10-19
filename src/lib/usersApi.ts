@@ -39,6 +39,19 @@ export interface User {
   tempPassword?: string | null;
 }
 
+/** Snake-case shape that FastAPI actually emits for `User`.
+ *  `normalizeUser` (below) promotes it to the camelCase `User` above. */
+export interface RawUser extends Partial<User> {
+  full_name?: string;
+  full_name_ar?: string | null;
+  is_active?: boolean;
+  client_id?: string | null;
+  last_login_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  temp_password?: string | null;
+}
+
 export interface UserCreate {
   email: string;
   username: string;
@@ -170,21 +183,136 @@ export function getApiErrorCode(err: unknown): string | null {
 // User CRUD — spec §1
 // ---------------------------------------------------------------------------
 
-/** GET /admin/users — list with optional filters + pagination. */
+/** GET /admin/users — list with optional filters + pagination.
+ *
+ * The spec §1.1 mandates `{ data: User[], pagination: {...} }`. In practice
+ * the backend sometimes returns alternative shapes (raw array, `{ items }`,
+ * `{ users }`) — see the `*_api_response_shapes` regression on the
+ * integration ticket. We normalize everything to `Page<User>` here so the
+ * consumer (the page) can read `.data` and `.pagination` uniformly.
+ *
+ * Each user row is also passed through `normalizeUser` so the
+ * snake_case fields the backend actually emits (`full_name`, `is_active`,
+ * `created_at`, etc.) become the camelCase fields the SPA's `User` type
+ * declares. Without this, the table cells render empty because
+ * `u.fullName` is `undefined` even when the server sent `full_name`.
+ */
 export function listUsers(
   filters: ListUsersFilters = {},
 ): Promise<Page<User>> {
-  return unwrap<Page<User>>(`/admin/users${buildListQuery(filters)}`);
-}
-
-/** POST /admin/users — create. Returns the new user + one-time tempPassword. */
-export function createUser(body: UserCreate): Promise<User> {
-  return unwrap<User>("/admin/users", { method: "POST", body });
+  return unwrap<Page<User> | User[] | Record<string, unknown>>(
+    `/admin/users${buildListQuery(filters)}`,
+  ).then((res) => {
+    const page = normalizeUserPage(res);
+    page.data = page.data.map(normalizeUser);
+    return page;
+  });
 }
 
 /** GET /admin/users/:id — fetch one. */
 export function getUser(id: string): Promise<User> {
-  return unwrap<User>(`/admin/users/${encodeURIComponent(id)}`);
+  return unwrap<RawUser | User>(
+    `/admin/users/${encodeURIComponent(id)}`,
+  ).then((u) => normalizeUser(u as RawUser));
+}
+
+/** Snake_case → camelCase adapter.
+ *  The backend returns `{ full_name, full_name_ar, is_active, ... }` per
+ *  FastAPI convention; the SPA's `User` type is camelCase. Tolerate both
+ *  shapes — if the camelCase field is already present, keep it. */
+export function normalizeUser(raw: RawUser): User {
+  const now = new Date().toISOString();
+  return {
+    id: raw.id ?? "",
+    email: raw.email ?? "",
+    username: raw.username ?? "",
+    fullName: raw.fullName ?? raw.full_name ?? "",
+    fullNameAr: raw.fullNameAr ?? raw.full_name_ar ?? null,
+    role: (raw.role ?? "admin") as UserRole,
+    isActive: raw.isActive ?? raw.is_active ?? true,
+    status: (raw.status ?? "active") as UserStatus,
+    clientId: raw.clientId ?? raw.client_id ?? null,
+    lastLoginAt: raw.lastLoginAt ?? raw.last_login_at ?? null,
+    createdAt: raw.createdAt ?? raw.created_at ?? now,
+    updatedAt: raw.updatedAt ?? raw.updated_at ?? now,
+    tempPassword: raw.tempPassword ?? raw.temp_password ?? null,
+  };
+}
+
+/** Reduce any plausible backend shape to `Page<User>`. */
+function normalizeUserPage(
+  res: Page<User> | User[] | Record<string, unknown> | null | undefined,
+): Page<User> {
+  if (res === null || res === undefined) {
+    return { data: [], pagination: { page: 1, pageSize: 0, total: 0, totalPages: 0 } };
+  }
+  if (Array.isArray(res)) {
+    return {
+      data: res as User[],
+      pagination: { page: 1, pageSize: res.length, total: res.length, totalPages: 1 },
+    };
+  }
+  if (typeof res === "object") {
+    const r = res as Record<string, unknown>;
+    // Canonical: { data: User[], pagination: {...} }
+    if (Array.isArray(r.data)) {
+      return {
+        data: r.data as User[],
+        pagination:
+          (r.pagination as Pagination | undefined) ??
+          {
+            page: 1,
+            pageSize: (r.data as unknown[]).length,
+            total: (r.data as unknown[]).length,
+            totalPages: 1,
+          },
+      };
+    }
+    // Some endpoints return { items: User[] } (test-parameter convention)
+    if (Array.isArray(r.items)) {
+      return {
+        data: r.items as User[],
+        pagination: {
+          page: 1,
+          pageSize: (r.items as unknown[]).length,
+          total: (r.items as unknown[]).length,
+          totalPages: 1,
+        },
+      };
+    }
+    // Some return { users: User[] }
+    if (Array.isArray(r.users)) {
+      return {
+        data: r.users as User[],
+        pagination: {
+          page: 1,
+          pageSize: (r.users as unknown[]).length,
+          total: (r.users as unknown[]).length,
+          totalPages: 1,
+        },
+      };
+    }
+    // Some return { results: User[] } (Django REST convention)
+    if (Array.isArray(r.results)) {
+      return {
+        data: r.results as User[],
+        pagination: {
+          page: 1,
+          pageSize: (r.results as unknown[]).length,
+          total: (r.results as unknown[]).length,
+          totalPages: 1,
+        },
+      };
+    }
+  }
+  return { data: [], pagination: { page: 1, pageSize: 0, total: 0, totalPages: 0 } };
+}
+
+/** POST /admin/users — create. Returns the new user + one-time tempPassword. */
+export function createUser(body: UserCreate): Promise<User> {
+  return unwrap<RawUser | User>("/admin/users", { method: "POST", body }).then(
+    normalizeUser,
+  );
 }
 
 /** PATCH /admin/users/:id — partial update. Pass `updatedAt` for `If-Match`. */
@@ -193,11 +321,14 @@ export function updateUser(
   body: UserUpdate,
   updatedAt?: string,
 ): Promise<User> {
-  return unwrap<User>(`/admin/users/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body,
-    headers: updatedAt ? { "If-Match": updatedAt } : undefined,
-  });
+  return unwrap<RawUser | User>(
+    `/admin/users/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      body,
+      headers: updatedAt ? { "If-Match": updatedAt } : undefined,
+    },
+  ).then(normalizeUser);
 }
 
 /** DELETE /admin/users/:id?confirm=<username> — hard delete. */
@@ -218,18 +349,24 @@ export function resetUserPassword(id: string): Promise<ResetPasswordResponse> {
 
 /** POST /admin/users/:id/suspend — set status=suspended. */
 export function suspendUser(id: string, updatedAt?: string): Promise<User> {
-  return unwrap<User>(`/admin/users/${encodeURIComponent(id)}/suspend`, {
-    method: "POST",
-    headers: updatedAt ? { "If-Match": updatedAt } : undefined,
-  });
+  return unwrap<RawUser | User>(
+    `/admin/users/${encodeURIComponent(id)}/suspend`,
+    {
+      method: "POST",
+      headers: updatedAt ? { "If-Match": updatedAt } : undefined,
+    },
+  ).then(normalizeUser);
 }
 
 /** POST /admin/users/:id/activate — set status=active. */
 export function activateUser(id: string, updatedAt?: string): Promise<User> {
-  return unwrap<User>(`/admin/users/${encodeURIComponent(id)}/activate`, {
-    method: "POST",
-    headers: updatedAt ? { "If-Match": updatedAt } : undefined,
-  });
+  return unwrap<RawUser | User>(
+    `/admin/users/${encodeURIComponent(id)}/activate`,
+    {
+      method: "POST",
+      headers: updatedAt ? { "If-Match": updatedAt } : undefined,
+    },
+  ).then(normalizeUser);
 }
 
 /** GET /admin/users/:id/menu-overrides — read overrides. */
