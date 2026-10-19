@@ -313,14 +313,23 @@ export function useDeleteUser(): UseMutationResult<
   });
 }
 
-/** POST /admin/users/:id/reset-password — mint reset link. */
+/** POST /admin/users/:id/reset-password.
+ *
+ *  When `newPassword` is provided, the SPA sends it in the body and the
+ *  backend is expected to set the user's password directly. When omitted,
+ *  the legacy "mint reset link" semantics apply (server emails a link).
+ */
 export function useResetUserPassword(): UseMutationResult<
   ResetPasswordResponse,
   unknown,
-  string
+  { id: string; newPassword?: string }
 > {
   return useMutation({
-    mutationFn: (id: string) => apiResetPassword(id),
+    mutationFn: ({ id, newPassword }) =>
+      apiResetPassword(
+        id,
+        newPassword ? { new_password: newPassword } : undefined,
+      ),
   });
 }
 

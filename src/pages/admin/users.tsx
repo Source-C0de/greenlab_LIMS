@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Pencil, KeyRound, Ban, CheckCircle2, Trash2, Copy } from "lucide-react";
+import { Plus, Pencil, KeyRound, Ban, CheckCircle2, Trash2, Copy, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import {
   mockUsers,
@@ -149,10 +149,22 @@ export default function UsersAdmin() {
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
   // One-time tempPassword dialog (POST 201 surfaces a generated password).
+  // Also reused to show the admin's typed password after a successful
+  // "Reset password" action so they can copy it for the user.
   const [tempPassword, setTempPassword] = useState<{
     username: string;
     password: string;
   } | null>(null);
+
+  // "Set new password" dialog state (admin-side reset flow).
+  const [resetTarget, setResetTarget] = useState<SaaSUser | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetTouched, setResetTouched] = useState({
+    password: false,
+    confirm: false,
+  });
 
   // Refetch after a successful mutation so the table reflects the server.
   useEffect(() => {
@@ -237,7 +249,7 @@ export default function UsersAdmin() {
               size="icon"
               onClick={(e) => {
                 e.stopPropagation();
-                handleResetPassword(u);
+                openResetPassword(u);
               }}
               title={t("Reset password", "إعادة تعيين كلمة المرور")}
             >
@@ -416,29 +428,86 @@ export default function UsersAdmin() {
     }
   }
 
-  function handleResetPassword(u: SaaSUser) {
+  function openResetPassword(u: SaaSUser) {
+    setResetTarget(u);
+    setResetPassword("");
+    setResetConfirm("");
+    setShowResetPassword(false);
+    setResetTouched({ password: false, confirm: false });
+  }
+
+  function closeResetPassword() {
+    setResetTarget(null);
+    setResetPassword("");
+    setResetConfirm("");
+    setResetTouched({ password: false, confirm: false });
+  }
+
+  /** Validate the typed new password. Returns a bilingual error map. */
+  function validateReset(): Partial<Record<"password" | "confirm", string>> {
+    const errors: Partial<Record<"password" | "confirm", string>> = {};
+    if (resetPassword.length < 8) errors.password = "Min 8 characters";
+    else if (!/[A-Za-z]/.test(resetPassword))
+      errors.password = "Must contain a letter";
+    else if (!/\d/.test(resetPassword))
+      errors.password = "Must contain a digit";
+    if (resetConfirm !== resetPassword) errors.confirm = "Passwords do not match";
+    return errors;
+  }
+
+  function submitResetPassword() {
+    const errors = validateReset();
+    if (Object.keys(errors).length > 0) {
+      // Mark both fields touched so the inline errors become visible.
+      setResetTouched({ password: true, confirm: true });
+      return;
+    }
+    if (!resetTarget) return;
+    const typedPassword = resetPassword;
+    const target = resetTarget;
+
     if (api) {
-      resetMut.mutate(u.id, {
-        onSuccess: (resp) => {
-          setTempPassword({
-            username: u.username,
-            // Surface the reset link instead of a raw password — the spec
-            // says the endpoint returns a link (24h expiry).
-            password: resp.resetLink,
-          });
+      resetMut.mutate(
+        { id: target.id, newPassword: typedPassword },
+        {
+          onSuccess: (resp) => {
+            // Discriminate on the server's success shape:
+            //   - mode: "set"  → admin typed the password → show it in the
+            //                    copy-to-clipboard dialog.
+            //   - mode: "link" → server minted a link (legacy, no body)
+            //                    → show the link instead.
+            if (resp.mode === "set") {
+              setTempPassword({
+                username: target.username,
+                password: typedPassword,
+              });
+              toast.success(resp.message || t("Password updated", "تم تحديث كلمة المرور"));
+            } else {
+              setTempPassword({
+                username: target.username,
+                password: resp.resetLink,
+              });
+              toast.success(
+                t("Reset link generated", "تم إنشاء رابط إعادة التعيين"),
+              );
+            }
+            closeResetPassword();
+          },
+          onError: (e) => {
+            const m = describeApiError(e, isRtl ? "ar" : "en");
+            toast.error(isRtl ? m.ar : m.en);
+          },
         },
-        onError: (e) => {
-          const m = describeApiError(e, isRtl ? "ar" : "en");
-          toast.error(isRtl ? m.ar : m.en);
-        },
-      });
+      );
     } else {
+      // Mock mode — no real call. Match the legacy toast copy.
       toast.success(
         t(
-          `Password reset link sent to ${u.email}`,
-          `تم إرسال رابط إعادة التعيين إلى ${u.email}`,
+          `Password reset link sent to ${target.email}`,
+          `تم إرسال رابط إعادة التعيين إلى ${target.email}`,
         ),
       );
+      closeResetPassword();
     }
   }
 
@@ -760,6 +829,133 @@ export default function UsersAdmin() {
           <DialogFooter>
             <Button onClick={() => setTempPassword(null)}>
               {t("Done", "تم")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* "Set new password" dialog (admin-side reset flow).
+          The admin types a new password for the target user, optionally
+          revealing it via the eye toggle, and we POST it to the same
+          /admin/users/:id/reset-password endpoint. */}
+      <Dialog
+        open={resetTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) closeResetPassword();
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>
+              {t("Set new password", "عيّن كلمة مرور جديدة")}
+            </DialogTitle>
+            <DialogDescription>
+              {resetTarget &&
+                t(
+                  `Set a new password for ${resetTarget.fullNameEn} (@${resetTarget.username}).`,
+                  `عيّن كلمة مرور جديدة لـ ${resetTarget.fullNameAr || resetTarget.fullNameEn} (@${resetTarget.username}).`,
+                )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {(() => {
+            const errors = validateReset();
+            const passwordError =
+              resetTouched.password ? errors.password : undefined;
+            const confirmError =
+              resetTouched.confirm ? errors.confirm : undefined;
+            const hasErrors = Object.keys(errors).length > 0;
+            return (
+              <div className="grid gap-4 py-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="resetPassword" className="text-sm font-medium">
+                    {t("New password", "كلمة المرور الجديدة")}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="resetPassword"
+                      type={showResetPassword ? "text" : "password"}
+                      value={resetPassword}
+                      onChange={(e) => setResetPassword(e.target.value)}
+                      onBlur={() =>
+                        setResetTouched((t) => ({ ...t, password: true }))
+                      }
+                      autoComplete="new-password"
+                      dir="ltr"
+                      className="pe-9"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPassword((v) => !v)}
+                      className="absolute inset-y-0 end-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                      title={
+                        showResetPassword
+                          ? t("Hide password", "إخفاء كلمة المرور")
+                          : t("Show password", "إظهار كلمة المرور")
+                      }
+                      tabIndex={-1}
+                    >
+                      {showResetPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                  {passwordError && (
+                    <span className="text-xs text-destructive">
+                      {isRtl ? "خطأ" : passwordError}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="resetConfirm" className="text-sm font-medium">
+                    {t("Confirm new password", "تأكيد كلمة المرور الجديدة")}
+                  </Label>
+                  <Input
+                    id="resetConfirm"
+                    type={showResetPassword ? "text" : "password"}
+                    value={resetConfirm}
+                    onChange={(e) => setResetConfirm(e.target.value)}
+                    onBlur={() =>
+                      setResetTouched((t) => ({ ...t, confirm: true }))
+                    }
+                    autoComplete="new-password"
+                    dir="ltr"
+                  />
+                  {confirmError && (
+                    <span className="text-xs text-destructive">
+                      {isRtl ? "خطأ" : confirmError}
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "Min 8 characters, must contain a letter and a digit.",
+                    "٨ أحرف على الأقل، يجب أن تحتوي على حرف ورقم.",
+                  )}
+                </p>
+              </div>
+            );
+          })()}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeResetPassword}>
+              {t("Cancel", "إلغاء")}
+            </Button>
+            <Button
+              onClick={submitResetPassword}
+              disabled={(() => {
+                const errors = validateReset();
+                return (
+                  (api && resetMut.isPending) ||
+                  Object.keys(errors).length > 0
+                );
+              })()}
+            >
+              {t("Save", "حفظ")}
             </Button>
           </DialogFooter>
         </DialogContent>
