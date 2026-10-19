@@ -9,6 +9,23 @@ import { Label } from "@/components/ui/label";
 import { useAppContext } from "@/context/AppContext";
 import { useMenuPermissions } from "@/hooks/useMenuPermissions";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
+import { Link } from "wouter";
+
+interface Tenant {
+  id: string;
+  name: string;
+  nameAr: string;
+  plan: string;
+  activeUsers: number;
+  activeSamples: number;
+  monthlyRevenue: number;
+  status: string;
+  createdAt: string;
+}
+
+function typedTenants(): Tenant[] {
+  return mockTenants as Tenant[];
+}
 import {
   MENU_REGISTRY,
   MENU_GROUP_LABELS,
@@ -16,9 +33,10 @@ import {
   type MenuGroup,
 } from "@/mock-data/menuPermissions";
 import {
-  ROLE_REGISTRY,
   ALL_TOGGLEABLE_ROLES,
+  getRoleEntry,
 } from "@/mock-data/rolePermissions";
+import { useRoleRegistry } from "@/hooks/useRoleRegistry";
 
 const GROUP_ORDER: MenuGroup[] = ["lab", "client", "accounting", "admin"];
 
@@ -27,6 +45,7 @@ function RolePermissionsPanel() {
   const isRtl = language === "ar";
   const { isEnabled, toggle, setAll, reset, isAllEnabled, isAllDisabled } =
     useRolePermissions();
+  const registry = useRoleRegistry();
 
   return (
     <div className="space-y-4">
@@ -72,8 +91,11 @@ function RolePermissionsPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           {ALL_TOGGLEABLE_ROLES.map((role) => {
-            const entry = ROLE_REGISTRY[role];
-            const Icon = entry.icon;
+            const entry = getRoleEntry(role);
+            if (!entry) return null;
+            // Resolve the icon from the registry hook so it respects
+            // any label/icon edits the admin made on /admin/roles.
+            const Icon = registry.getIcon(role);
             return (
               <div
                 key={role}
@@ -196,12 +218,12 @@ export default function AdminPanel() {
   const isRtl = language === "ar";
 
   const columns = [
-    { key: "name", header: "Tenant Name", render: (t: any) => <span className="font-bold">{t.name}</span> },
+    { key: "name", header: "Tenant Name", render: (t: Tenant) => <span className="font-bold">{t.name}</span> },
     { key: "plan", header: "Plan" },
     { key: "activeUsers", header: "Users" },
     { key: "activeSamples", header: "Monthly Samples" },
-    { key: "monthlyRevenue", header: "MRR", render: (t: any) => `SAR ${t.monthlyRevenue.toLocaleString()}` },
-    { key: "status", header: "Status", render: (t: any) => <StatusBadge status={t.status} /> },
+    { key: "monthlyRevenue", header: "MRR", render: (t: Tenant) => `SAR ${t.monthlyRevenue.toLocaleString()}` },
+    { key: "status", header: "Status", render: (t: Tenant) => <StatusBadge status={t.status} /> },
   ];
 
   return (
@@ -225,7 +247,47 @@ export default function AdminPanel() {
         </TabsList>
 
         <TabsContent value="tenants" className="space-y-4">
-          <DataTable data={mockTenants} columns={columns} />
+          <div className="grid gap-3 md:grid-cols-2">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  {isRtl ? "إدارة المستخدمين" : "User Management"}
+                </CardTitle>
+                <CardDescription>
+                  {isRtl
+                    ? "إنشاء المستخدمين وتعيين الأدوار وإدارة تجاوزات القوائم."
+                    : "Create users, assign roles, and manage per-user menu overrides."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/admin/users">
+                    {isRtl ? "افتح صفحة المستخدمين" : "Open Users Page"}
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  {isRtl ? "مصفوفة صلاحيات الأدوار" : "Role Permission Matrix"}
+                </CardTitle>
+                <CardDescription>
+                  {isRtl
+                    ? "اضبط عناصر القائمة الافتراضية لكل دور."
+                    : "Configure which menu items each role sees by default."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/admin/roles">
+                    {isRtl ? "افتح مصفوفة الأدوار" : "Open Role Matrix"}
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+          <DataTable data={typedTenants()} columns={columns} />
         </TabsContent>
 
         <TabsContent value="plans">

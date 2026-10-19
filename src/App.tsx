@@ -37,6 +37,9 @@ import InvoicesList from "@/pages/invoices/index";
 import InvoiceDetail from "@/pages/invoices/[id]";
 import Analytics from "@/pages/analytics";
 import AdminPanel from "@/pages/admin";
+import UsersAdmin from "@/pages/admin/users";
+import RolesAdmin from "@/pages/admin/roles";
+import UserDetail from "@/pages/admin/users/[id]";
 import ClientPortal from "@/pages/client-portal";
 import Settings from "@/pages/settings";
 import AccountingDashboard from "@/pages/accounting/dashboard";
@@ -53,6 +56,7 @@ import ParameterLibrary from "@/pages/specifications/library";
 import ApprovalQueue from "@/pages/specifications/approval";
 import VersionHistory from "@/pages/specifications/history";
 import TestMasterPage from "@/pages/specifications/test-master";
+import TestParameterCatalogue from "@/pages/specifications/test-parameters";
 import SampleReceiving from "@/pages/samples/receiving";
 import ApprovalsQueue from "@/pages/approvals/queue";
 import MySubmissions from "@/pages/approvals/my-submissions";
@@ -123,6 +127,9 @@ function Router() {
       <Route path="/quotations/:id"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={QuotationDetail} /></ProtectedRoute></Route>
       <Route path="/analytics"><ProtectedRoute><LayoutWrapper component={Analytics} /></ProtectedRoute></Route>
       <Route path="/admin"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={AdminPanel} /></ProtectedRoute></Route>
+      <Route path="/admin/users"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={UsersAdmin} /></ProtectedRoute></Route>
+      <Route path="/admin/users/:id"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={UserDetail} /></ProtectedRoute></Route>
+      <Route path="/admin/roles"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={RolesAdmin} /></ProtectedRoute></Route>
       <Route path="/client-portal"><ProtectedRoute roles={["client"]}><LayoutWrapper component={ClientPortal} /></ProtectedRoute></Route>
       <Route path="/settings"><ProtectedRoute><LayoutWrapper component={Settings} /></ProtectedRoute></Route>
 
@@ -140,6 +147,7 @@ function Router() {
       <Route path="/specifications/approval"><ProtectedRoute><LayoutWrapper component={ApprovalQueue} /></ProtectedRoute></Route>
       <Route path="/specifications/history"><ProtectedRoute><LayoutWrapper component={VersionHistory} /></ProtectedRoute></Route>
       <Route path="/specifications/test-master"><ProtectedRoute><LayoutWrapper component={TestMasterPage} /></ProtectedRoute></Route>
+      <Route path="/specifications/test-parameters"><ProtectedRoute><LayoutWrapper component={TestParameterCatalogue} /></ProtectedRoute></Route>
 
       {/* Approval Routes */}
       <Route path="/approvals"><ProtectedRoute><LayoutWrapper component={ApprovalsQueue} /></ProtectedRoute></Route>

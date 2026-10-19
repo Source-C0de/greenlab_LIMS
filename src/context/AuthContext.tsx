@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -48,6 +49,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { setCurrentRole } = useAppContext();
   const [state, setState] = useState<AuthState>({ status: "anonymous" });
 
+  // Timestamp of the most recent explicit auth mutation (login, hydrate
+  // from a LoginResponse, logout). The bootstrap's late-arriving /me
+  // response checks this to avoid clobbering state set by a login that
+  // happened during the bootstrap's await window.
+  const lastExplicitMutationAt = useRef<number>(0);
+
   const apiOn = isApiEnabled();
 
   // Bootstrap on mount — only when the user opted in to API mode.
@@ -64,10 +71,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const user = await meRequest();
         if (cancelled) return;
+        // A login may have happened while /me was in flight. If so, leave
+        // the authenticated state alone — the explicit mutation wins.
+        if (Date.now() - lastExplicitMutationAt.current < 2000) return;
         setState({ status: "authenticated", user });
         setCurrentRole(user.role);
       } catch (err) {
         if (cancelled) return;
+        // A login may have happened while /me was in flight. Don't clobber
+        // the explicit "authenticated" state with a stale 401.
+        if (Date.now() - lastExplicitMutationAt.current < 2000) return;
         // 401 = no session — that's the normal anonymous case.
         if (err instanceof ApiError && err.status === 401) {
           setState({ status: "anonymous" });
@@ -88,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applyLoginResponse = useCallback(
     (response: LoginResponse): AuthUser => {
+      lastExplicitMutationAt.current = Date.now();
       if (response.token) setToken(response.token);
       setState({ status: "authenticated", user: response.user });
       setCurrentRole(response.user.role);
@@ -111,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Even if the server logout fails, clear the local state — the user
       // wants out.
     }
+    lastExplicitMutationAt.current = Date.now();
     clearToken();
     setState({ status: "anonymous" });
     // Don't touch currentRole here — the back-compat shim in AppContext falls

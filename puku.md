@@ -44,6 +44,12 @@ There is no `typecheck`, `lint`, or `test` script in `package.json`.
 
 - **Don't introduce React Router** — this project uses Wouter.
 - **Don't add a backend, `fetch`, `axios`, or Supabase** — data is mock-only.
+  - **Exception**: the **Test Parameter Catalogue** module
+    (`src/lib/testParametersApi.ts` + `src/pages/specifications/test-parameters.tsx`)
+    calls the real FastAPI backend at `docs/test_parameter_api.md` when
+    `VITE_USE_API=true`. It uses the existing `apiFetch` helper from
+    `src/lib/api.ts` (which already handles Bearer auth + JSON envelopes).
+    All other modules stay 100% mock-only.
 - **Don't add real auth** — `Login` is a demo role picker; routes are unguarded.
 - **Don't use `react-i18next`** — i18n is hand-rolled via `AppContext.language`.
 - **Don't touch `.backup_*` dirs** (`.backup_artifacts`, `.backup_lib`,
@@ -65,6 +71,9 @@ There is no `typecheck`, `lint`, or `test` script in `package.json`.
 6. `src/mock-data/index.ts` — entity barrel.
 7. `src/components/shared/DataTable.tsx` — generic list table (prefer over
    reinventing table JSX).
+8. `src/lib/api.ts` + `src/lib/queries.ts` — typed `apiFetch` and
+   TanStack Query hooks for the optional API mode. Used by the Test
+   Parameter Catalogue; not used by the rest of the app.
 
 ## Open gaps to flag (don't silently fix)
 

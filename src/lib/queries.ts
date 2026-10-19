@@ -5,9 +5,25 @@
  * driven by default. Flip `VITE_USE_API=true` in `.env.local` to enable.
  */
 
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import { apiFetch, isApiEnabled, ApiError } from "@/lib/api";
 import type { AuthUser } from "@/lib/auth";
+import {
+  type ListFilters,
+  type TestParameter,
+  type TestParameterCreate,
+  type TestParameterUpdate,
+  createTestParameter as apiCreate,
+  deleteTestParameter as apiDelete,
+  listTestParameters as apiList,
+  updateTestParameter as apiUpdate,
+} from "@/lib/testParametersApi";
 
 export interface HealthResponse {
   status: string;
@@ -60,5 +76,109 @@ export function useMe(): UseQueryResult<AuthUser> {
     },
     refetchOnWindowFocus: false,
     staleTime: 60_000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Test Parameter Catalogue — docs/test_parameter_api.md
+// ---------------------------------------------------------------------------
+
+export const testParameterKeys = {
+  all: ["api", "test-parameters"] as const,
+  list: (filters: ListFilters) =>
+    [
+      ...testParameterKeys.all,
+      "list",
+      {
+        search: filters.search ?? "",
+        spec: filters.spec ?? "",
+        sop_code: filters.sop_code ?? "",
+        is_active:
+          typeof filters.is_active === "boolean" ? filters.is_active : null,
+        limit: filters.limit ?? 50,
+        offset: filters.offset ?? 0,
+      },
+    ] as const,
+  detail: (id: string) => [...testParameterKeys.all, "detail", id] as const,
+};
+
+/** GET /test-parameters — list with filters. */
+export function useTestParameters(
+  filters: ListFilters = {},
+): UseQueryResult<Awaited<ReturnType<typeof apiList>>> {
+  return useQuery({
+    queryKey: testParameterKeys.list(filters),
+    queryFn: () => apiList({ ...filters, limit: filters.limit ?? 200 }),
+    enabled: isApiEnabled(),
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+}
+
+/** GET /test-parameters/{id} — single. */
+export function useTestParameter(
+  id: string | null,
+): UseQueryResult<TestParameter> {
+  return useQuery({
+    queryKey: testParameterKeys.detail(id ?? ""),
+    queryFn: () => apiList({ limit: 200 }).then((p) => {
+      // The contract has no GET-by-id consumer in the page, so this is a
+      // safety net: when an id is provided but the endpoint is unreachable,
+      // we fall back to a list scan. The single endpoint is also exposed
+      // via testParametersApi.getTestParameter if needed elsewhere.
+      const hit = p.items.find((r) => r.id === id);
+      if (!hit) throw new ApiError(404, "Test parameter not found", null);
+      return hit;
+    }),
+    enabled: isApiEnabled() && !!id,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+}
+
+/** POST /test-parameters — create (admin). */
+export function useCreateTestParameter(): UseMutationResult<
+  TestParameter,
+  unknown,
+  TestParameterCreate
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: TestParameterCreate) => apiCreate(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: testParameterKeys.all });
+    },
+  });
+}
+
+/** PATCH /test-parameters/{id} — partial update (admin). */
+export function useUpdateTestParameter(): UseMutationResult<
+  TestParameter,
+  unknown,
+  { id: string; body: TestParameterUpdate }
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }) => apiUpdate(id, body),
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: testParameterKeys.all });
+      qc.setQueryData(testParameterKeys.detail(row.id), row);
+    },
+  });
+}
+
+/** DELETE /test-parameters/{id} — hard delete (admin). */
+export function useDeleteTestParameter(): UseMutationResult<
+  void,
+  unknown,
+  string
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(id),
+    onSuccess: (_void, id) => {
+      qc.invalidateQueries({ queryKey: testParameterKeys.all });
+      qc.removeQueries({ queryKey: testParameterKeys.detail(id) });
+    },
   });
 }

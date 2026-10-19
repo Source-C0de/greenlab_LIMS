@@ -16,12 +16,13 @@ import {
   ClipboardCheck,
   ClipboardList,
   LogOut,
+  UserCog,
   type LucideIcon,
 } from "lucide-react";
 import { useAppContext, type Role } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
-import { useMenuPermissions } from "@/hooks/useMenuPermissions";
 import { useRolePermissions } from "@/hooks/useRolePermissions";
+import { useEffectiveMenuVisibility } from "@/hooks/useEffectiveMenuVisibility";
 import { RoleAvatar } from "@/components/auth/RoleAvatar";
 import type { MenuKey } from "@/mock-data/menuPermissions";
 import type { ToggleableRole } from "@/mock-data/rolePermissions";
@@ -52,8 +53,8 @@ export function Sidebar({ isOpen }: SidebarProps) {
   const [location, setLocation] = useLocation();
   const { currentRole, language } = useAppContext();
   const { user, logout } = useAuth();
-  const menuPerms = useMenuPermissions();
   const rolePerms = useRolePermissions();
+  const visibility = useEffectiveMenuVisibility();
   const isRtl = language === "ar";
 
   // If a non-superadmin role was disabled by superadmin, fall back to "admin"
@@ -70,6 +71,8 @@ export function Sidebar({ isOpen }: SidebarProps) {
     try {
       window.localStorage.removeItem("glims_role_permissions_v1");
       window.localStorage.removeItem("glims_menu_permissions_v1");
+      window.localStorage.removeItem("glims_role_menu_matrix_v1");
+      window.localStorage.removeItem("glims_user_menu_overrides_v1");
     } catch {
       // ignore — localStorage may be unavailable
     }
@@ -84,6 +87,8 @@ export function Sidebar({ isOpen }: SidebarProps) {
     if (isSuperadmin) {
       return [
         { href: "/admin", labelEn: "SaaS Admin", labelAr: "إدارة النظام", icon: ShieldCheck, roles: ["superadmin"], key: "saas_admin" },
+        { href: "/admin/users", labelEn: "Users", labelAr: "المستخدمون", icon: UserCog, roles: ["superadmin"], key: "saas_admin" },
+        { href: "/admin/roles", labelEn: "Role Permissions", labelAr: "صلاحيات الأدوار", icon: ShieldCheck, roles: ["superadmin"], key: "saas_admin" },
         { href: "/settings", labelEn: "Settings", labelAr: "الإعدادات", icon: Settings, roles: ["superadmin"], key: "settings" },
       ];
     }
@@ -158,6 +163,8 @@ export function Sidebar({ isOpen }: SidebarProps) {
 
     if (effectiveRole === "admin") {
       items.push({ href: "/admin", labelEn: "SaaS Admin", labelAr: "إدارة النظام", icon: ShieldCheck, roles: ["admin"], key: "saas_admin" });
+      items.push({ href: "/admin/users", labelEn: "Users", labelAr: "المستخدمون", icon: UserCog, roles: ["admin"], key: "saas_admin" });
+      items.push({ href: "/admin/roles", labelEn: "Role Permissions", labelAr: "صلاحيات الأدوار", icon: ShieldCheck, roles: ["admin"], key: "saas_admin" });
     }
 
     // Add Specifications for Admin and Lab Manager
@@ -173,6 +180,7 @@ export function Sidebar({ isOpen }: SidebarProps) {
           { href: "/specifications", labelEn: "Specification List", labelAr: "قائمة المواصفات", key: "specifications" },
           { href: "/specifications/library", labelEn: "Test Parameters", labelAr: "معلمات الاختبار", key: "specifications_library" },
           { href: "/specifications/test-master", labelEn: "Test List", labelAr: "سجل الاختبارات", key: "specifications_tests" },
+          { href: "/specifications/test-parameters", labelEn: "Test Parameter Catalogue", labelAr: "كتالوج معلمات الاختبار", key: "specifications_test_parameters" },
           { href: "/specifications/approval", labelEn: "Approval Queue", labelAr: "قائمة الاعتماد", key: "specifications_approval" },
           { href: "/specifications/history", labelEn: "Version History", labelAr: "سجل الإصدارات", key: "specifications_history" },
         ]
@@ -184,14 +192,17 @@ export function Sidebar({ isOpen }: SidebarProps) {
     // Step 1: role filter
     const roleFiltered = items.filter(item => item.roles.includes(effectiveRole));
 
-    // Step 2: superadmin-controlled visibility filter
-    // (already bypassed above by returning early for superadmin)
+    // Step 2: composited visibility filter — global kill-switch + role
+    // default + per-user override. `useEffectiveMenuVisibility` already
+    // returns a fresh closure on every change, so this re-runs whenever
+    // any of the three stores mutate.
+    // (superadmin is bypassed above by returning early)
     return roleFiltered
-      .filter(item => menuPerms.isEnabled(item.key))
+      .filter(item => visibility.isEnabled(item.key, effectiveRole, user?.id))
       .map(item => {
         if (!item.children) return item;
         const filteredChildren = item.children.filter(
-          child => menuPerms.isEnabled(child.key)
+          child => visibility.isEnabled(child.key, effectiveRole, user?.id)
         );
         return { ...item, children: filteredChildren.length > 0 ? filteredChildren : undefined };
       });

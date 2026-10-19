@@ -37,6 +37,7 @@ export type MenuKey =
   | "specifications_tests"
   | "specifications_approval"
   | "specifications_history"
+  | "specifications_test_parameters"
   | "saas_admin"
   | "settings"
   | "client_portal"
@@ -236,6 +237,14 @@ export const MENU_REGISTRY: Record<MenuKey, MenuEntry> = {
     labelAr: "سجل الإصدارات",
     icon: GitCommit,
     href: "/specifications/history",
+    group: "lab",
+  },
+  specifications_test_parameters: {
+    key: "specifications_test_parameters",
+    labelEn: "Test Parameter Catalogue",
+    labelAr: "كتالوج معلمات الاختبار",
+    icon: GitCommit,
+    href: "/specifications/test-parameters",
     group: "lab",
   },
   saas_admin: {

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FlaskConical, ShieldCheck, AlertCircle } from "lucide-react";
+import { FlaskConical, ShieldCheck, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useAppContext, type Role } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { buildLoginPayload } from "@/lib/auth";
@@ -63,6 +63,7 @@ export default function Login() {
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [shake, setShake] = useState(false);
@@ -93,8 +94,35 @@ export default function Login() {
       if (err instanceof ApiError && err.status === 401) {
         setLoginError(pick(LABELS.invalid));
         triggerShake();
+      } else if (err instanceof ApiError) {
+        // Backend replied with a non-401 status — surface the status + body.
+        const detail =
+          err.body && typeof err.body === "object" && "detail" in err.body
+            ? String((err.body as { detail: unknown }).detail)
+            : err.message;
+        setLoginError(`${err.status} — ${detail}`);
+        triggerShake();
+      } else if (err instanceof TypeError) {
+        // "Failed to fetch" — the browser could not open a network
+        // connection. Show the actual message and the base URL so the user
+        // can compare to the backend in DevTools. Handle both relative
+        // (default "/api/v1", same-origin via Vite proxy) and absolute
+        // (e.g. "http://localhost:8000") base URLs without double-prefixing.
+        const base =
+          (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ||
+          "/api/v1";
+        const fullUrl = /^https?:\/\//.test(base)
+          ? `${base.replace(/\/$/, "")}/auth/login`
+          : `${window.location.origin}${base}/auth/login`;
+        setLoginError(
+          `Network: ${err.message}. Tried ${fullUrl} — ` +
+            `is the backend reachable? Check that the dev proxy (vite.config.ts → /api) ` +
+            `points to the right host/port, and that no browser extension is blocking /api.`,
+        );
+        triggerShake();
       } else {
         setLoginError(err instanceof Error ? err.message : pick(LABELS.network));
+        triggerShake();
       }
     } finally {
       setSubmitting(false);
@@ -181,15 +209,47 @@ export default function Login() {
                     {pick(LABELS.forgot)}
                   </Link>
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11"
-                  autoComplete="current-password"
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-11 pe-10"
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={
+                      showPassword
+                        ? isRtl
+                          ? "إخفاء كلمة المرور"
+                          : "Hide password"
+                        : isRtl
+                        ? "إظهار كلمة المرور"
+                        : "Show password"
+                    }
+                    title={
+                      showPassword
+                        ? isRtl
+                          ? "إخفاء كلمة المرور"
+                          : "Hide password"
+                        : isRtl
+                        ? "إظهار كلمة المرور"
+                        : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    className="absolute inset-y-0 end-0 flex items-center justify-center w-10 text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-e-md"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <Eye className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -214,9 +274,11 @@ export default function Login() {
                 className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 text-destructive px-3 py-2 text-sm"
               >
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{loginError}</span>
+                <span className="whitespace-pre-line">{loginError}</span>
               </div>
             )}
+
+            <TestBackendButton />
           </form>
 
           <p className="text-center text-sm text-muted-foreground">
@@ -239,6 +301,82 @@ export default function Login() {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Quick connectivity test. Hits the same proxy the login form uses so the
+ * user can see whether the backend is reachable before trying to sign in.
+ */
+function TestBackendButton() {
+  const { language } = useAppContext();
+  const isRtl = language === "ar";
+  const [status, setStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
+  const [detail, setDetail] = useState<string>("");
+
+  const run = async () => {
+    setStatus("testing");
+    setDetail("");
+    const base =
+      (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ||
+      "/api/v1";
+    const url = /^https?:\/\//.test(base)
+      ? `${base.replace(/\/$/, "")}/auth/login`
+      : `${window.location.origin}${base}/auth/login`;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        credentials: "include",
+      });
+      setStatus("ok");
+      setDetail(
+        isRtl
+          ? `تم الاتصال — استجاب الخادم بـ ${res.status}`
+          : `Reachable — server returned ${res.status}`,
+      );
+    } catch (err) {
+      setStatus("fail");
+      const msg = err instanceof Error ? err.message : String(err);
+      setDetail(
+        isRtl
+          ? `فشل الاتصال بـ ${url}: ${msg}`
+          : `Could not reach ${url}: ${msg}`,
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={run}
+        disabled={status === "testing"}
+        className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1 disabled:opacity-50"
+      >
+        {status === "testing"
+          ? isRtl
+            ? "…جاري اختبار الاتصال"
+            : "Testing connection…"
+          : isRtl
+          ? "اختبار الاتصال بالخادم"
+          : "Test backend connection"}
+      </button>
+      {detail && (
+        <p
+          className={`text-xs ${
+            status === "ok"
+              ? "text-emerald-600"
+              : status === "fail"
+              ? "text-destructive"
+              : "text-muted-foreground"
+          }`}
+        >
+          {detail}
+        </p>
+      )}
     </div>
   );
 }

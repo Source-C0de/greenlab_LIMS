@@ -1,18 +1,27 @@
 import { useEffect, useState } from "react";
-import {
-  ALL_TOGGLEABLE_ROLES,
-  type ToggleableRole,
-} from "@/mock-data/rolePermissions";
 
 const STORAGE_KEY = "glims_role_permissions_v1";
 
-type PermissionsMap = Record<ToggleableRole, boolean>;
+/**
+ * Role → enabled? map. Keys are open-ended strings — the 6 fixed
+ * toggleable roles are seeded; custom roles created via `useRoleAdmin`
+ * are added on the fly.
+ */
+type PermissionsMap = Record<string, boolean>;
+
+/** Slugs that should be enabled by default — mirrors the 6 fixed toggleable roles. */
+const SEED_SLUGS = [
+  "admin",
+  "lab_manager",
+  "analyst",
+  "client",
+  "accountant",
+  "receptionist",
+];
 
 function buildDefaultMap(): PermissionsMap {
-  const map = {} as PermissionsMap;
-  for (const role of ALL_TOGGLEABLE_ROLES) {
-    map[role] = true;
-  }
+  const map: PermissionsMap = {};
+  for (const slug of SEED_SLUGS) map[slug] = true;
   return map;
 }
 
@@ -21,7 +30,7 @@ function loadFromStorage(): PermissionsMap {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return buildDefaultMap();
-    const parsed = JSON.parse(raw) as Partial<PermissionsMap>;
+    const parsed = JSON.parse(raw) as PermissionsMap;
     return { ...buildDefaultMap(), ...parsed };
   } catch {
     return buildDefaultMap();
@@ -71,18 +80,32 @@ export function useRolePermissions() {
   };
 
   return {
-    isEnabled: (role: ToggleableRole): boolean => state[role] !== false,
-    toggle: (role: ToggleableRole): void =>
+    isEnabled: (role: string): boolean => state[role] !== false,
+    toggle: (role: string): void =>
       persist({ ...state, [role]: !state[role] }),
     setAll: (value: boolean): void => {
-      const next = {} as PermissionsMap;
-      for (const role of ALL_TOGGLEABLE_ROLES) next[role] = value;
+      const next: PermissionsMap = {};
+      for (const role of Object.keys(state)) next[role] = value;
       persist(next);
     },
     reset: (): void => persist(buildDefaultMap()),
     isAllEnabled: (): boolean =>
-      ALL_TOGGLEABLE_ROLES.every((r) => state[r] !== false),
+      Object.values(state).every((v) => v !== false),
     isAllDisabled: (): boolean =>
-      ALL_TOGGLEABLE_ROLES.every((r) => state[r] === false),
+      Object.values(state).every((v) => v === false),
+
+    /** Add a new role to the map (called by `useRoleAdmin.create`). */
+    addRole: (role: string, enabled: boolean = true): void =>
+      persist({ ...state, [role]: enabled }),
+
+    /** Remove a role entirely (called by `useRoleAdmin.archive/hardDelete`). */
+    removeRole: (role: string): void => {
+      const next: PermissionsMap = { ...state };
+      delete next[role];
+      persist(next);
+    },
+
+    /** All slugs currently in the map. */
+    listRoles: (): string[] => Object.keys(state),
   };
 }
