@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { isApiEnabled } from "@/infrastructure/api/api";
 import type { Role, Language, Theme } from "@/shared/lib/types";
+import {
+  currentMockRole,
+  setMockRole,
+} from "@/infrastructure/mock/repositories/authSession";
 
 // Re-exported for the existing `from "@/presentation/providers/AppContext"`
 // call sites. The canonical home is `@/shared/lib/types` — non-presentation
@@ -21,36 +24,19 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
  * permissions panel (superadmin tooling) can change roles without losing them.
  * In API mode the AuthProvider drives `setCurrentRole` directly and the
  * override is bypassed.
+ *
+ * PHASE 4: the localStorage key and its read/write helpers moved to
+ * `infrastructure/mock/repositories/authSession.ts`, which owns the mock auth
+ * session and needs the same key. Both modules touching
+ * `glims_role_override` independently would let them drift — the login screen
+ * would resolve one role while the sidebar rendered another. This provider now
+ * reuses the adapter's functions rather than re-implementing them.
  */
-const ROLE_OVERRIDE_KEY = "glims_role_override";
-
-function readRoleOverride(): Role | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(ROLE_OVERRIDE_KEY);
-    if (!raw) return null;
-    const valid: Role[] = ["superadmin", "admin", "lab_manager", "analyst", "client", "accountant", "receptionist"];
-    return valid.includes(raw as Role) ? (raw as Role) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeRoleOverride(role: Role | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (role === null) window.localStorage.removeItem(ROLE_OVERRIDE_KEY);
-    else window.localStorage.setItem(ROLE_OVERRIDE_KEY, role);
-  } catch {
-    // ignore
-  }
-}
-
 export function AppProvider({ children }: { children: ReactNode }) {
   // In API mode: default to "admin" until AuthProvider hydrates the real role.
   // In mock mode: prefer the persisted override so dev role changes survive refresh.
   const [currentRole, setCurrentRoleState] = useState<Role>(() => {
-    return readRoleOverride() ?? "admin";
+    return currentMockRole();
   });
   const [language, setLanguage] = useState<Language>("en");
 
@@ -67,11 +53,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setCurrentRole = (role: Role) => {
     setCurrentRoleState(role);
-    // In both mock and API modes, the SPA keeps a local currentRole for
-    // sidebar / role-gated UI. The backend's `user.role` is the source of
-    // truth for what the user is *actually* allowed to do, but the local
-    // override (when present) determines what the SPA renders.
-    writeRoleOverride(role);
+    // Persisted through the mock adapter so the sidebar and the active
+    // session stay in lockstep. In API mode the session's role is the
+    // source of truth, but the local override keeps the sidebar readable
+    // when a session is anonymous.
+    setMockRole(role);
   };
 
   return (

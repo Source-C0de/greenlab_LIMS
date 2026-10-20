@@ -37,16 +37,42 @@
 
 import type { SampleRepository } from "@/domain/sample/ports";
 import type { ClientRepository } from "@/domain/client/ports";
+import type { AuthSession } from "@/domain/identity/ports";
 
+import { isApiEnabled } from "@/infrastructure/api/api";
 import { mockSampleRepository } from "@/infrastructure/mock/repositories/sampleRepository";
 import { mockClientRepository } from "@/infrastructure/mock/repositories/clientRepository";
+import { mockAuthSession } from "@/infrastructure/mock/repositories/authSession";
+import { httpAuthSession } from "@/infrastructure/api/repositories/authSession";
 
 export interface Container {
   readonly samples: SampleRepository;
   readonly clients: ClientRepository;
+  readonly auth: AuthSession;
 }
+
+/**
+ * Adapter selection happens HERE and nowhere else.
+ *
+ * `isApiEnabled()` is evaluated exactly once, at module load, and its result
+ * chooses the auth adapter. That is the whole point of Phase 4: before this,
+ * the flag was consulted in 20+ places using two incompatible idioms — an
+ * `enabled:` property on TanStack Query hooks, and an `if (apiOn)` branch
+ * inside `AuthContext`. Both are gone.
+ *
+ * `samples` and `clients` have no HTTP alternative yet, so they stay mock-only
+ * unconditionally. When those adapters land (and when the test-parameter
+ * repository is ported in Phase 5), they join `auth` in the conditional below
+ * rather than growing their own scattered checks.
+ *
+ * Reading the flag at module scope is deliberate: a Vite dev-server reload of
+ * `.env.local` should be a full page reload, not a mid-session adapter swap
+ * that would strand the user in a half-HTTP session.
+ */
+const API_ENABLED = isApiEnabled();
 
 export const container: Container = {
   samples: mockSampleRepository,
   clients: mockClientRepository,
+  auth: API_ENABLED ? httpAuthSession : mockAuthSession,
 };

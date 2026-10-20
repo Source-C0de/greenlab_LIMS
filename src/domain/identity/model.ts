@@ -29,6 +29,40 @@ export interface User {
   readonly createdAt: string;
 }
 
+/**
+ * The authenticated principal, as the SPA sees it after login.
+ *
+ * DELIBERATELY DISTINCT FROM `User` above, which is the directory record
+ * managed by `/admin/users`. They overlap but are not the same thing and are
+ * not interchangeable:
+ *
+ *   User     — `fullNameEn` / `fullNameAr`, `status`, admin-managed, mutable.
+ *   AuthUser — `fullName` + optional `fullNameAr`, `isActive`, derived from a
+ *              login/`/me` response, and the only shape the backend returns
+ *              from the auth endpoints.
+ *
+ * Collapsing them would force one of two fictions: either the login response
+ * pretends to carry admin directory fields it never sends, or the directory
+ * grows auth-only fields. Keeping both means each adapter maps its own wire
+ * shape onto the right domain concept, and `UserRepository` (Phase 4d) can
+ * still reconcile the two when the admin screen needs a full record.
+ */
+export interface AuthUser {
+  readonly id: string;
+  readonly username: string;
+  readonly email?: string | null;
+  /** Display name. Arabic display name is optional — many records omit it. */
+  readonly fullName: string;
+  readonly fullNameAr?: string | null;
+  readonly role: Role;
+  readonly isActive: boolean;
+  /** Set for `client`-role accounts; links to `domain/client`. */
+  readonly clientId?: string | null;
+  readonly lastLoginAt?: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // Menu + permissions
 // ---------------------------------------------------------------------------
