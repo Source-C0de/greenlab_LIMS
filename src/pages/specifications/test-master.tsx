@@ -8,6 +8,14 @@ import {
   mockSpecifications,
 } from "@/mock-data/specifications";
 import { DataTable } from "@/components/shared/DataTable";
+import { isApiEnabled } from "@/lib/api";
+import {
+  useTestList,
+  useDeleteTestListItem,
+  useCreateTestListItem,
+  useUpdateTestListItem,
+} from "@/lib/queries";
+import { getTestListErrorDetail } from "@/lib/testListApi";
 import { Button } from "@/components/ui/button";
 import {
   Plus,
@@ -30,7 +38,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -109,9 +116,52 @@ function generateNextTestCode(existing: TestMaster[]): string {
   return `GL-TM-${max + 1}`;
 }
 
+/** One flattened row per test, carrying the first parameter's details.
+ *
+ *  The table shows `ID · Specifications · Test Name · MU · Reference · LIMIT`.
+ *  The last three are per-parameter fields that live inside the
+ *  `parameterDetails` JSON blob, so we read `parameterRows[0]`. Every seeded
+ *  test has exactly one parameter row, so this is a clean 1:1 mapping; for a
+ *  test that later gains more parameters, only the first is surfaced here
+ *  (the rest remain visible in the View dialog). */
+type TestRow = {
+  id: string;
+  specifications: string;
+  testName: string;
+  mu: string;
+  reference: string;
+  limit: string;
+  /** Back-reference so the actions column can call the existing handlers
+   *  with the original `TestMaster` shape they already expect.
+   *
+   *  In API mode the backend's row is a *flat* parameter measurement with no
+   *  `TestMaster` counterpart, so we carry a minimally-hydrated shim. Fields
+   *  the API has no home for (sampleType, sopCode, …) come back blank; the
+   *  View dialog degrades gracefully. */
+  source: TestMaster;
+};
+
+/** Resolve a specificationId to "CODE · Name", or a graceful fallback. */
+function specLabel(specificationId?: string): string {
+  if (!specificationId) return "—";
+  const spec = mockSpecifications.find((s) => s.id === specificationId);
+  if (!spec) return specificationId;
+  return `${spec.code} · ${spec.name}`;
+}
+
 export default function TestMasterPage() {
   const { language } = useAppContext();
   const isRtl = language === 'ar';
+  const apiMode = isApiEnabled();
+
+  // API mode: real rows from `GET /api/v1/test-list` (flat parameter
+  // measurements, one row per record). Mock mode: the local `TestMaster[]`
+  // collection below.
+  const testListQuery = useTestList({ limit: 200, offset: 0 });
+  const createTestListItemMutation = useCreateTestListItem();
+  const updateTestListItemMutation = useUpdateTestListItem();
+  const deleteTestListItemMutation = useDeleteTestListItem();
+
   const [tests, setTests] = useState<TestMaster[]>(testMasterData);
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -225,6 +275,90 @@ export default function TestMasterPage() {
 
     setIsSubmitting(true);
 
+    // -----------------------------------------------------------
+    // API mode: round-trip to the backend's flat /test-list model.
+    //
+    // The backend stores ONE row per parameter measurement (each with its
+    // own `code` + `parameter`), so a UI submission that picked N parameters
+    // becomes N POSTs (or N PATCHes for editing). The first parameter also
+    // carries the test's primary `parameter` label, and any extra parameters
+    // share the same `code` so they remain grouped semantically.
+    // -----------------------------------------------------------
+    if (apiMode) {
+      const code = editingId
+        ? tests.find((t) => t.id === editingId)?.testCode || generateNextTestCode(tests)
+        : generateNextTestCode(tests);
+      const spec = formData.specificationId || undefined;
+      const finish = (msg: string) => {
+        setIsSubmitting(false);
+        setOpen(false);
+        setEditingId(null);
+        setFormData(emptyForm);
+        setParamSearch("");
+        toast.success(msg);
+      };
+      const fail = (err: unknown) => {
+        setIsSubmitting(false);
+        const d = getTestListErrorDetail(err);
+        toast.error(
+          isRtl
+            ? `فشل الحفظ (${d.status}): ${d.message}`
+            : `Save failed (${d.status}): ${d.message}`
+        );
+      };
+
+      const ops = formData.parameterRows.map((row, idx) => ({
+        row,
+        existingId:
+          editingId &&
+          safeParseRows(tests.find((t) => t.id === editingId)?.parameterDetails)[idx]
+            ?.id,
+      }));
+
+      const run = async () => {
+        try {
+          for (const { row, existingId } of ops) {
+            if (editingId && existingId) {
+              await updateTestListItemMutation.mutateAsync({
+                id: existingId,
+                body: {
+                  code,
+                  parameter: row.name,
+                  spec,
+                  mu: row.mu || undefined,
+                  reference: row.methodReference || undefined,
+                  limit_value: row.limitRange || undefined,
+                },
+              });
+            } else {
+              await createTestListItemMutation.mutateAsync({
+                code,
+                parameter: row.name,
+                spec,
+                mu: row.mu || undefined,
+                reference: row.methodReference || undefined,
+                limit_value: row.limitRange || undefined,
+              });
+            }
+          }
+          finish(
+            editingId
+              ? isRtl
+                ? "تم تحديث الاختبار بنجاح"
+                : "Test updated successfully"
+              : isRtl
+              ? "تم إضافة الاختبار بنجاح"
+              : "Test added successfully"
+          );
+        } catch (err) {
+          fail(err);
+        }
+      };
+
+      run();
+      return;
+    }
+
     setTimeout(() => {
       const joinedNames = formData.parameterRows.map(r => r.name).join(", ");
       const parameterDetails = JSON.stringify(formData.parameterRows);
@@ -328,85 +462,146 @@ export default function TestMasterPage() {
 
   const confirmDelete = () => {
     if (!deleteId) return;
+
+    if (apiMode) {
+      deleteTestListItemMutation.mutate(deleteId, {
+        onSuccess: () =>
+          toast.success(isRtl ? "تم حذف الاختبار بنجاح" : "Test deleted successfully"),
+        onError: (err) => {
+          const detail = getTestListErrorDetail(err);
+          toast.error(
+            isRtl
+              ? `فشل الحذف (${detail.status})`
+              : `Delete failed (${detail.status}): ${detail.message}`
+          );
+        },
+      });
+      setDeleteId(null);
+      return;
+    }
+
     setTests(prev => prev.filter(t => t.id !== deleteId));
     toast.success(isRtl ? "تم حذف الاختبار بنجاح" : "Test deleted successfully");
     setDeleteId(null);
   };
 
+  // Flatten each test into a display row carrying its first parameter's
+  // MU / Reference / LIMIT. See the `TestRow` doc comment above.
+  //
+  // API mode: server rows are already flat; we just translate field names.
+  // Mock mode: `parameterDetails` is a JSON blob of `TestParameterRow[]`,
+  // and we read row 0 for the per-parameter cells.
+  const apiItems = testListQuery.data?.items;
+  const apiLoading = testListQuery.isLoading || testListQuery.isFetching;
+  const apiError = testListQuery.error;
+
+  const rows = useMemo<TestRow[]>(() => {
+    if (apiMode) {
+      if (!apiItems) return [];
+      return apiItems.map((it) => ({
+        id: it.code,
+        specifications: it.spec ?? "—",
+        testName: it.parameter,
+        mu: it.mu ?? "—",
+        reference: it.reference ?? "—",
+        limit: it.limit_value ?? "—",
+        // Hydrate a minimal `TestMaster` shim so the View / Edit / Delete
+        // handlers don't have to branch. The fields below aren't emitted by
+        // the backend's flat row.
+        source: {
+          id: it.id,
+          testCode: it.code,
+          testName: it.parameter,
+          testParameter: it.parameter,
+          methodType: "",
+          methodReference: it.reference ?? "",
+          sampleType: "",
+          referenceNo: "",
+          sopCode: "",
+          warehouseItems: "",
+          specificationId: it.spec ?? undefined,
+          parameterDetails: JSON.stringify([
+            {
+              id: "",
+              name: it.parameter,
+              methodReference: it.reference ?? "",
+              limitRange: it.limit_value ?? "",
+              limitType: "Range",
+              mu: it.mu ?? "",
+            },
+          ]),
+        },
+      }));
+    }
+
+    return tests.map((t) => {
+      const p = safeParseRows(t.parameterDetails)[0];
+      return {
+        id: t.id,
+        specifications: specLabel(t.specificationId),
+        testName: t.testName,
+        mu: p?.mu || "—",
+        reference: p?.methodReference || t.methodReference || "—",
+        limit: p?.limitRange || "—",
+        source: t,
+      };
+    });
+  }, [apiMode, apiItems, tests]);
+
   const columns = useMemo(
     () => [
       {
-        key: "testCode",
-        header: isRtl ? "كود الاختبار" : "Test Code",
-        render: (item: TestMaster) => (
-          <span className="font-mono font-medium">{item.testCode}</span>
+        key: "id",
+        header: isRtl ? "المعرف" : "ID",
+        render: (row: TestRow) => (
+          <span className="font-mono text-xs">{row.id}</span>
+        ),
+      },
+      {
+        key: "specifications",
+        header: isRtl ? "المواصفات" : "Specifications",
+        render: (row: TestRow) => (
+          <span className="text-sm">{row.specifications}</span>
         ),
       },
       {
         key: "testName",
         header: isRtl ? "اسم الاختبار" : "Test Name",
-        render: (item: TestMaster) => (
-          <span className="font-medium text-primary">{item.testName}</span>
+        render: (row: TestRow) => (
+          <span className="font-medium text-primary">{row.testName}</span>
         ),
       },
       {
-        key: "testParameter",
-        header: isRtl ? "معلمات الاختبار" : "Test Parameters",
-        render: (item: TestMaster) => (
-          <div className="flex flex-wrap gap-1 max-w-[260px]">
-            {item.testParameter
-              ? item.testParameter
-                  .split(",")
-                  .map(s => s.trim())
-                  .filter(Boolean)
-                  .map(p => (
-                    <span
-                      key={p}
-                      className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium"
-                    >
-                      {p}
-                    </span>
-                  ))
-              : <span className="text-muted-foreground text-xs">—</span>}
-          </div>
+        key: "mu",
+        header: isRtl ? "عدم اليقين" : "MU",
+        render: (row: TestRow) => (
+          <span className="font-mono text-muted-foreground">{row.mu}</span>
         ),
       },
       {
-        key: "specificationId",
-        header: isRtl ? "المواصفة" : "Specification",
-        render: (item: TestMaster) => {
-          if (!item.specificationId) {
-            return <span className="text-muted-foreground text-xs">—</span>;
-          }
-          const spec = mockSpecifications.find(s => s.id === item.specificationId);
-          if (!spec) {
-            return (
-              <Badge variant="outline" className="text-[10px] font-mono">
-                {item.specificationId}
-              </Badge>
-            );
-          }
-          return (
-            <Badge
-              variant="outline"
-              className="text-[10px] font-mono"
-              title={spec.name}
-            >
-              {spec.code}
-            </Badge>
-          );
-        },
+        key: "reference",
+        header: isRtl ? "المرجع" : "Reference",
+        render: (row: TestRow) => (
+          <span className="font-mono text-muted-foreground">{row.reference}</span>
+        ),
+      },
+      {
+        key: "limit",
+        header: isRtl ? "الحد" : "LIMIT",
+        render: (row: TestRow) => (
+          <span className="font-mono">{row.limit}</span>
+        ),
       },
       {
         key: "actions",
         header: "",
-        render: (item: TestMaster) => (
+        render: (row: TestRow) => (
           <div className="flex gap-2 justify-end">
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-primary hover:bg-primary/10"
-              onClick={() => handleView(item)}
+              onClick={() => handleView(row.source)}
               title={isRtl ? "عرض" : "View"}
             >
               <Eye className="h-4 w-4" />
@@ -415,7 +610,7 @@ export default function TestMasterPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-primary hover:bg-primary/10"
-              onClick={() => handleEdit(item)}
+              onClick={() => handleEdit(row.source)}
               title={isRtl ? "تعديل" : "Edit"}
             >
               <Pencil className="h-4 w-4" />
@@ -424,7 +619,7 @@ export default function TestMasterPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-destructive hover:bg-destructive/10"
-              onClick={() => setDeleteId(item.id)}
+              onClick={() => setDeleteId(row.source.id)}
               title={isRtl ? "حذف" : "Delete"}
             >
               <Trash2 className="h-4 w-4" />
@@ -881,11 +1076,49 @@ export default function TestMasterPage() {
       </div>
 
       <DataTable
-        data={tests}
+        data={rows}
         columns={columns as any}
         searchKey="testName"
         searchPlaceholder={isRtl ? "البحث في معلمات الاختبار..." : "Search test parameters..."}
       />
+
+      {/* API-mode status banner — surfaces 401/no-session/load errors so the
+          developer can tell mock-data from a real backend roundtrip. */}
+      {apiMode && (
+        <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md border bg-muted/30 text-xs">
+          <div className="flex items-center gap-2">
+            {apiLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {apiError ? (
+              <span className="text-destructive">
+                {(() => {
+                  const d = getTestListErrorDetail(apiError);
+                  return isRtl
+                    ? `تعذر تحميل القائمة (${d.status}): ${d.message}`
+                    : `Failed to load list (${d.status}): ${d.message}`;
+                })()}
+              </span>
+            ) : (
+              <>
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-muted-foreground">
+                  {isRtl
+                    ? `متصل بالـ API — إجمالي ${testListQuery.data?.total ?? rows.length} سجل`
+                    : `Live API — ${testListQuery.data?.total ?? rows.length} record(s) from DB`}
+                </span>
+              </>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7"
+            onClick={() => testListQuery.refetch()}
+            disabled={apiLoading}
+          >
+            {isRtl ? "إعادة التحميل" : "Refresh"}
+          </Button>
+        </div>
+      )}
 
       {/* View Dialog */}
       <Dialog open={viewOpen} onOpenChange={setViewOpen}>

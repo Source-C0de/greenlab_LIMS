@@ -46,6 +46,17 @@ import {
   clearUserMenuOverrides as apiClearUserMenuOverrides,
 } from "@/lib/usersApi";
 import {
+  type TestListItem,
+  type TestListCreate,
+  type TestListUpdate,
+  type TestListFilters,
+  type Paginated,
+  listTestList as apiListTestList,
+  createTestListItem as apiCreateTestList,
+  updateTestListItem as apiUpdateTestList,
+  deleteTestListItem as apiDeleteTestList,
+} from "@/lib/testListApi";
+import {
   type Role,
   type RoleUpdate,
   type RoleCreate,
@@ -226,6 +237,100 @@ export function useDeleteTestParameter(): UseMutationResult<
     onSuccess: (_void, id) => {
       qc.invalidateQueries({ queryKey: testParameterKeys.all });
       qc.removeQueries({ queryKey: testParameterKeys.detail(id) });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Test List (Test Methods catalogue) — `/api/v1/test-list`
+//
+// One row per parameter measurement (flat shape). Differs from the mock
+// `TestMaster`, which nests N parameters inside a single row via a JSON
+// `parameterDetails` blob.
+// ---------------------------------------------------------------------------
+
+export const testListKeys = {
+  all: ["api", "test-list"] as const,
+  list: (filters: TestListFilters) =>
+    [
+      ...testListKeys.all,
+      "list",
+      {
+        search: filters.search ?? "",
+        spec: filters.spec ?? "",
+        is_active:
+          typeof filters.is_active === "boolean" ? filters.is_active : null,
+        limit: filters.limit ?? 50,
+        offset: filters.offset ?? 0,
+      },
+    ] as const,
+  detail: (id: string) => [...testListKeys.all, "detail", id] as const,
+};
+
+/** GET /test-list — list with filters + limit/offset pagination.
+ *
+ *  `limit` / `offset` are passed through so the page can paginate; only
+ *  `limit` gets a default when the caller omitted it entirely. */
+export function useTestList(
+  filters: TestListFilters = {},
+): UseQueryResult<Paginated<TestListItem>> {
+  return useQuery<Paginated<TestListItem>>({
+    queryKey: testListKeys.list(filters),
+    queryFn: () =>
+      apiListTestList({
+        ...filters,
+        limit: filters.limit ?? 50,
+        offset: filters.offset ?? 0,
+      }),
+    enabled: isApiEnabled(),
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+}
+
+/** POST /test-list — create (admin). */
+export function useCreateTestListItem(): UseMutationResult<
+  TestListItem,
+  unknown,
+  TestListCreate
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: TestListCreate) => apiCreateTestList(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: testListKeys.all });
+    },
+  });
+}
+
+/** PATCH /test-list/{id} — partial update (admin). */
+export function useUpdateTestListItem(): UseMutationResult<
+  TestListItem,
+  unknown,
+  { id: string; body: TestListUpdate }
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }) => apiUpdateTestList(id, body),
+    onSuccess: (row) => {
+      qc.invalidateQueries({ queryKey: testListKeys.all });
+      qc.setQueryData(testListKeys.detail(row.id), row);
+    },
+  });
+}
+
+/** DELETE /test-list/{id} — hard delete (admin). */
+export function useDeleteTestListItem(): UseMutationResult<
+  void,
+  unknown,
+  string
+> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDeleteTestList(id),
+    onSuccess: (_void, id) => {
+      qc.invalidateQueries({ queryKey: testListKeys.all });
+      qc.removeQueries({ queryKey: testListKeys.detail(id) });
     },
   });
 }
