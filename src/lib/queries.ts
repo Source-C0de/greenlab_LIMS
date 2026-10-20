@@ -141,13 +141,21 @@ export const testParameterKeys = {
   detail: (id: string) => [...testParameterKeys.all, "detail", id] as const,
 };
 
-/** GET /test-parameters — list with filters. */
+/** GET /test-parameters — list with filters.
+ *
+ *  `limit` / `offset` are passed straight through so the page can paginate.
+ *  Only default `limit` when the caller didn't specify one at all. */
 export function useTestParameters(
   filters: ListFilters = {},
 ): UseQueryResult<Awaited<ReturnType<typeof apiList>>> {
   return useQuery({
     queryKey: testParameterKeys.list(filters),
-    queryFn: () => apiList({ ...filters, limit: filters.limit ?? 200 }),
+    queryFn: () =>
+      apiList({
+        ...filters,
+        limit: filters.limit ?? 50,
+        offset: filters.offset ?? 0,
+      }),
     enabled: isApiEnabled(),
     refetchOnWindowFocus: false,
     staleTime: 30_000,

@@ -7,6 +7,8 @@ import {
   Trash2,
   Eye,
   Search,
+  ChevronLeft,
+  ChevronRight,
   X as XIcon,
 } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
@@ -100,6 +102,11 @@ export default function TestParameterCatalogue() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
+  // --- Pagination state ---
+  const PAGE_SIZES = [25, 50, 100] as const;
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [pageIndex, setPageIndex] = useState(0);
+
   // Debounce the free-text search so we don't fire a request on every keystroke.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -108,13 +115,19 @@ export default function TestParameterCatalogue() {
 
   // Build the filter object that the API expects.
   const filters = useMemo<ListFilters>(() => {
-    const f: ListFilters = { limit: 200, offset: 0 };
+    const f: ListFilters = { limit: pageSize, offset: pageIndex * pageSize };
     if (debouncedSearch.trim()) f.search = debouncedSearch.trim();
     if (specFilter !== "all") f.spec = specFilter;
     if (statusFilter === "active") f.is_active = true;
     if (statusFilter === "inactive") f.is_active = false;
     return f;
-  }, [debouncedSearch, specFilter, statusFilter]);
+  }, [debouncedSearch, specFilter, statusFilter, pageSize, pageIndex]);
+
+  // Any filter change must snap back to the first page — otherwise the user
+  // can land on page 7 of a result set that only has 1 page.
+  useEffect(() => {
+    setPageIndex(0);
+  }, [debouncedSearch, specFilter, statusFilter, pageSize]);
 
   // --- Data hook (only fires when API mode is on) ---
   const {
@@ -147,13 +160,20 @@ export default function TestParameterCatalogue() {
     });
   }, [page]);
 
-  // Distinct spec values for the filter dropdown, derived from the current
-  // unfiltered list when possible.
+  // Distinct spec values for the filter dropdown.
+  //
+  // `rows` is now only the *current page*, so it can't be the source here —
+  // deriving specs from it would hide every spec that isn't on the visible
+  // page. Fetch a separate unfiltered, high-limit list purely for the
+  // dropdown options.
+  const specOptionsQuery = useTestParameters({ limit: 500, offset: 0 });
   const allSpecs = useMemo<string[]>(() => {
     const set = new Set<string>();
-    for (const r of rows) if (r.spec) set.add(r.spec);
+    for (const r of specOptionsQuery.data?.items ?? []) {
+      if (r.spec) set.add(r.spec);
+    }
     return Array.from(set).sort();
-  }, [rows]);
+  }, [specOptionsQuery.data]);
 
   // --- Mutations ---
   const createMut = useCreateTestParameter();
@@ -291,9 +311,20 @@ export default function TestParameterCatalogue() {
     }
   };
 
-  // --- KPI counts (derived from the loaded rows) ---
+  // --- KPI counts ---
+  //
+  // `rows` is only the current page now, so the KPI cards must read the
+  // server-reported totals (`page.total`) rather than counting rows locally.
+  // Active/inactive splits aren't available from the server, so those two
+  // cards stay scoped to the visible page and are labelled as such.
+  const grandTotal = page?.total ?? 0;
   const totalActive = rows.filter((r) => r.is_active).length;
   const totalInactive = rows.length - totalActive;
+
+  // --- Pagination math ---
+  const totalPages = Math.max(1, Math.ceil(grandTotal / pageSize));
+  const fromRow = grandTotal === 0 ? 0 : pageIndex * pageSize + 1;
+  const toRow = Math.min(grandTotal, pageIndex * pageSize + rows.length);
 
   return (
     <div className="space-y-6">
@@ -342,17 +373,17 @@ export default function TestParameterCatalogue() {
           <p className="text-sm text-muted-foreground">
             {isRtl ? "إجمالي المعلمات" : "Total Parameters"}
           </p>
-          <p className="text-2xl font-bold">{rows.length}</p>
+          <p className="text-2xl font-bold">{grandTotal}</p>
         </div>
         <div className="bg-card p-4 rounded-xl border shadow-sm">
           <p className="text-sm text-muted-foreground">
-            {isRtl ? "نشطة" : "Active"}
+            {isRtl ? "نشطة (هذه الصفحة)" : "Active (this page)"}
           </p>
           <p className="text-2xl font-bold text-emerald-600">{totalActive}</p>
         </div>
         <div className="bg-card p-4 rounded-xl border shadow-sm">
           <p className="text-sm text-muted-foreground">
-            {isRtl ? "غير نشطة" : "Inactive"}
+            {isRtl ? "غير نشطة (هذه الصفحة)" : "Inactive (this page)"}
           </p>
           <p className="text-2xl font-bold text-muted-foreground">{totalInactive}</p>
         </div>
@@ -624,6 +655,71 @@ export default function TestParameterCatalogue() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Pagination footer — server-side paging driven by
+          `page.total` / `page.limit` / `page.offset` from
+          GET /test-parameters. */}
+      {apiOn && grandTotal > 0 && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            {isRtl
+              ? `عرض ${fromRow}–${toRow} من ${grandTotal}`
+              : `Showing ${fromRow}–${toRow} of ${grandTotal}`}
+          </p>
+
+          <div className="flex items-center gap-2">
+            {/* Page-size selector */}
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => setPageSize(Number(v))}
+            >
+              <SelectTrigger className="h-8 w-[110px]" aria-label={isRtl ? "حجم الصفحة" : "Rows per page"}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZES.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {isRtl ? `${n} لكل صفحة` : `${n} / page`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Prev / page indicator / Next */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+                disabled={pageIndex === 0 || isLoading}
+                title={isRtl ? "السابق" : "Previous page"}
+              >
+                <ChevronLeft className="h-4 w-4 rtl:rotate-0" />
+                <span className="sr-only">{isRtl ? "السابق" : "Previous"}</span>
+              </Button>
+
+              <span className="min-w-[7rem] text-center text-sm text-muted-foreground">
+                {isRtl
+                  ? `صفحة ${pageIndex + 1} من ${totalPages}`
+                  : `Page ${pageIndex + 1} of ${totalPages}`}
+              </span>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={pageIndex >= totalPages - 1 || isLoading}
+                title={isRtl ? "التالي" : "Next page"}
+              >
+                <ChevronRight className="h-4 w-4" />
+                <span className="sr-only">{isRtl ? "التالي" : "Next"}</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!isAdmin && (
         <p className="text-xs text-muted-foreground italic">
