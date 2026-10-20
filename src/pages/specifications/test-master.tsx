@@ -63,9 +63,6 @@ const emptyForm: FormState = {
   limitRange: "",
 };
 
-const newRowId = () =>
-  `TPR-${Date.now().toString(36)}-${Math.floor(Math.random() * 1000).toString(36)}`;
-
 /** Parse the legacy/mock `parameterDetails` JSON blob.
  *
  *  Only mock seed records still carry this — API rows are already flat and never
@@ -79,7 +76,7 @@ function safeParseRows(raw?: string | null): TestParameterRow[] {
       return parsed
         .filter((r) => r && typeof r === 'object' && typeof r.name === 'string')
         .map((r) => ({
-          id: r.id || newRowId(),
+          id: r.id || "",
           name: r.name,
           methodReference: r.methodReference || '',
           limitRange: r.limitRange || '',
@@ -97,23 +94,9 @@ function safeParseRows(raw?: string | null): TestParameterRow[] {
   return [];
 }
 
-/** Flat view of a test's MU / Reference / Limit, regardless of source.
- *
- *  API records carry these as direct fields; mock records keep them inside a
- *  1-element `parameterDetails` array. Normalising here keeps the table, the
- *  View dialog and `handleEdit` from each reaching into the JSON blob. */
-function flatFields(t: TestMaster): {
-  mu: string;
-  reference: string;
-  limit: string;
-} {
-  const p = safeParseRows(t.parameterDetails)[0];
-  return {
-    mu: p?.mu || "",
-    reference: t.methodReference || "",
-    limit: p?.limitRange || "",
-  };
-}
+/** Read the first row of a mock-mode test's `parameterDetails` JSON blob. */
+const firstRow = (t: TestMaster): TestParameterRow | undefined =>
+  safeParseRows(t.parameterDetails)[0];
 
 // Generate the next sequential test code based on existing tests.
 //
@@ -251,7 +234,6 @@ export default function TestMasterPage() {
     setTimeout(() => {
       const parameterDetails = JSON.stringify([
         {
-          id: newRowId(),
           name: formData.testName,
           methodReference: formData.methodReference,
           limitRange: formData.limitRange,
@@ -312,15 +294,15 @@ export default function TestMasterPage() {
   };
 
   const handleEdit = (test: TestMaster) => {
-    const f = flatFields(test);
+    const p = firstRow(test);
     setEditingId(test.id);
     setFormData({
       testCode: test.testCode,
       testName: test.testName,
       specificationId: test.specificationId ?? "",
-      mu: f.mu,
-      methodReference: f.reference || test.methodReference,
-      limitRange: f.limit,
+      mu: p?.mu || "",
+      methodReference: p?.methodReference || test.methodReference || "",
+      limitRange: p?.limitRange || "",
     });
     setOpen(true);
   };
@@ -392,7 +374,6 @@ export default function TestMasterPage() {
           specificationId: it.spec ?? undefined,
           parameterDetails: JSON.stringify([
             {
-              id: "",
               name: it.parameter,
               methodReference: it.reference ?? "",
               limitRange: it.limit_value ?? "",
@@ -405,14 +386,14 @@ export default function TestMasterPage() {
     }
 
     return tests.map((t) => {
-      const f = flatFields(t);
+      const p = firstRow(t);
       return {
         id: t.testCode,
         specifications: specLabel(t.specificationId),
         testName: t.testName,
-        mu: f.mu || "—",
-        reference: f.reference || "—",
-        limit: f.limit || "—",
+        mu: p?.mu || "—",
+        reference: p?.methodReference || t.methodReference || "—",
+        limit: p?.limitRange || "—",
         source: t,
       };
     });
@@ -757,7 +738,7 @@ export default function TestMasterPage() {
 
           {selectedTest &&
             (() => {
-              const f = flatFields(selectedTest);
+              const p = firstRow(selectedTest);
               const cells: Array<{
                 label: string;
                 value: string;
@@ -770,17 +751,17 @@ export default function TestMasterPage() {
                 },
                 {
                   label: isRtl ? "عدم اليقين (MU)" : "MU",
-                  value: f.mu || "—",
+                  value: p?.mu || "—",
                   mono: true,
                 },
                 {
                   label: isRtl ? "المرجع" : "Reference",
-                  value: f.reference || "—",
+                  value: p?.methodReference || selectedTest.methodReference || "—",
                   mono: true,
                 },
                 {
                   label: isRtl ? "الحد" : "LIMIT",
-                  value: f.limit || "—",
+                  value: p?.limitRange || "—",
                   mono: true,
                 },
               ];
