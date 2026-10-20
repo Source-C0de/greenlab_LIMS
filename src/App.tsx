@@ -1,71 +1,71 @@
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/shared/ui/toaster";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 
 // Context
-import { AppProvider } from "@/context/AppContext";
-import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { NotificationProvider } from "@/context/NotificationContext";
+import { AppProvider } from "@/presentation/providers/AppContext";
+import { AuthProvider, useAuth } from "@/presentation/providers/AuthContext";
+import { NotificationProvider } from "@/presentation/providers/NotificationContext";
 
 // Layout
-import { AppLayout } from "@/components/layout/AppLayout";
+import { AppLayout } from "@/presentation/components/layout/AppLayout";
 
 // Auth
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { ProtectedRoute } from "@/presentation/components/auth/ProtectedRoute";
 
 // Auth Pages (No sidebar)
-import Login from "@/pages/login";
-import Register from "@/pages/register";
-import ForgotPassword from "@/pages/forgot-password";
-import OtpVerify from "@/pages/otp-verify";
-import SuperadminLogin from "@/pages/superadmin-login";
+import Login from "@/presentation/pages/login";
+import Register from "@/presentation/pages/register";
+import ForgotPassword from "@/presentation/pages/forgot-password";
+import OtpVerify from "@/presentation/pages/otp-verify";
+import SuperadminLogin from "@/presentation/pages/superadmin-login";
 
 // App Pages
-import Dashboard from "@/pages/dashboard";
-import MarketingReportsPage from "@/pages/dashboard/marketing";
-import SamplesList from "@/pages/samples/index";
-import SampleDetail from "@/pages/samples/[id]";
-import SampleReportPage from "@/pages/samples/report";
-import WorkflowBoard from "@/pages/workflow";
-import ClientsList from "@/pages/clients";
-import ReportsList from "@/pages/reports/index";
-import ReportDetail from "@/pages/reports/[id]";
-import InventoryList from "@/pages/inventory";
-import InvoicesList from "@/pages/invoices/index";
-import InvoiceDetail from "@/pages/invoices/[id]";
-import Analytics from "@/pages/analytics";
-import AdminPanel from "@/pages/admin";
-import UsersAdmin from "@/pages/admin/users";
-import RolesAdmin from "@/pages/admin/roles";
-import UserDetail from "@/pages/admin/users/[id]";
-import ClientPortal from "@/pages/client-portal";
-import Settings from "@/pages/settings";
-import AccountingDashboard from "@/pages/accounting/dashboard";
-import AccountingJournals from "@/pages/accounting/journals";
-import AccountingLedger from "@/pages/accounting/ledger";
-import AccountingReports from "@/pages/accounting/reports";
-import ChartOfAccounts from "@/pages/accounting/chart-of-accounts";
-import QuotationsList from "@/pages/quotations/index";
-import NewQuotation from "@/pages/quotations/new";
-import QuotationDetail from "@/pages/quotations/[id]";
-import SpecificationList from "@/pages/specifications/index";
-import NewSpecification from "@/pages/specifications/new";
-import ParameterLibrary from "@/pages/specifications/library";
-import ApprovalQueue from "@/pages/specifications/approval";
-import VersionHistory from "@/pages/specifications/history";
-import TestMasterPage from "@/pages/specifications/test-master";
-import TestParameterCatalogue from "@/pages/specifications/test-parameters";
-import SampleReceiving from "@/pages/samples/receiving";
-import ApprovalsQueue from "@/pages/approvals/queue";
-import MySubmissions from "@/pages/approvals/my-submissions";
-import ClientRequestsList from "@/pages/client-requests/index";
-import NewClientRequest from "@/pages/client-requests/new";
-import ClientRequestDetail from "@/pages/client-requests/[id]";
-import TechnicalEvaluationList from "@/pages/technical-evaluation/index";
-import TechnicalEvaluationDetail from "@/pages/technical-evaluation/[id]";
-import NotFound from "@/pages/not-found";
+import Dashboard from "@/presentation/pages/dashboard";
+import MarketingReportsPage from "@/presentation/pages/dashboard/marketing";
+import SamplesList from "@/presentation/pages/samples/index";
+import SampleDetail from "@/presentation/pages/samples/[id]";
+import SampleReportPage from "@/presentation/pages/samples/report";
+import WorkflowBoard from "@/presentation/pages/workflow";
+import ClientsList from "@/presentation/pages/clients";
+import ReportsList from "@/presentation/pages/reports/index";
+import ReportDetail from "@/presentation/pages/reports/[id]";
+import InventoryList from "@/presentation/pages/inventory";
+import InvoicesList from "@/presentation/pages/invoices/index";
+import InvoiceDetail from "@/presentation/pages/invoices/[id]";
+import Analytics from "@/presentation/pages/analytics";
+import AdminPanel from "@/presentation/pages/admin";
+import UsersAdmin from "@/presentation/pages/admin/users";
+import RolesAdmin from "@/presentation/pages/admin/roles";
+import UserDetail from "@/presentation/pages/admin/users/[id]";
+import ClientPortal from "@/presentation/pages/client-portal";
+import Settings from "@/presentation/pages/settings";
+import AccountingDashboard from "@/presentation/pages/accounting/dashboard";
+import AccountingJournals from "@/presentation/pages/accounting/journals";
+import AccountingLedger from "@/presentation/pages/accounting/ledger";
+import AccountingReports from "@/presentation/pages/accounting/reports";
+import ChartOfAccounts from "@/presentation/pages/accounting/chart-of-accounts";
+import QuotationsList from "@/presentation/pages/quotations/index";
+import NewQuotation from "@/presentation/pages/quotations/new";
+import QuotationDetail from "@/presentation/pages/quotations/[id]";
+import SpecificationList from "@/presentation/pages/specifications/index";
+import NewSpecification from "@/presentation/pages/specifications/new";
+import ParameterLibrary from "@/presentation/pages/specifications/library";
+import ApprovalQueue from "@/presentation/pages/specifications/approval";
+import VersionHistory from "@/presentation/pages/specifications/history";
+import TestMasterPage from "@/presentation/pages/specifications/test-master";
+import TestParameterCatalogue from "@/presentation/pages/specifications/test-parameters";
+import SampleReceiving from "@/presentation/pages/samples/receiving";
+import ApprovalsQueue from "@/presentation/pages/approvals/queue";
+import MySubmissions from "@/presentation/pages/approvals/my-submissions";
+import ClientRequestsList from "@/presentation/pages/client-requests/index";
+import NewClientRequest from "@/presentation/pages/client-requests/new";
+import ClientRequestDetail from "@/presentation/pages/client-requests/[id]";
+import TechnicalEvaluationList from "@/presentation/pages/technical-evaluation/index";
+import TechnicalEvaluationDetail from "@/presentation/pages/technical-evaluation/[id]";
+import NotFound from "@/presentation/pages/not-found";
 
 const queryClient = new QueryClient();
 

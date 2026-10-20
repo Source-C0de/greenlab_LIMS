@@ -16,7 +16,7 @@
 // is a follow-up pass; nothing here changes behaviour today.
 // =========================================================================
 
-export type { Language } from "@/context/AppContext";
+export type { Language } from "@/shared/lib/types";
 
 /**
  * A value that exists in every supported language.

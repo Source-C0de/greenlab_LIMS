@@ -1,4 +1,4 @@
-import type { Language } from "@/context/AppContext";
+import type { Language } from "@/shared/lib/types";
 import { samplesLabels } from "./samples.en";
 import { samplesLabelsAr } from "./samples.ar";
 
