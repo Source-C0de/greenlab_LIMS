@@ -9,7 +9,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useAppContext } from "@/presentation/providers/AppContext";
-import { samplesStore, notifyStoreChanged, findSample } from "./store";
+import { samplesStore, notifyStoreChanged, findSample } from "@/infrastructure/mock/repositories/sampleStore";
 import type { MockSample, Test } from "@/infrastructure/mock/data/samples";
 import type {
   SupplementarySampleInput,

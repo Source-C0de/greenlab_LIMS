@@ -3,7 +3,7 @@
 // =========================================================================
 
 import { useCallback } from "react";
-import { findTestById, notifyStoreChanged } from "./store";
+import { findTestById, notifyStoreChanged } from "@/infrastructure/mock/repositories/sampleStore";
 import type { UpdateTestParametersInput } from "./types";
 import type { ParameterValue, Test } from "@/infrastructure/mock/data/samples";
 

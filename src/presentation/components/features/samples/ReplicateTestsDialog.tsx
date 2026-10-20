@@ -14,7 +14,7 @@ import { ScrollArea } from "@/shared/ui/scroll-area";
 import { Beaker, Check, Copy, Search } from "lucide-react";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import { mockSamples, type MockSample, type Test } from "@/infrastructure/mock/data/samples";
-import { findSample, notifyStoreChanged } from "@/presentation/hooks/test-approvals/store";
+import { findSample, notifyStoreChanged } from "@/infrastructure/mock/repositories/sampleStore";
 import { Input } from "@/shared/ui/input";
 import { toast } from "sonner";
 

@@ -9,7 +9,7 @@
 
 import { useCallback } from "react";
 import { useNotifications } from "@/presentation/providers/NotificationContext";
-import { findTestById, notifyStoreChanged } from "./store";
+import { findTestById, notifyStoreChanged } from "@/infrastructure/mock/repositories/sampleStore";
 import type { ApproveTestInput } from "./types";
 import type { Test, TestReviewStatus } from "@/infrastructure/mock/data/samples";
 import { approvalLabels } from "./labels";

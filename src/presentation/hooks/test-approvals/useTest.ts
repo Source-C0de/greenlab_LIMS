@@ -3,7 +3,7 @@
 // =========================================================================
 
 import { useSyncExternalStore } from "react";
-import { findTestById, getStoreSnapshot, subscribe } from "./store";
+import { findTestById, getStoreSnapshot, subscribe } from "@/infrastructure/mock/repositories/sampleStore";
 import type { Test, MockSample } from "@/infrastructure/mock/data/samples";
 
 interface UseTestResult {

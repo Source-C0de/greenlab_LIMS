@@ -1,7 +1,6 @@
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Link, useParams } from "wouter";
 import { Info } from "lucide-react";
-import { mockSamples } from "@/infrastructure/mock/data";
 import { SampleHeader } from "@/presentation/components/features/samples/SampleHeader";
 import { SampleTabs } from "@/presentation/components/features/samples/SampleTabs";
 import { TestDrawer } from "@/presentation/components/features/tests/TestDrawer";
@@ -9,14 +8,14 @@ import { TestReviewDrawer } from "@/presentation/components/features/approvals/T
 import { AssignAnalystDialog } from "@/presentation/components/features/samples/AssignAnalystDialog";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import {
-  findSample,
   getStoreSnapshot,
-  notifyStoreChanged,
   subscribe,
-} from "@/presentation/hooks/test-approvals/store";
+} from "@/infrastructure/mock/repositories/sampleStore";
+import { container } from "@/infrastructure/di/container";
 import { currentStage, roleForStage } from "@/infrastructure/mock/data/samples";
 import { toast } from "sonner";
-import type { Test, MockSample } from "@/infrastructure/mock/data/samples";
+import type { Test } from "@/infrastructure/mock/data/samples";
+import type { Sample } from "@/domain/sample/model";
 
 export default function SampleDetail() {
   // Sample IDs contain slashes (e.g. "FD/2024/0001"), so wouter's `:id`
@@ -41,17 +40,36 @@ export default function SampleDetail() {
 
   // Keep this page in sync with the approval store so any decision made from
   // the TestReviewDrawer (or any other source) is reflected immediately.
-  useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);
+  const storeTick = useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);
 
-  // Read the live sample from the store on every render. The
-  // useSyncExternalStore above re-fires on every store mutation, so this
-  // picks up newly-added tests (e.g. from AddTestFromTeDialog /
-  // AddTestToSampleDialog) without a stale useMemo caching the old
-  // reference. Falls back to mockSamples for IDs not in the live store.
-  const sample: MockSample =
-    findSample(id ?? "") ??
-    mockSamples.find((s) => s.id === id) ??
-    mockSamples[0];
+  // Load through the `SampleRepository` port. `get()` is async, so the sample
+  // lands in state and is re-fetched whenever the store tick changes — which
+  // is what makes an approval decided in the drawer appear here immediately.
+  //
+  // NOTE ON THE OLD FALLBACK: this used to end in `?? mockSamples[0]`, so a
+  // typo'd or stale sample id rendered the *first* sample in the corpus with
+  // no indication anything was wrong. It now renders an explicit
+  // "not found" state instead — silently showing unrelated laboratory data is
+  // worse than showing an error.
+  const [sample, setSample] = useState<Sample | null>(null);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void container.samples.get(id ?? "").then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setSample(result.value);
+        setNotFound(false);
+      } else {
+        setSample(null);
+        setNotFound(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, storeTick]);
 
   // Dialog States
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
@@ -73,20 +91,25 @@ export default function SampleDetail() {
     setSelectedTestId(null);
   };
 
-  const selectedTest: Test | undefined = sample.tests?.find(
+  // The sample may be null while the port call is in flight (and permanently,
+  // for an unknown id) — the not-found / loading returns below handle both.
+  // These derivations run before that guard, so they tolerate null here.
+  const sampleTests: Test[] = sample?.tests ?? [];
+
+  const selectedTest: Test | undefined = sampleTests.find(
     (t) => t.id === selectedTestId,
   );
 
   // Tests on THIS sample that are awaiting the current user's stage.
   const myPending = useMemo(() => {
-    return (sample.tests ?? []).filter((t) => {
+    return sampleTests.filter((t) => {
       const stage = currentStage(t);
       if (!stage) return false;
       return (
         currentRole === roleForStage(stage) || currentRole === "superadmin"
       );
     });
-  }, [sample.tests, currentRole]);
+  }, [sampleTests, currentRole]);
 
   const openReview = () => {
     if (myPending.length === 0) {
@@ -102,12 +125,15 @@ export default function SampleDetail() {
   };
 
   // Action Handlers
+  //
+  // Writes go through `container.samples.update()` rather than reaching into
+  // the store directly. `update()` patches the live object in place (callers
+  // hold references to it) and fires `notifyStoreChanged()`, so the semantics
+  // are identical to the code these replaced — but the page now depends on the
+  // port, not on the mock's storage layout.
+
   const handleAssignAnalyst = (analyst: any) => {
-    const target = findSample(id ?? "");
-    if (target) {
-      target.assignedAnalyst = analyst.name;
-      notifyStoreChanged();
-    }
+    void container.samples.update(id ?? "", { assignedAnalyst: analyst.name });
     setIsAssignOpen(false);
     toast.success(isRtl ? "تم تعيين المحلل" : "Analyst assigned", {
       description: `${isRtl ? "المحلل:" : "Assigned to:"} ${isRtl ? analyst.nameAr : analyst.name}`,
@@ -118,13 +144,13 @@ export default function SampleDetail() {
   // still awaiting the user's stage. If none, close the drawer.
   const handleReviewDecision = () => {
     setTimeout(() => {
-      const refreshed = findSample(id ?? "");
+      const refreshed = sample;
       if (!refreshed) {
         setReviewOpen(false);
         setReviewTestId(null);
         return;
       }
-      const next = refreshed.tests.find((t) => {
+      const next = refreshed.tests.find((t: Test) => {
         const stage = currentStage(t);
         if (!stage) return false;
         return (
@@ -141,19 +167,19 @@ export default function SampleDetail() {
   };
 
   const handleAddTest = (newTests: Test[]) => {
-    const target = findSample(id ?? "");
-    if (!target) return;
-    target.tests = [...target.tests, ...newTests];
-    notifyStoreChanged();
+    if (!sample) return;
+    void container.samples.update(id ?? "", {
+      tests: [...sample.tests, ...newTests],
+    });
   };
 
   const handleUpdateTest = (testId: string, patch: Partial<Test>) => {
-    const target = findSample(id ?? "");
-    if (!target) return;
-    target.tests = target.tests.map((t) =>
-      t.id === testId ? { ...t, ...patch } : t,
-    );
-    notifyStoreChanged();
+    if (!sample) return;
+    void container.samples.update(id ?? "", {
+      tests: sample.tests.map((t) =>
+        t.id === testId ? { ...t, ...patch } : t,
+      ),
+    });
   };
 
   const handleEditTest = (testId: string) => {
@@ -172,12 +198,11 @@ export default function SampleDetail() {
   };
 
   const handleDeleteTest = (testId: string) => {
-    const target = findSample(id ?? "");
-    if (!target) return;
-    const before = target.tests.length;
-    target.tests = target.tests.filter((t) => t.id !== testId);
-    if (target.tests.length === before) return;
-    notifyStoreChanged();
+    if (!sample) return;
+    const before = sample.tests.length;
+    const remaining = sample.tests.filter((t) => t.id !== testId);
+    if (remaining.length === before) return;
+    void container.samples.update(id ?? "", { tests: remaining });
     toast.success(
       isRtl ? "تم حذف الاختبار" : "Test deleted",
       {
@@ -185,6 +210,33 @@ export default function SampleDetail() {
       },
     );
   };
+
+  if (notFound) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+        <p className="text-base font-medium">
+          {isRtl ? "لم يتم العثور على العينة" : "Sample not found"}
+        </p>
+        <p className="text-sm text-muted-foreground">{id}</p>
+        <Link
+          to="/samples"
+          className="mt-2 text-sm underline underline-offset-2 hover:no-underline"
+        >
+          {isRtl ? "→ العودة إلى قائمة العينات" : "Back to samples →"}
+        </Link>
+      </div>
+    );
+  }
+
+  if (!sample) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <p className="text-sm text-muted-foreground">
+          {isRtl ? "جارٍ التحميل…" : "Loading…"}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-visible">

@@ -1,16 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  mockSamples,
-  mockClients,
   sampleTypes,
   mockSpecifications,
 } from "@/infrastructure/mock/data";
-import { generateSampleId } from "@/shared/lib/sample-id";
 import { StatusBadge } from "@/presentation/components/shared/StatusBadge";
 import { useReissueSample } from "@/presentation/hooks/test-approvals/useReissueSample";
 import { useSupplementarySample } from "@/presentation/hooks/test-approvals/useSupplementarySample";
-import { samplesStore } from "@/presentation/hooks/test-approvals/store";
+import {
+  samplesStore,
+  subscribe,
+  getStoreSnapshot,
+} from "@/infrastructure/mock/repositories/sampleStore";
+import { container } from "@/infrastructure/di/container";
+import type { Page } from "@/domain/shared/pagination";
+import { MAX_PAGE_LIMIT } from "@/domain/shared/pagination";
+import type { Sample } from "@/domain/sample/model";
+import type { Client } from "@/domain/client/model";
 import { Button } from "@/shared/ui/button";
 import {
   Plus,
@@ -93,10 +99,33 @@ export default function SamplesList() {
   const { supplementary } = useSupplementarySample();
   const [, setLocation] = useLocation();
 
-  const [samples, setSamples] = useState(mockSamples);
   const [isAdding, setIsAdding] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSpec, setSelectedSpec] = useState<any>(null);
+
+  // Subscribe to store mutations so a new sample (registered here, reissued,
+  // or created by an approval action on another route) refreshes the table
+  // without the user touching a filter. Declared before the derived
+  // `statusOptions`/`allMatches` memos that depend on it.
+  const storeTick = useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);
+
+  // Clients come from the `ClientRepository` port rather than the raw fixture.
+  // Loaded once into component state because `ClientRepository` is async while
+  // the client `<Select>` dropdowns, the filter-chip label and the submit
+  // handler all need synchronous access — refetching per dropdown render would
+  // be absurd. Client data is reference data and does not change at runtime.
+  const [clients, setClients] = useState<Client[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void container.clients.list({ limit: MAX_PAGE_LIMIT }).then((result) => {
+      if (cancelled) return;
+      if (result.ok) setClients([...result.value.items] as Client[]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Filters — single search + status + client + date range.
   const [search, setSearch] = useState("");
@@ -155,7 +184,7 @@ export default function SamplesList() {
   const onSubmit = (data: SampleFormValues) => {
     setIsAdding(true);
     setTimeout(() => {
-      const client = mockClients.find((c) => c.id === data.clientId);
+      const client = clients.find((c) => c.id === data.clientId);
       const tests = selectedSpec
         ? selectedSpec.parameters.map((p: any, idx: number) => ({
             id: `T-${String(idx + 1).padStart(3, "0")}`,
@@ -179,8 +208,7 @@ export default function SamplesList() {
           }))
         : [];
 
-      const newSample = {
-        id: generateSampleId(data.sampleType, samples),
+      const newSample: Omit<Sample, "id"> = {
         clientId: data.clientId,
         clientName: client
           ? language === "ar"
@@ -197,21 +225,39 @@ export default function SamplesList() {
         tests,
       };
 
-      setSamples([newSample, ...samples]);
-      setIsAdding(false);
-      setDialogOpen(false);
-      reset();
-      setSelectedSpec(null);
-      toast.success("Sample registered successfully with linked specification");
+      // Persisted through the port, not local component state. The previous
+      // `setSamples([newSample, ...samples])` only touched this page's
+      // useState — nothing wrote to `samplesStore`, so a freshly registered
+      // sample disappeared the moment the user navigated away and came back.
+      // `create()` also mints the id, which is why `generateSampleId` is no
+      // longer called here: it needs the full corpus to derive the next
+      // serial, and only the adapter has that.
+      void container.samples.create(newSample).then((result) => {
+        if (!result.ok) {
+          toast.error(
+            isRtl ? "تعذر تسجيل العينة" : "Failed to register sample",
+          );
+          setIsAdding(false);
+          return;
+        }
+        setIsAdding(false);
+        setDialogOpen(false);
+        reset();
+        setSelectedSpec(null);
+        toast.success("Sample registered successfully with linked specification");
+      });
     }, 600);
   };
 
-  // Distinct status values for the dropdown.
+  // Distinct status values for the dropdown. Read from the unfiltered corpus
+  // via the store rather than `allMatches`, which is narrowed by the active
+  // filters — offering only the statuses the user is already looking at makes
+  // the dropdown useless for broadening a search.
   const statusOptions = useMemo(() => {
     const set = new Set<string>();
-    samples.forEach((s) => set.add(s.status));
+    samplesStore.forEach((s) => set.add(s.status));
     return Array.from(set).sort();
-  }, [samples]);
+  }, [storeTick]);
 
   // Active filter chips + derived hasActiveFilters flag.
   const activeFilters = useMemo(() => {
@@ -222,7 +268,7 @@ export default function SamplesList() {
       clear: () => setSearch(""),
     });
     if (customerFilter !== "all") {
-      const c = mockClients.find((x) => x.id === customerFilter);
+      const c = clients.find((x) => x.id === customerFilter);
       chips.push({
         key: "customer",
         label: `${isRtl ? "العميل" : "Client"}: ${
@@ -253,28 +299,92 @@ export default function SamplesList() {
 
   const hasActiveFilters = activeFilters.length > 0;
 
-  // Single-pass filtering pipeline.
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return samples.filter((s) => {
-      if (customerFilter !== "all" && s.clientId !== customerFilter) return false;
-      if (statusFilter !== "all" && s.status !== statusFilter) return false;
-      if (fromDate && s.receivedDate < fromDate) return false;
-      if (toDate && s.receivedDate > toDate) return false;
-      if (needle) {
-        const hay = `${s.id} ${s.clientName} ${s.description}`.toLowerCase();
-        if (!hay.includes(needle)) return false;
-      }
-      return true;
-    });
-  }, [samples, customerFilter, statusFilter, fromDate, toDate, search]);
+  // -------------------------------------------------------------------
+  // Filtering + pagination go through the `SampleRepository` port rather
+  // than filtering `mockSamples` in the page.
+  //
+  // This is the payoff of Phase 3: filtering and paging used to be JS running
+  // over the whole array in the browser. Now the page states WHAT it wants and
+  // an adapter decides HOW — `list()` filters and returns a `Page<Sample>`.
+  // When the HTTP adapter lands, the identical call returns a server-filtered
+  // page and this component does not change.
+  //
+  // `filtered` is retained deliberately: the CSV/Excel exports and the status
+  // dropdown both need every matching row, not just the current page. The mock
+  // adapter is in-process so filtering it again costs nothing; when this
+  // becomes a real backend call, exports get their own endpoint.
+  // -------------------------------------------------------------------
+  const query = useMemo(
+    () => ({
+      search,
+      clientId: customerFilter === "all" ? undefined : customerFilter,
+      status: statusFilter === "all" ? undefined : statusFilter,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    }),
+    [search, customerFilter, statusFilter, fromDate, toDate, pageSize, page],
+  );
 
-  const totalRows = filtered.length;
+  const [pageResult, setPageResult] = useState<Page<Sample>>({
+    items: [],
+    total: 0,
+    limit: pageSize,
+    offset: 0,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    void container.samples.list(query).then((result) => {
+      if (cancelled) return;
+      if (result.ok) setPageResult(result.value);
+      else setPageResult({ items: [], total: 0, limit: query.limit, offset: query.offset });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // `storeTick` is deliberately a dependency: it is the invalidation signal
+    // for mutations that happen outside this page's own handlers (approve /
+    // reject / reissue performed on another route), so the refetched page
+    // reflects them without the user touching a filter.
+  }, [query, storeTick]);
+
+  // `filtered` = EVERY row matching the filters, ignoring pagination. The CSV
+  // and Excel exports both iterate it, so a page-sized slice would silently
+  // export only what happens to be on screen. MAX_PAGE_LIMIT caps the request;
+  // today the corpus is ~30 samples, and when it outgrows one page the export
+  // path grows its own endpoint rather than a 100k-row fetch.
+  const [allMatches, setAllMatches] = useState<Sample[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void container.samples
+      .list({
+        search,
+        clientId: customerFilter === "all" ? undefined : customerFilter,
+        status: statusFilter === "all" ? undefined : statusFilter,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
+        limit: MAX_PAGE_LIMIT,
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setAllMatches(result.ok ? ([...result.value.items] as Sample[]) : []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [search, customerFilter, statusFilter, fromDate, toDate, storeTick]);
+
+  const filtered = allMatches;
+
+  const totalRows = pageResult.total;
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const safePage = Math.min(page, totalPages);
   const startIdx = (safePage - 1) * pageSize;
   const endIdx = Math.min(startIdx + pageSize, totalRows);
-  const pageRows = filtered.slice(startIdx, endIdx);
+  const pageRows = pageResult.items as Sample[];
 
   // Reset page whenever filters change so the user is never stranded on a
   // now-empty page.
@@ -427,7 +537,7 @@ export default function SamplesList() {
                       <SelectValue placeholder="Select a client" />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockClients.map((client) => (
+                      {clients.map((client) => (
                         <SelectItem key={client.id} value={client.id}>
                           {language === "ar" ? client.nameAr : client.nameEn}
                         </SelectItem>
@@ -595,7 +705,7 @@ export default function SamplesList() {
                   <SelectItem value="all">
                     {isRtl ? "الكل" : "All clients"}
                   </SelectItem>
-                  {mockClients.map((c) => (
+                  {clients.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {language === "ar" ? c.nameAr : c.nameEn}
                     </SelectItem>
@@ -872,13 +982,11 @@ export default function SamplesList() {
                                         ? `تم إعادة الإصدار باسم ${result.newId}`
                                         : `Reissued as ${result.newId}`,
                                     );
-                                    // Force the list to reflect the new row.
-                                    // (This page uses a local useState —
-                                    // samplesStore is the canonical source
-                                    // of truth, so we re-sync from it.)
-                                    setSamples([
-                                      ...(samplesStore as typeof samples),
-                                    ]);
+                                    // No manual re-sync needed: the page
+                                    // subscribes to `storeTick`, and
+                                    // `reissue()` notifies the store, which
+                                    // re-runs the `container.samples.list()`
+                                    // effect and refreshes the table.
                                   } else {
                                     toast.error(
                                       isRtl
@@ -918,9 +1026,6 @@ export default function SamplesList() {
                                         ? `تم إنشاء عينة تكميلية: ${result.newId}`
                                         : `Supplementary sample created: ${result.newId}`,
                                     );
-                                    setSamples([
-                                      ...(samplesStore as typeof samples),
-                                    ]);
                                     // Land on the new sample's detail page
                                     // so the user can use the existing
                                     // "Add Test" dialog to attach new

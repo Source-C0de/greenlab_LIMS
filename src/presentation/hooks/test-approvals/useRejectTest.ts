@@ -6,7 +6,7 @@
 
 import { useCallback } from "react";
 import { useNotifications } from "@/presentation/providers/NotificationContext";
-import { findTestById, notifyStoreChanged } from "./store";
+import { findTestById, notifyStoreChanged } from "@/infrastructure/mock/repositories/sampleStore";
 import type { RejectTestInput } from "./types";
 import type { Test } from "@/infrastructure/mock/data/samples";
 import { toast } from "sonner";

@@ -5,7 +5,7 @@
 
 import { useMemo } from "react";
 import { useSyncExternalStore } from "react";
-import { samplesStore, getStoreSnapshot, subscribe } from "./store";
+import { samplesStore, getStoreSnapshot, subscribe } from "@/infrastructure/mock/repositories/sampleStore";
 import { lookupAnalyst } from "@/infrastructure/mock/data/testQueue";
 import type { ListTestsQuery, PaginatedTests } from "./types";
 import type { TestQueueItem } from "@/infrastructure/mock/data/testQueue";

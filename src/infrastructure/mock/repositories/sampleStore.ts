@@ -1,9 +1,20 @@
 // =========================================================================
-// Shared in-memory store for the approval hook layer
+// Mutable in-memory sample store — the backing data for the mock adapter
 // =========================================================================
-// Today: holds a mutable copy of mockSamples so hooks can read/mutate.
-// Tomorrow: swap each hook's body to useQuery / useMutation against the
-// real backend — the public hook signature never changes.
+// MOVED HERE IN PHASE 3: this file used to live at
+// `presentation/hooks/test-approvals/store.ts`, which made it impossible to
+// write `infrastructure/mock/repositories/sampleRepository.ts` against it —
+// infrastructure is not allowed to depend on presentation, and the layering
+// guard (`npm run lint:layers`) correctly refused the dependency.
+//
+// It belongs here: it is in-memory state, not React. The hooks subscribe to
+// it via `subscribe`/`getStoreSnapshot` (a `useSyncExternalStore` pair), but
+// the store itself has no React dependency and is consumed by the repository
+// adapter too.
+//
+// `mockSamples` is deep-copied rather than aliased so that hook mutations
+// (approve/reject/reissue) don't write through into the seed data, which other
+// modules still import as a pristine fixture.
 
 import { mockSamples } from "@/infrastructure/mock/data";
 import type { MockSample } from "@/infrastructure/mock/data/samples";

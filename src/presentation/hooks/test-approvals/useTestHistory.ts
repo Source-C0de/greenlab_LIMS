@@ -3,7 +3,7 @@
 // =========================================================================
 
 import { useSyncExternalStore } from "react";
-import { findTestById, getStoreSnapshot, subscribe } from "./store";
+import { findTestById, getStoreSnapshot, subscribe } from "@/infrastructure/mock/repositories/sampleStore";
 import type { TestReviewEntry } from "@/infrastructure/mock/data/samples";
 
 export function useTestHistory(testId: string | null | undefined): TestReviewEntry[] {

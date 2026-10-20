@@ -18,6 +18,10 @@ export interface SampleQuery extends PageRequest {
   readonly status?: string;
   readonly priority?: string;
   readonly assignedAnalyst?: string;
+  /** Inclusive lower bound for `receivedDate` (YYYY-MM-DD). */
+  readonly fromDate?: string;
+  /** Inclusive upper bound for `receivedDate` (YYYY-MM-DD). */
+  readonly toDate?: string;
 }
 
 export interface SampleRepository {

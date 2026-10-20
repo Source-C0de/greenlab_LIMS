@@ -4,7 +4,7 @@
 
 import { useMemo } from "react";
 import { useSyncExternalStore } from "react";
-import { samplesStore, getStoreSnapshot, subscribe } from "./store";
+import { samplesStore, getStoreSnapshot, subscribe } from "@/infrastructure/mock/repositories/sampleStore";
 import type { Test } from "@/infrastructure/mock/data/samples";
 import { MOCK_CURRENT_USER_ID } from "./types";
 

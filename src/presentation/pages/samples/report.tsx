@@ -29,7 +29,7 @@ import {
   getStoreSnapshot,
   notifyStoreChanged,
   subscribe,
-} from "@/presentation/hooks/test-approvals/store";
+} from "@/infrastructure/mock/repositories/sampleStore";
 import { useSyncExternalStore } from "react";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import { signatureFor } from "@/infrastructure/domain-support/signature";
