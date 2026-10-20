@@ -8,176 +8,58 @@
 //         → QA approves (terminal "qa_approved")
 
 import type { Role } from "@/shared/lib/types";
+import type {
+  ApprovalStage,
+  ParameterStatus,
+  ParameterValue,
+  ReviewDecision,
+  Sample as MockSample,
+  StageApproval,
+  Test,
+  TestReviewEntry,
+  TestReviewStatus,
+} from "@/domain/sample/model";
+import {
+  currentStage,
+  roleForStage,
+  labelKeyForStage,
+} from "@/domain/sample/rules";
 
-export type TestReviewStatus =
-  | "draft"
-  | "pending"
-  | "in_progress"
-  | "changes_requested"
-  | "awaiting_lab_supervisor"
-  | "awaiting_tech_manager"
-  | "awaiting_qa"
-  | "qa_approved";
+// ---------------------------------------------------------------------------
+// Domain ownership (Phase 2)
+// The canonical declarations now live in `domain/sample/`. They are re-exported
+// here so the ~200 existing `from "@/infrastructure/mock/data/samples"` import
+// sites keep working untouched. Phase 3 moves this file's mutable helpers into
+// a real adapter; until then it *is* the in-memory adapter and merely borrows
+// its types from the domain.
+// ---------------------------------------------------------------------------
+export type {
+  ApprovalStage,
+  ParameterStatus,
+  ParameterValue,
+  ReviewDecision,
+  Sample as MockSample,
+  StageApproval,
+  Test,
+  TestReviewEntry,
+  TestReviewStatus,
+} from "@/domain/sample/model";
 
-export type ParameterStatus = "pending" | "pass" | "fail";
-export type ReviewDecision = "approved" | "changes_requested";
-
-/** Which approval stage a review entry corresponds to. */
-export type ApprovalStage =
-  | "lab_supervisor"
-  | "tech_manager"
-  | "qa";
-
-export interface StageApproval {
-  /** Stage this approval covers. */
-  stage: ApprovalStage;
-  /** Role that owns this stage — used to gate UI actions. */
-  approverRole: Role;
-  /** Display name of the person who approved. */
-  approverName: string;
-  approverId: string;
-  approverEmail: string;
-  /** ISO timestamp when they signed off. */
-  approvedAt: string;
-  /** Optional reviewer comment. */
-  comment?: string;
-}
-
-export interface ParameterValue {
-  id: string;
-  name: string;
-  value: string;
-  unit: string;
-  min: number | null;
-  max: number | null;
-  /** Target value. Numeric for Range/Max/Min, but textual for
-   *  Pass / Fail, Text and Not Detected limits (e.g. "Absent", "Clear"). */
-  target?: number | string | null;
-  limitType?: string;
-  /** Measurement uncertainty (e.g. "±0.05"). */
-  mu?: string;
-  /** Analytical method (e.g. "Titration"). */
-  method?: string;
-  /** Reference / standard method number (e.g. "ISO 10523"). */
-  reference?: string;
-  status: ParameterStatus;
-  note?: string;
-}
-
-export interface TestReviewEntry {
-  id: string;
-  reviewerId: string;
-  reviewerEmail: string;
-  /** Free-form display name for the person taking this action. */
-  reviewerName?: string;
-  /** Role that took this action — drives stage gating. */
-  reviewerRole?: Role;
-  decision: ReviewDecision;
-  /** Which approval stage this entry advances/cancels. */
-  stage?: ApprovalStage;
-  reason?: string;
-  comment?: string;
-  previousReviewStatus: TestReviewStatus;
-  newReviewStatus: TestReviewStatus;
-  createdAt: string;
-}
-
-export interface Test {
-  id: string;
-  sampleId: string;
-  name: string;
-  category: string;
-  method: string;
-  assignedTo: string | null;
-  reviewStatus: TestReviewStatus;
-  parameters: ParameterValue[];
-  reviewHistory: TestReviewEntry[];
-  /** Three sign-off slots — one per approval stage. */
-  approvals: {
-    lab_supervisor: StageApproval | null;
-    tech_manager: StageApproval | null;
-    qa: StageApproval | null;
-  };
-  submittedAt?: string;
-  /** Set when QA signs off the final stage. */
-  qaApprovedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MockSample {
-  id: string;
-  clientId: string;
-  clientName: string;
-  sampleType: string;
-  description: string;
-  status: string;
-  assignedAnalyst: string | null;
-  receivedDate: string;
-  completedDate: string | null;
-  priority: "Normal" | "High" | "Urgent";
-  tests: Test[];
-
-  // Extended metadata shown on the COA Sample Details card.
-  // All optional — older samples without these fields fall back to "—".
-  /** Commercial or generic product name (e.g. "Metformin Hydrochloride"). */
-  sampleName?: string;
-  /** Manufacturer's batch / lot number. */
-  batchNumber?: string;
-  /** Date of manufacture ("YYYY-MM-DD" or "NA"). */
-  mfgDate?: string;
-  /** Expiry date ("YYYY-MM-DD" or "NA"). */
-  expiryDate?: string;
-  /** Date lab work started on this sample. */
-  testStartDate?: string;
-  /** Date lab work finished — usually just before report issuance. */
-  testCompletionDate?: string;
-  /** Storage / testing environment notes (e.g. "Room Temperature"). */
-  environmentalConditions?: string;
-}
-
-// =========================================================================
-// Helpers — what stage a test is currently sitting at
-// =========================================================================
-
-/** Returns the stage that must approve the test right now, or null if done. */
-export function currentStage(
-  test: Pick<Test, "reviewStatus" | "approvals">,
-): ApprovalStage | null {
-  if (test.reviewStatus === "qa_approved") return null;
-  if (test.reviewStatus === "awaiting_lab_supervisor") return "lab_supervisor";
-  if (test.reviewStatus === "awaiting_tech_manager") return "tech_manager";
-  if (test.reviewStatus === "awaiting_qa") return "qa";
-  return null;
-}
-
-/** Role that owns a given stage — single source of truth for UI gating. */
-export function roleForStage(stage: ApprovalStage): Role {
-  switch (stage) {
-    case "lab_supervisor":
-      return "lab_manager"; // Lab Supervisor maps to the lab_manager role
-    case "tech_manager":
-      return "admin"; // Technical Manager — modeled as admin in this mock
-    case "qa":
-      return "admin"; // QA — modeled as admin in this mock
-  }
-}
-
-/** Human-readable stage label key — used by i18n. */
-export function labelKeyForStage(stage: ApprovalStage): string {
-  switch (stage) {
-    case "lab_supervisor":
-      return "stageLabSupervisor";
-    case "tech_manager":
-      return "stageTechManager";
-    case "qa":
-      return "stageQa";
-  }
-}
+export {
+  currentStage,
+  labelKeyForStage,
+  nextStage,
+  roleForStage,
+  statusAfterApproval,
+} from "@/domain/sample/rules";
 
 // =========================================================================
 // Seed data — every test carries the three-slot approvals block
 // =========================================================================
+// NOTE: `currentStage` / `roleForStage` / `labelKeyForStage` used to live here
+// as local implementations. They are domain rules and now live in
+// `domain/sample/rules.ts`; the re-export above keeps every existing
+// `from "@/infrastructure/mock/data/samples"` call site working untouched.
 
 const NOW = "2024-01-18T10:00:00Z";
 
