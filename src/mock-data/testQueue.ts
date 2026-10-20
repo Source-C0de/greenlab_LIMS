@@ -1,7 +1,7 @@
 // =========================================================================
 // testQueue — flattened queue entity for the approval page
 // =========================================================================
-// Backend ref: .backup_lib/api-spec/superadmin.openapi.yaml
+// Backend ref: docs/SUPERADMIN_API.md
 //   GET /superadmin/tests/queue → Paginated<TestQueueItem>
 
 import type { MockSample, Test, TestReviewStatus } from "./samples";

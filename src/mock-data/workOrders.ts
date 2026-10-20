@@ -30,7 +30,15 @@ export interface WorkOrderTestRow {
   id: string;
   testRequired: string;
   techniqueInstrument: string;
-  status: "Applicable" | "Not Applicable" | "Applicable (need samples)" | "Outsource";
+  // Widened to include the two qualified variants the seed data actually uses
+  // ("Applicable (2 samples per day)", "Applicable (need some requirements)").
+  status:
+    | "Applicable"
+    | "Not Applicable"
+    | "Applicable (need samples)"
+    | "Applicable (2 samples per day)"
+    | "Applicable (need some requirements)"
+    | "Outsource";
   reference: string;
   numberOfSamples: string;
   column: string;

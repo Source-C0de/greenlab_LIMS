@@ -336,7 +336,7 @@ export function useDeleteTestListItem(): UseMutationResult<
 }
 
 // ---------------------------------------------------------------------------
-// Users — docs/api_frontend/users.md §1
+// Users — docs/api/users.md §1
 // ---------------------------------------------------------------------------
 
 export const userKeys = {

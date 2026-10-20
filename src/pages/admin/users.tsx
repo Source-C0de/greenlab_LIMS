@@ -104,7 +104,7 @@ function validate(form: FormState): Partial<Record<keyof FormState, string>> {
   if (form.username.length < 3) errors.username = "Min 3 characters";
   if (form.fullNameEn.length < 2) errors.fullNameEn = "Required";
   // fullNameAr is optional — the backend's `UserCreate.fullNameAr` is
-  // nullable per docs/api_frontend/users.md §1.2.
+  // nullable per docs/api/users.md §1.2.
   return errors;
 }
 

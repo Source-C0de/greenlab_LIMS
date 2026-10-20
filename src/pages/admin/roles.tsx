@@ -479,11 +479,16 @@ export default function RolesAdmin() {
   // and PUT the full matrix for that role on every cell toggle. In mock
   // mode we use the existing local matrix hook directly.
   function isRoleEnabledForMatrix(role: string, key: string): boolean {
-    return localMatrix.isRoleEnabled(role, key as Parameters<typeof localMatrix.isRoleEnabled>[1]);
+    return localMatrix.isRoleEnabled(
+      role,
+      key as Parameters<typeof localMatrix.isRoleEnabled>[1],
+    );
   }
   function toggleMatrixCell(role: string, key: string) {
     const current = localMatrix.getRoleKeys(role);
-    const typedKey = key as Parameters<typeof localMatrix.getRoleKeys>[1];
+    // `getRoleKeys(role: string): MenuKey[]` — MenuKey is the *return* element
+    // type, not a parameter, so it comes from `ReturnType<...>[number]`.
+    const typedKey = key as ReturnType<typeof localMatrix.getRoleKeys>[number];
     const next = current.includes(typedKey)
       ? current.filter((k) => k !== typedKey)
       : [...current, typedKey];

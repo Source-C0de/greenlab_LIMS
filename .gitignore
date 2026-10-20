@@ -32,6 +32,7 @@ node_modules
 /connect.lock
 /coverage
 /libpeerconnection.log
+*.log
 npm-debug.log
 yarn-error.log
 testem.log
@@ -53,8 +54,12 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# # Puku (local embeddings DB)
-# .puku/
+# Puku local embeddings DB — regenerated, 12 MB, must never be committed.
+.puku/puku-embeddings.db
 
-# # Puku CLI project-scoped skills — opt in by removing this line
+# Employee signature images (PII) — see CLAUDE.md. Tracked copies are already
+# in history; this stops NEW ones from being added.
+public/signatures/
+
+# Puku CLI project-scoped skills — opt in by removing this line
 # .puku-cli/skills/

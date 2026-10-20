@@ -284,7 +284,10 @@ export default function ApprovalsQueue() {
         <DataTable
           data={queue.data}
           columns={columns}
-          searchKey="name"
+          // `TestQueueItem` has no flat `name`; search across client, test and type.
+          searchKey={(item) =>
+            `${item.sample.clientName} ${item.test.name} ${item.sample.sampleType}`
+          }
           searchPlaceholder={isRtl ? "البحث في القائمة..." : "Search queue..."}
           onRowClick={(item) => {
             setDrawerTestId(item.test.id);

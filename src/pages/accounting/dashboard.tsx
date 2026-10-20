@@ -72,13 +72,13 @@ export default function AccountingDashboard() {
           title={isRtl ? "إجمالي الإيرادات" : "Total Revenue"} 
           value={`SAR ${totalRevenue.toLocaleString()}`} 
           icon={<TrendingUp className="text-emerald-500" />}
-          trend={{ value: "12%", isPositive: true }}
+          trend={{ value: 12, isPositive: true }}
         />
         <KpiCard 
           title={isRtl ? "إجمالي المصاريف" : "Total Expenses"} 
           value={`SAR ${totalExpenses.toLocaleString()}`} 
           icon={<TrendingDown className="text-rose-500" />}
-          trend={{ value: "8%", isPositive: false }}
+          trend={{ value: 8, isPositive: false }}
         />
         <KpiCard 
           title={isRtl ? "صافي الربح" : "Net Profit"} 

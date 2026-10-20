@@ -22,6 +22,10 @@ export interface ApprovalLabels {
   awaitingQa: string;
   qaApproved: string;
 
+  // Column headings on the "My Submissions" page
+  awaitingReview: string;
+  changesRequested: string;
+
   // Actions / generic
   approve: string;
   reject: string;
@@ -102,6 +106,8 @@ const en: ApprovalLabels = {
   awaitingTechManager: "Pending Technical Manager",
   awaitingQa: "Pending QA",
   qaApproved: "QA Approved",
+  awaitingReview: "Awaiting Review",
+  changesRequested: "Changes Requested",
 
   approve: "Approve",
   reject: "Reject",
@@ -181,6 +187,8 @@ const ar: ApprovalLabels = {
   awaitingTechManager: "بانتظار المدير الفني",
   awaitingQa: "بانتظار ضمان الجودة",
   qaApproved: "معتمد من الجودة",
+  awaitingReview: "بانتظار المراجعة",
+  changesRequested: "مطلوب تعديلات",
 
   approve: "اعتماد",
   reject: "رفض",

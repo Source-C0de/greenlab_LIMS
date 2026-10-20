@@ -34,7 +34,8 @@ export default function MySubmissions() {
   const isRtl = language === "ar";
   const labels = approvalLabels(isRtl ? "ar" : "en");
 
-  const { submitted, changesRequested } = useMySubmittedTests();
+  // `inChain` = tests currently awaiting review at any stage.
+  const { inChain: submitted, changesRequested } = useMySubmittedTests();
 
   const [drawerTestId, setDrawerTestId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);

@@ -1,5 +1,5 @@
 /**
- * Roles & Menu-Permissions API — typed client for `docs/api_frontend/users.md` §2.
+ * Roles & Menu-Permissions API — typed client for `docs/api/users.md` §2.
  *
  * Sibling to `usersApi.ts` — same envelope, same bearer auth, same
  * `isApiEnabled()` gating strategy.
@@ -8,7 +8,7 @@
 import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
-// Types — mirror docs/api_frontend/users.md §2 + §5
+// Types — mirror docs/api/users.md §2 + §5
 // ---------------------------------------------------------------------------
 
 export type RoleIconName =

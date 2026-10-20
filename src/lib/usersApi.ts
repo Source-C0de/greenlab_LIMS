@@ -1,5 +1,5 @@
 /**
- * Users & Roles API — typed client for `docs/api_frontend/users.md`.
+ * Users & Roles API — typed client for `docs/api/users.md`.
  *
  * All calls flow through `apiFetch` (Bearer auth, JSON envelopes,
  * structured ApiError). Activated via `VITE_USE_API=true`; the consuming
@@ -9,7 +9,7 @@
 import { apiFetch } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
-// Types — mirror docs/api_frontend/users.md §5
+// Types — mirror docs/api/users.md §5
 // ---------------------------------------------------------------------------
 
 export type UserRole =

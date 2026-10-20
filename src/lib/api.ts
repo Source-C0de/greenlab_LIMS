@@ -60,7 +60,11 @@ function warnEnvTokenOnce(): void {
   );
 }
 
-type Json = Record<string, unknown> | unknown[] | string | number | boolean | null;
+// `object` (not `Record<string, unknown>`) so that named interfaces such as
+// `LoginRequest` are assignable — interfaces have no implicit index signature,
+// which `Record<string, unknown>` demands. `unknown` covers the same ground
+// without that restriction.
+type Json = object | unknown[] | string | number | boolean | null;
 
 interface ApiFetchInit extends Omit<RequestInit, "body"> {
   body?: Json;

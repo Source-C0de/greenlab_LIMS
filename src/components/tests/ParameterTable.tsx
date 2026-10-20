@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, AlertCircle } from "lucide-react";
 import { useAppContext } from "@/context/AppContext";
+import type { TestLimitType } from "@/mock-data/specifications";
 
 export interface Parameter {
   id: string;
@@ -13,6 +14,10 @@ export interface Parameter {
   min: number | null;
   max: number | null;
   status: string;
+  /** Discriminates how `min`/`max`/`target` should be read when rendering limits. */
+  limitType?: TestLimitType;
+  target?: string | null;
+  reference?: string;
 }
 
 interface ParameterTableProps {
@@ -133,10 +138,10 @@ export function ParameterTable({ parameters, onUpdate }: ParameterTableProps) {
               <TableCell className="text-muted-foreground text-xs">
                 {param.limitType === 'Pass / Fail' || param.limitType === 'Not Detected' || param.limitType === 'Text' || param.limitType === 'Exact Value' ? (
                   <span className="font-medium text-primary">{param.target || param.limitType}</span>
-                ) : (param.min !== null && param.min !== "") || (param.max !== null && param.max !== "") ? (
+                ) : param.min !== null || param.max !== null ? (
                   <span>
-                    {param.min !== null && param.min !== "" && param.max !== null && param.max !== "" ? `${param.min} - ${param.max}` : 
-                     param.min !== null && param.min !== "" ? `≥ ${param.min}` : `≤ ${param.max}`}
+                    {param.min !== null && param.max !== null ? `${param.min} - ${param.max}` :
+                     param.min !== null ? `≥ ${param.min}` : `≤ ${param.max}`}
                   </span>
                 ) : "-"}
               </TableCell>

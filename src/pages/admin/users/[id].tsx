@@ -103,6 +103,7 @@ export default function UserDetail() {
   }
 
   function setOverrideApi(
+    _userId: string,
     menuKey: string,
     effect: "grant" | "deny" | null,
   ) {

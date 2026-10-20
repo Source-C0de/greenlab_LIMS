@@ -20,7 +20,11 @@ interface Column<T> {
 interface DataTableProps<T> {
   data: T[];
   columns: Column<T>[];
-  searchKey?: keyof T;
+  /**
+   * Either a top-level key on `T`, OR a function returning the searchable
+   * text for an item (used when the search target is a nested field).
+   */
+  searchKey?: keyof T | ((item: T) => string);
   searchPlaceholder?: string;
   onRowClick?: (item: T) => void;
   itemsPerPage?: number;
@@ -39,8 +43,11 @@ export function DataTable<T extends Record<string, any>>({
 
   const filteredData = searchKey && searchTerm
     ? data.filter((item) => {
-        const val = item[searchKey];
-        return String(val).toLowerCase().includes(searchTerm.toLowerCase());
+        const val =
+          typeof searchKey === "function"
+            ? searchKey(item)
+            : String(item[searchKey] ?? "");
+        return val.toLowerCase().includes(searchTerm.toLowerCase());
       })
     : data;
 

@@ -11,6 +11,8 @@ import type {
 
 export interface CreateWorkOrderInput {
   clientId: string;
+  /** Optional display name; `useCreateWorkOrder` falls back to `clientId`. */
+  clientName?: string;
   sampleType: string;
   sampleName: string;
   description: string;

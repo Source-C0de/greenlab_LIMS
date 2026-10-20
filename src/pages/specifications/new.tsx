@@ -1,7 +1,7 @@
 
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { mockSpecifications } from "@/mock-data/specifications";
+import { mockSpecifications, type Specification } from "@/mock-data/specifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -83,12 +83,14 @@ export default function NewSpecification() {
       );
     } else {
       // Create new
-      const newSpec = {
+      const newSpec: Specification = {
         id: `SPEC-${Math.floor(Math.random() * 10000)
           .toString()
           .padStart(4, "0")}`,
         code: formData.code,
         name: formData.name,
+        productName: formData.name,
+        status: "Draft",
         category: formData.category,
         issuanceDate: formData.issuanceDate,
         parameters: [],

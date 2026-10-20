@@ -70,7 +70,11 @@ const sampleSchema = z.object({
   clientId: z.string().min(1, "Please select a client"),
   sampleType: z.string().min(1, "Please select a sample type"),
   description: z.string().min(5, "Description must be at least 5 characters"),
-  priority: z.string().min(1, "Please select priority"),
+  // Narrowed from `z.string()` so the validated value satisfies
+  // `MockSample["priority"]` — the dropdown only offers these three.
+  priority: z.enum(["Normal", "High", "Urgent"], {
+    required_error: "Please select priority",
+  }),
 });
 
 type SampleFormValues = z.infer<typeof sampleSchema>;
@@ -462,7 +466,9 @@ export default function SamplesList() {
                   <div className="grid gap-2">
                     <Label htmlFor="priority">Priority</Label>
                     <Select
-                      onValueChange={(val) => setValue("priority", val)}
+                      onValueChange={(val) =>
+                        setValue("priority", val as SampleFormValues["priority"])
+                      }
                       defaultValue="Normal"
                     >
                       <SelectTrigger>

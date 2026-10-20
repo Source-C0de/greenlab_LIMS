@@ -80,6 +80,11 @@ export interface Specification {
   id: string;
   code: string;
   name: string;
+  /** Human-readable product name. `samples/index.tsx` matches the form's
+   *  `sampleType` against this; `specifications/approval.tsx` shows it. */
+  productName: string;
+  /** Approval state used by `specifications/approval.tsx`. */
+  status: "Draft" | "Pending" | "Approved" | "Rejected";
   category: string;
   issuanceDate: string;
   parameters: SpecParameter[];
@@ -125,6 +130,8 @@ export const mockSpecifications: Specification[] = [
     id: 'SPEC-001',
     code: 'SPEC-DW-001',
     name: 'Drinking Water Standard',
+    productName: 'Drinking Water',
+    status: 'Approved',
     category: 'Water',
     issuanceDate: '2024-01-01',
     defaultPrice: 350,
@@ -139,6 +146,8 @@ export const mockSpecifications: Specification[] = [
     id: 'SPEC-002',
     code: 'SPEC-W-002',
     name: 'Industrial Waste Water',
+    productName: 'Industrial Waste Water',
+    status: 'Pending',
     category: 'Water',
     issuanceDate: '2024-05-01',
     defaultPrice: 420,
@@ -151,6 +160,8 @@ export const mockSpecifications: Specification[] = [
     id: "SPEC-003",
     code: "SPEC-W-003",
     name: "Industrial Waste Water 2",
+    productName: "Industrial Waste Water 2",
+    status: "Draft",
     category: "Water",
     issuanceDate: "2024-05-01",
     defaultPrice: 480,

@@ -10,6 +10,7 @@
 import type { Role } from "@/context/AppContext";
 
 export type TestReviewStatus =
+  | "draft"
   | "pending"
   | "in_progress"
   | "changes_requested"
@@ -49,10 +50,14 @@ export interface ParameterValue {
   unit: string;
   min: number | null;
   max: number | null;
-  target?: number;
+  /** Target value. Numeric for Range/Max/Min, but textual for
+   *  Pass / Fail, Text and Not Detected limits (e.g. "Absent", "Clear"). */
+  target?: number | string | null;
   limitType?: string;
   /** Measurement uncertainty (e.g. "±0.05"). */
   mu?: string;
+  /** Analytical method (e.g. "Titration"). */
+  method?: string;
   /** Reference / standard method number (e.g. "ISO 10523"). */
   reference?: string;
   status: ParameterStatus;

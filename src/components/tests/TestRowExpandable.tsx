@@ -98,8 +98,6 @@ export function TestRowExpandable({
   const parameterRowTone =
     parameter.status === "fail"
       ? "bg-red-500/5 hover:bg-red-500/10"
-      : parameter.status === "warn"
-      ? "bg-amber-500/5 hover:bg-amber-500/10"
       : canActOnStage
       ? "bg-amber-500/5 hover:bg-amber-500/10"
       : "";
@@ -146,7 +144,9 @@ export function TestRowExpandable({
                   {test.method}
                 </Badge>
                 <span className="truncate">
-                  {test.assignedAnalyst ?? "—"}
+                  {/* `Test.assignedTo` is a user-ID; a name lookup will arrive
+                      with the Phase 5 user service refactor (todo). */}
+                  {test.assignedTo ?? "—"}
                 </span>
               </div>
             </div>
@@ -159,7 +159,6 @@ export function TestRowExpandable({
           className={cn(
             "text-sm font-mono whitespace-nowrap",
             parameter.status === "fail" && "text-red-600",
-            parameter.status === "warn" && "text-amber-600",
           )}
         >
           {formatResult(parameter)}
