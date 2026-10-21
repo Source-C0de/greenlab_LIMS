@@ -1,107 +1,260 @@
 # GreenLIMS KSA — Laboratory Information Management System
 
-> A production-ready SaaS frontend for a Saudi Arabia laboratory. Bilingual
-> (English / Arabic with RTL), multi-role, dark/light themed, and 100%
-> mock-data driven — no backend required to demo the full flow.
+> A bilingual (English / Arabic with RTL), multi-role, dark/light themed
+> Laboratory Information Management System frontend for Saudi Arabia. React 18 +
+> TypeScript + Vite on a **ports-and-adapters (hexagonal) architecture**, so
+> the UI runs against in-memory mocks today and a real HTTP backend tomorrow
+> without rewriting a single component.
 
 ---
 
 ## Table of Contents
 
 1. [Project Overview](#1-project-overview)
-2. [Features](#2-features)
-3. [Tech Stack](#3-tech-stack)
+2. [Tech Stack](#2-tech-stack)
+3. [Architecture](#3-architecture)
+   - [The dependency rule](#the-dependency-rule)
+   - [Layers](#layers)
+   - [Ports & adapters in practice](#ports--adapters-in-practice)
+   - [The composition root](#the-composition-root)
+   - [Layering guard](#layering-guard)
 4. [Project Structure](#4-project-structure)
 5. [Getting Started](#5-getting-started)
 6. [Available Scripts](#6-available-scripts)
-7. [Roles & Permissions](#7-roles--permissions)
-8. [Pages & Routes](#8-pages--routes)
-9. [Mock Data](#9-mock-data)
+7. [Environment Variables](#7-environment-variables)
+8. [Roles & Permissions](#8-roles--permissions)
+9. [Pages & Routes](#9-pages--routes)
 10. [Core Modules](#10-core-modules)
 11. [Bilingual (EN / AR) + RTL](#11-bilingual-en--ar--rtl)
-12. [Theming](#12-theming)
-13. [Reusable Components](#13-reusable-components)
-14. [State Management](#14-state-management)
-15. [Sample Test Replicate Workflow](#15-sample-test-replicate-workflow)
-16. [Role-Based Per-Test Editing](#16-role-based-per-test-editing)
-17. [Accounting (ZATCA)](#17-accounting-zatca)
-18. [Marketing Reports Dashboard](#18-marketing-reports-dashboard)
-19. [Build & Typecheck](#19-build--typecheck)
-20. [Legacy / Backup Artifacts](#20-legacy--backup-artifacts)
-21. [Roadmap](#21-roadmap)
-22. [License](#22-license)
-23. [AI / Agent Context](#23-ai--agent-context)
+12. [Reusable Components](#12-reusable-components)
+13. [State Management](#13-state-management)
+14. [Key Workflows](#14-key-workflows)
+15. [Accounting (ZATCA)](#15-accounting-zatca)
+16. [Mock Data](#16-mock-data)
+17. [Adding Features](#17-adding-features)
+18. [Current State & Roadmap](#18-current-state--roadmap)
+19. [Troubleshooting](#19-troubleshooting)
+20. [License](#20-license)
 
 ---
 
 ## 1. Project Overview
 
-**GreenLIMS KSA** is a Laboratory Information Management System (LIMS)
-purpose-built for the Saudi Arabian market. The application simulates a
-multi-tenant SaaS where laboratories receive samples, assign analysts,
-run tests, approve results, issue ZATCA-compliant invoices, and expose
-analytics to clients — all from a single React SPA.
+**GreenLIMS KSA** is a Laboratory Information Management System frontend
+purpose-built for the Saudi Arabian market. It simulates a multi-tenant SaaS
+where laboratories receive samples, assign analysts, run tests, approve results,
+issue ZATCA-format invoices, and expose analytics to clients — all from a single
+React SPA.
 
-The repository ships the full UI/UX with realistic mock data
-(Al-Marai, Saudi Aramco, Ajmal Perfumes, SADL, etc.) so it can be
-demoed end-to-end without any backend services.
+```
+Sample receiving → Testing → 3-stage approval → Certificate of Analysis
+                → Quotation → ZATCA invoice → Accounting
+```
 
-> ⚠️ **There is no real backend.** All data lives in
-> `src/mock-data/*.ts` and is mutated in-memory through the
-> `findSample` / `notifyStoreChanged` helpers in
-> `src/hooks/test-approvals/store.ts`. Refresh the page to reset state.
+The repository ships the full UI/UX with realistic Saudi mock data (Al-Marai,
+Saudi Aramco, Ajmal Perfumes, SWCC, Tabuk Pharmaceuticals), so the entire flow
+is demoable end-to-end with no backend running.
 
----
+> ⚠️ **Mock-first, not mock-only.** Two seams already speak to a real FastAPI
+> backend when `VITE_USE_API=true`: the **entire auth flow** and the **Test
+> Parameter Catalogue**. Everything else reads in-memory fixtures. The
+> architecture was refactored so extending the second seam is a config flip,
+> not a rewrite. See [Current State](#18-current-state--roadmap) for exactly
+> what is and isn't ported yet.
 
-## 2. Features
+**Core capabilities**
 
-- ✅ **Role-based UI** for 7 personas (Admin, Lab Manager, Analyst,
-  Receptionist, Accountant, Client, Superadmin).
-- ✅ **Bilingual EN / AR** with full RTL flipping driven by `AppContext`.
-- ✅ **Dark + Light** theme via `next-themes`.
-- ✅ **Sample Lifecycle**: Receiving → Testing → Review → Approval →
-  Certificate of Analysis (COA) → Invoice.
-- ✅ **Chain-of-Custody** timeline on each sample.
-- ✅ **Replicate Tests to Other Samples** (deep copy with fresh IDs and
-  reset approval state).
-- ✅ **Per-test Edit / Delete** actions for privileged roles
-  (`admin`, `lab_manager`, `superadmin`).
-- ✅ **Test Approvals** workflow with reviewer chains, reject-with-reason
-  dialog, and approval history.
-- ✅ **Kanban Workflow** board (`/workflow`).
-- ✅ **ZATCA FATOORA-compliant** tax invoices (SAR, 15% VAT) with
-  Phase-2-ready QR/TLV fields.
-- ✅ **Accounting**: Chart of Accounts, Journals, General Ledger,
-  Financial Reports.
-- ✅ **Marketing Reports** dashboard segment with CSV / Excel export
-  and pagination.
-- ✅ **Multi-tenant** SaaS Admin panel (Tenants, Plans, Feature Flags).
-- ✅ **Client Portal** with My Samples / Reports / Invoices.
-- ✅ **Inventory** alerts for low/expiring reagents.
-- ✅ **Analytics** with Recharts visualisations.
-- ✅ **Responsive** layout for desktop, tablet, and mobile.
+- ✅ Role-based UI across **7 personas**
+- ✅ Bilingual EN/AR with full RTL flipping, **typed** so a missing Arabic
+  label is a compile error
+- ✅ Dark + light theme via `next-themes`
+- ✅ Sample lifecycle: receiving → testing → review → approval → COA → invoice
+- ✅ Chain-of-custody timeline per sample
+- ✅ Reissue & supplementary workflows (clone a sample, keep all test work)
+- ✅ Replicate tests to other samples (deep copy, fresh ids, reset approvals)
+- ✅ 3-stage test approval chain with reject-with-reason and history
+- ✅ Kanban workflow board (`/workflow`)
+- ✅ Accounting: chart of accounts, journals, ledger, financial reports
+- ✅ ZATCA-shaped tax invoices (SAR, 15% VAT) — see the honesty note in
+  [Accounting](#15-accounting-zatca)
+- ✅ Marketing reports dashboard with CSV / Excel export and pagination
+- ✅ Multi-tenant SaaS admin panel (tenants, plans, feature flags)
+- ✅ Client portal, inventory alerts, Recharts analytics, responsive layout
 
 ---
 
-## 3. Tech Stack
+## 2. Tech Stack
 
-| Layer            | Choice                                  |
-| ---------------- | --------------------------------------- |
-| Framework        | **React 18** + **TypeScript**           |
-| Build tool       | **Vite 6**                              |
-| Styling          | **Tailwind CSS v4** + `tailwind-vite`   |
-| UI primitives    | **shadcn/ui** (Radix-based)             |
-| Icons            | **lucide-react**, **react-icons**       |
-| Routing          | **wouter**                              |
-| Charts           | **Recharts**                            |
-| Animations       | **framer-motion**                       |
-| Forms + schema   | **react-hook-form** + **Zod**           |
-| Tables / DnD     | **@tanstack/react-query**, **@hello-pangea/dnd** |
-| Dates            | **date-fns**, **react-day-picker**      |
-| PDF export       | **jspdf** + **html2canvas**             |
-| Toasts           | **sonner** + **@radix-ui/react-toast**  |
-| Theme            | **next-themes**                         |
-| Lang/runtime     | **Node.js 24+**, ESM (`"type": "module"`)|
+| Concern | Choice |
+|---|---|
+| Framework | **React 18** + **TypeScript 5.9** (`strict: true`) |
+| Build tool | **Vite 6** (dev server on port **3000**) |
+| Styling | **Tailwind CSS v4** (`@tailwindcss/vite`) + design tokens in `index.css` |
+| UI primitives | **shadcn/ui** (Radix-based), **55 components** in `shared/ui/` |
+| Icons | **lucide-react** |
+| Routing | **wouter** (do **not** introduce React Router) |
+| Data fetching | **@tanstack/react-query** 5 (used by the API-backed seams) |
+| Charts | **Recharts** |
+| Animations | **framer-motion** |
+| Forms + validation | **react-hook-form** + **Zod** |
+| Drag & drop | **@hello-pangea/dnd** |
+| Dates | **date-fns**, **react-day-picker** |
+| PDF / image export | **jspdf** + **html2canvas** |
+| QR codes | **qrcode.react** |
+| Toasts | **sonner** + **@radix-ui/react-toast** |
+| Theme | **next-themes** |
+| i18n | Hand-rolled (`AppContext.language`) — do **not** add `react-i18next` |
+| Runtime | Node.js 18+ (developed against 22/24), ESM (`"type": "module"`) |
+
+---
+
+## 3. Architecture
+
+### The dependency rule
+
+This is the single most important thing to understand about the codebase:
+
+```
+presentation  →  domain  ←  infrastructure
+                       ↑
+            (shared is imported by all, imports nothing)
+```
+
+Arrows mean "may import". Nothing ever points back. A `domain/` file that
+imports React, or an `infrastructure/` file that imports a React component, is
+a design error — and [`npm run lint:layers`](#layering-guard) will fail the
+build.
+
+### Layers
+
+| Layer | Contains | May import |
+|---|---|---|
+| `shared/` | UI primitives (55 shadcn), pure utilities, i18n label **data** | *nothing app-internal* |
+| `domain/` | Business entities, pure rules, port interfaces | `shared/` |
+| `infrastructure/` | Adapters — HTTP clients, in-memory mocks, repositories, DI | `shared/`, `domain/` |
+| `presentation/` | React: pages, components, hooks, providers | all of the above |
+
+**246 TypeScript files**: `shared` 69, `domain` 18, `infrastructure` 40,
+`presentation` 116.
+
+`domain/` is pure TypeScript — no React, no `fetch`, no side effects. That is
+what makes it testable (see [Current State](#18-current-state--roadmap) for why
+tests aren't there yet) and portable to a different UI framework.
+
+### Ports & adapters in practice
+
+A **port** is an interface the domain declares. An **adapter** is an
+implementation the infrastructure provides. Consumers depend on the port, so
+swapping implementations is a one-line change at the composition root.
+
+`domain/sample/ports.ts`, in full:
+
+```ts
+export interface SampleRepository {
+  list(query?: SampleQuery): Promise<Result<Page<Sample>>>;
+  get(id: string): Promise<Result<Sample>>;
+  create(input: Omit<Sample, "id">): Promise<Result<{ id: string }>>;
+  update(id: string, patch: Partial<Sample>): Promise<Result<Sample>>;
+  remove(id: string): Promise<Result<void>>;
+}
+```
+
+Adapters that exist today:
+
+| Adapter | Location | Backing |
+|---|---|---|
+| `mockSampleRepository` | `infrastructure/mock/repositories/sampleRepository.ts` | in-memory store |
+| `mockClientRepository` | `infrastructure/mock/repositories/clientRepository.ts` | in-memory fixture |
+| `mockAuthSession` | `infrastructure/mock/repositories/authSession.ts` | demo role picker |
+| `httpAuthSession` | `infrastructure/api/repositories/authSession.ts` | real FastAPI backend |
+
+**Four design points worth knowing before you touch these:**
+
+**`Page<T>`, never a bare array.** Every `list()` returns `Page<T>` with
+`{ items, total, limit, offset }`. The mock adapter paginates in memory; an HTTP
+adapter maps `limit`/`offset`/`total` from the server envelope. If the port
+returned `Sample[]`, adding a backend would force a signature change on the port
+*and* on every caller. `total` is the count of **all** matching rows, not the
+page size — that's what a pager needs to render "showing 1–20 of 347".
+
+**`Result<T, E>` for expected failures.** Repositories return
+`Result<T, RepositoryError>` rather than throwing for operational failures
+("not found", "conflict", "validation failed"), so callers can't forget the
+failure branch. Exceptions stay correct for genuine bugs — a broken invariant.
+
+**One deliberate exception: `AuthSession.signIn` throws.** The login screen
+distinguishes `ApiError` (401 → "wrong password") from `TypeError` (network
+unreachable → shows a proxy-URL diagnostic). Collapsing both into a
+`RepositoryError.code` destroys that distinction. The HTTP adapter re-throws
+`apiFetch` errors **unchanged** for exactly this reason. The port's doc comment
+says so, so nobody "fixes" it back into a `Result`.
+
+**Sample fields are deliberately mutable.** The `domain/sample/model.ts` types
+carry no `readonly` modifiers even though a domain model normally would, because
+~15 hooks across the app mutate samples in place. This is recorded in a comment
+at the top of that file. Making them `readonly` is not a free cleanup — it is a
+migration.
+
+### The composition root
+
+`src/infrastructure/di/container.ts` is **the only place** adapters are
+selected:
+
+```ts
+const API_ENABLED = isApiEnabled();   // read once, at module load
+
+export const container: Container = {
+  samples: mockSampleRepository,          // no HTTP alternative yet
+  clients: mockClientRepository,          // no HTTP alternative yet
+  auth:    API_ENABLED ? httpAuthSession : mockAuthSession,
+};
+```
+
+Before the refactor, `isApiEnabled()` was consulted in 20+ places using two
+incompatible idioms — an `enabled:` flag on TanStack Query hooks, and an
+`if (apiOn)` branch inside `AuthContext`. Both are gone from the auth path.
+`AuthContext` now depends on the `AuthSession` port and has no idea which backend
+is live.
+
+The `Container` interface is load-bearing: it makes the container fail at
+compile time if an adapter stops satisfying its port, rather than at some
+call site far away.
+
+> **Why is this in `infrastructure/di/` and not `application/di/`?** The plan
+> originally said `application/di/`, but the layering guard rejected it —
+> `application/ must not depend on infrastructure/`. A composition root's entire
+> job is to import concrete adapters and hand back interfaces, so by definition
+> it sits *outside* both layers it joins. `infrastructure/di/` is the outermost
+> placement that keeps the one-way rule intact. `src/application/` therefore
+> doesn't exist yet; the guard's rule table still lists it, ready for when use
+> cases arrive.
+
+Reading the flag at module scope is deliberate: reloading `.env.local` should be
+a full page reload, not a mid-session adapter swap that would strand the user in
+a half-HTTP session.
+
+### Layering guard
+
+```bash
+npm run lint:layers
+```
+
+`scripts/check-layering.mjs` — plain Node, no dependencies. Walks every
+`.ts`/`.tsx` file, resolves each import (both `@/`-aliased and relative),
+classifies source and target into layers, and exits non-zero listing any
+forbidden dependency.
+
+It has real teeth. It caught all of these during the refactor:
+
+- `infrastructure/` importing from `presentation/` — the sample store lived in
+  `presentation/hooks/test-approvals/store.ts` and had to move
+- `application/di/` importing adapters — which relocated the container
+- `shared/ui/toaster.tsx` reaching into `presentation/hooks/use-toast`
+- `shared/ui/sidebar.tsx` reaching into `presentation/hooks/use-mobile`
+- `infrastructure/api/auth.ts` importing the `Role` **type** from a React context
+
+> Folders not in the rule table are treated as transitional and exempt, so the
+> guard gains coverage automatically as files migrate in.
 
 ---
 
@@ -111,74 +264,65 @@ demoed end-to-end without any backend services.
 greenlims-ksa/
 ├── index.html
 ├── package.json
-├── vite.config.ts
-├── tsconfig.json
-├── tsconfig.node.json
-├── components.json              # shadcn/ui config
-├── migrate.sh                   # (legacy) DB seed helper
-├── public/
-│   └── signatures/              # Static COA signature SVGs
-├── src/
-│   ├── main.tsx                 # React entry
-│   ├── App.tsx                  # Provider tree + wouter routes
-│   ├── index.css                # Tailwind + design tokens
-│   ├── components/
-│   │   ├── layout/              # AppLayout, Sidebar, Header, Breadcrumb, NotificationBell
-│   │   ├── samples/             # SampleHeader, SampleTabs, ReplicateTestsDialog, …
-│   │   ├── tests/               # TestTable, TestRowExpandable, TestDrawer, ParameterTable
-│   │   ├── approvals/           # ApprovalChainPanel, RejectTestDialog, TestReviewDrawer
-│   │   ├── shared/              # DataTable, KpiCard, StatusBadge, RoleSwitcher, SampleTimeline
-│   │   └── ui/                  # shadcn/ui primitives (button, card, dialog, …)
-│   ├── pages/
-│   │   ├── dashboard.tsx        # KPI + Marketing Reports
-│   │   ├── samples/             # index, [id], receiving
-│   │   ├── specifications/      # library, test-master, new, approval, history, index
-│   │   ├── invoices/            # index, [id]
-│   │   ├── reports/             # index, [id] (COA)
-│   │   ├── accounting/          # dashboard, journals, ledger, reports, chart-of-accounts
-│   │   ├── admin.tsx
-│   │   ├── analytics.tsx
-│   │   ├── clients.tsx
-│   │   ├── inventory.tsx
-│   │   ├── workflow.tsx         # Kanban
-│   │   ├── login.tsx
-│   │   ├── register.tsx
-│   │   ├── forgot-password.tsx
-│   │   ├── otp-verify.tsx
-│   │   ├── settings.tsx
-│   │   ├── superadmin-login.tsx
-│   │   ├── client-portal.tsx
-│   │   └── not-found.tsx
-│   ├── context/
-│   │   ├── AppContext.tsx       # currentRole, language, RTL, theme
-│   │   └── NotificationContext.tsx
-│   ├── hooks/
-│   │   ├── use-mobile.tsx
-│   │   ├── use-toast.ts
-│   │   ├── useMenuPermissions.ts
-│   │   ├── useRolePermissions.ts
-│   │   └── test-approvals/      # store.ts (findSample / notifyStoreChanged) + helpers
-│   ├── lib/
-│   │   ├── utils.ts             # cn(), class helpers
-│   │   └── accounting-utils.ts  # ZATCA + accounting math
-│   └── mock-data/
-│       ├── index.ts             # barrel export
-│       ├── samples.ts           # MockSample[] + deriveMarketingRows()
-│       ├── clients.ts           # Saudi companies
-│       ├── analysts.ts
-│       ├── sampleTypes.ts
-│       ├── specifications.ts
-│       ├── reagents.ts
-│       ├── reports.ts
-│       ├── invoices.ts          # ZATCA-ready
-│       ├── accounts.ts
-│       ├── journals.ts
-│       ├── expenses.ts
-│       ├── tenants.ts
-│       ├── notifications.ts
-│       ├── rolePermissions.ts
-│       └── menuPermissions.ts
-└── .backup_artifacts/           # Legacy Express+Drizzle backend (unused)
+├── vite.config.ts              # port 3000, @ alias, /api dev proxy
+├── tsconfig.json               # strict: true, @/* → ./src/*
+├── components.json             # shadcn generator config (paths point at shared/ui)
+├── .env.example                # documents all four VITE_* variables
+├── docs/                       # API contracts (OpenAPI, user + test-param specs)
+├── scripts/
+│   └── check-layering.mjs      # architecture guard
+├── public/signatures/          # COA signature images (gitignored — PII)
+└── src/
+    ├── main.tsx
+    ├── App.tsx                 # provider tree + all 49 routes
+    ├── index.css               # Tailwind v4 + design tokens
+    │
+    ├── domain/                 # ← pure business logic, no React  (18 files)
+    │   ├── sample/             #   model.ts  rules.ts  ports.ts
+    │   ├── client/             #   model.ts  ports.ts
+    │   ├── accounting/         #   model.ts  rules.ts  ports.ts
+    │   ├── quotation/          #   model.ts  rules.ts  ports.ts
+    │   ├── identity/           #   model.ts  ports.ts   (User, AuthUser, AuthSession)
+    │   ├── testParameter/      #   model.ts  ports.ts
+    │   ├── shared/             #   pagination.ts  result.ts
+    │   └── index.ts            #   barrel (cross-cutting only)
+    │
+    ├── infrastructure/         # ← adapters  (40 files)
+    │   ├── api/
+    │   │   ├── api.ts          #   apiFetch, isApiEnabled, ApiError
+    │   │   ├── auth.ts         #   token storage + auth endpoints
+    │   │   ├── apiErrors.ts
+    │   │   ├── tanstack-queries.ts
+    │   │   ├── clients/        #   usersApi rolesApi testListApi testParametersApi
+    │   │   └── repositories/   #   authSession.ts   ← HTTP adapter
+    │   ├── di/
+    │   │   └── container.ts    #   ★ composition root — the only adapter-selection site
+    │   ├── domain-support/     #   quotation utils, signature
+    │   ├── mock/
+    │   │   ├── data/           #   23 fixture files
+    │   │   └── repositories/   #   sampleRepository  clientRepository
+    │   │                        #   authSession  sampleStore
+    │   └── storage/
+    │
+    ├── presentation/           # ← React  (116 files)
+    │   ├── providers/          #   AppContext  AuthContext  NotificationContext
+    │   ├── hooks/
+    │   │   ├── i18n/           #   useTranslation (typed EN/AR)
+    │   │   ├── test-approvals/ #   approval hooks, labels
+    │   │   └── *               #   useMenuPermissions, useRolePermissions, …
+    │   ├── components/
+    │   │   ├── layout/         #   AppLayout Sidebar Header Breadcrumb NotificationBell
+    │   │   ├── auth/           #   ProtectedRoute  RoleAvatar
+    │   │   ├── features/       #   samples/ tests/ approvals/ accounting/ admin/
+    │   │   │                   #   samples-specs/ work-orders/ quotations/ dashboard/
+    │   │   └── shared/         #   DataTable KpiCard StatusBadge RoleSwitcher SampleTimeline
+    │   └── pages/              #   16 route directories + top-level pages
+    │
+    └── shared/                 # ← imported by everything, imports nothing  (69 files)
+        ├── ui/                 #   55 shadcn/ui primitives
+        ├── lib/                #   cn()  types.ts  sample-id.ts  adminMenuKeys.ts
+        │                       #   app-meta.ts  accounting-utils.ts  pdf-report.ts
+        └── i18n/               #   types.ts + domains/<vertical>/{en,ar}.ts
 ```
 
 ---
@@ -187,371 +331,556 @@ greenlims-ksa/
 
 ### Prerequisites
 
-- **Node.js ≥ 24** (the project uses ESM and modern Vite 6 features).
-- **npm ≥ 10** (a `package-lock.json` is committed). You can also use
-  pnpm / yarn, but npm is what CI uses.
-
-### Install
+Node.js 18+ (developed against 22/24; `@types/node` is `^22.10.6`). No
+`.nvmrc` is pinned, so any modern Node works.
 
 ```bash
+# 1. Install dependencies
 npm install
-```
 
-### Run the dev server
-
-```bash
+# 2. Start the dev server  →  http://localhost:3000
 npm run dev
+
+# 3. Verify the codebase is sound (run before every commit)
+npm run typecheck      # tsc --noEmit — zero errors
+npm run lint:layers    # architecture guard — zero violations
+
+# 4. Production build
+npm run build          # → dist/
+npm run serve          # preview the production build
 ```
 
-Then open <http://localhost:3000>.
+### Logging in
 
-The login page exposes a **demo role selector** so you can switch
-between Admin, Lab Manager, Analyst, Receptionist, Accountant, Client,
-and Superadmin without any credentials.
+With `VITE_USE_API=false` (the default) the login screen is a **demo role
+picker** — any credentials work, and a role switcher in the sidebar changes the
+active role at runtime. The chosen role persists across refresh via
+`localStorage` (key `glims_role_override`).
 
-### Build for production
+> Role gating in demo mode **demonstrates intent rather than enforcing
+> security**. The backend's `user.role` is the real authority when
+> `VITE_USE_API=true`.
 
-```bash
-npm run build
-```
+### Running against the real backend
 
-The static bundle lands in `dist/`. Serve it with any static host:
-
-```bash
-npm run serve
-```
+Set `VITE_USE_API=true` and make sure the dev proxy target is reachable. Leave
+`VITE_API_BASE_URL` empty in dev so requests go through the Vite `/api` proxy
+(avoids CORS). In production set it to the absolute origin.
 
 ---
 
 ## 6. Available Scripts
 
-| Script           | What it does                                            |
-| ---------------- | ------------------------------------------------------- |
-| `npm run dev`    | Start Vite dev server on port `3000`.                   |
-| `npm run build`  | Production build → `dist/`.                             |
-| `npm run serve`  | Preview the production build with `vite preview`.       |
+| Script | Command | What it does |
+|---|---|---|
+| `npm run dev` | `vite` | Dev server on port **3000** |
+| `npm run build` | `vite build` | Production build → `dist/` |
+| `npm run serve` | `vite preview` | Preview the production build |
+| `npm run typecheck` | `tsc --noEmit -p tsconfig.json` | Full type check, zero errors expected |
+| `npm run lint:layers` | `node scripts/check-layering.mjs` | Architecture guard, zero violations expected |
 
-> The original `replit.md` mentions a `pnpm run typecheck` workspace
-> command, but the shipped project is a single-package Vite app —
-> use `npx tsc --noEmit` for ad-hoc typechecking.
+**There is no `test` script and no test framework installed.** See
+[Current State](#18-current-state--roadmap).
 
----
+### Before you commit
 
-## 7. Roles & Permissions
+```bash
+npm run typecheck && npm run lint:layers && npm run build
+```
 
-Roles are stored in `AppContext.currentRole` and drive both navigation
-(`Sidebar.tsx`) and in-page gating (`useRolePermissions`,
-`useMenuPermissions`).
+All three must be clean.
 
-| Role          | Typical access                                                       |
-| ------------- | -------------------------------------------------------------------- |
-| `admin`       | Full operational + billing access.                                   |
-| `lab_manager` | Samples, workflow, approvals, inventory, analytics. No billing.      |
-| `analyst`     | Assigned tests, approvals. Read-only on samples.                     |
-| `receptionist`| Samples (receiving), clients, inventory.                             |
-| `accountant`  | Accounting dashboard, invoices, journals, ledger, reports.           |
-| `client`      | Client Portal only (My Samples, Reports, Invoices).                  |
-| `superadmin`  | Tenant management, plans, feature flags, per-test edit/delete.      |
-
-### Per-test Edit / Delete gating
-
-`TestTable.tsx` exposes `canModifyTest` for `admin`, `lab_manager`, and
-`superadmin`. Other roles only see the **View** action. See
-[§16 Role-Based Per-Test Editing](#16-role-based-per-test-editing).
+> TypeScript was only added to this project during the architecture work.
+> Before that, Vite bundled via esbuild, which *strips* types without *checking*
+> them — so `npm run build` passing told you very little. Fixing the 52 errors
+> that surfaced on the first `tsc` run uncovered three genuine runtime crashes
+> that would otherwise have shipped. It no longer works that way.
 
 ---
 
-## 8. Pages & Routes
+## 7. Environment Variables
 
-| Route                      | Purpose                                                       |
-| -------------------------- | ------------------------------------------------------------- |
-| `/login`                   | Auth with demo role selector.                                 |
-| `/register`                | New account sign-up.                                          |
-| `/forgot-password`         | Password reset request.                                       |
-| `/otp-verify`              | One-time passcode entry.                                      |
-| `/superadmin-login`        | Tenant operator login.                                        |
-| `/dashboard`               | KPI cards, Recharts, Marketing Reports segment.               |
-| `/samples`                 | Samples Manager table (filters: customer, status, sample#, report#, name, date range). |
-| `/samples/receiving`       | Walk-in sample intake form.                                   |
-| `/samples/:id`             | Sample detail with Chain of Custody, Tests, Approvals tabs.   |
-| `/specifications`          | Specification library index.                                  |
-| `/specifications/library`  | Browse specifications.                                        |
-| `/specifications/test-master` | Master list of test definitions.                            |
-| `/specifications/new`      | Create a new specification.                                   |
-| `/specifications/approval` | Approval queue.                                               |
-| `/specifications/history`  | Approved / rejected history.                                  |
-| `/workflow`                | Kanban: Received → Testing → Approved.                         |
-| `/clients`                 | Client management.                                            |
-| `/reports` + `/reports/:id`| Certificate of Analysis (COA).                                |
-| `/inventory`               | Reagents + alerts.                                            |
-| `/invoices` + `/invoices/:id` | ZATCA FATOORA-compliant invoices (SAR, 15% VAT).           |
-| `/accounting/dashboard`    | Finance KPIs.                                                 |
-| `/accounting/journals`     | General journal entries.                                      |
-| `/accounting/ledger`       | General ledger view.                                          |
-| `/accounting/reports`      | Trial balance, P&L, balance sheet.                            |
-| `/accounting/chart-of-accounts` | Chart of accounts tree.                                  |
-| `/analytics`               | Cross-tenant analytics dashboard.                             |
-| `/admin`                   | SaaS admin: Tenants, Plans, Feature Flags.                    |
-| `/client-portal`           | Client-facing landing.                                        |
-| `/settings`                | App preferences (theme, language).                            |
+| Variable | Default | Effect |
+|---|---|---|
+| `VITE_USE_API` | `false` | `true` selects HTTP adapters in the composition root |
+| `VITE_API_BASE_URL` | `""` → falls back to `/api` | Backend base URL. Empty means relative, which routes through the dev proxy |
+| `VITE_API_TOKEN` | — | Bearer token sent as `Authorization` on outgoing requests |
+
+Plus one **Node-side** variable read by `vite.config.ts` (never exposed to the
+browser):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `VITE_API_PROXY_TARGET` | `http://localhost:8000` | Where the dev server proxies `/api` |
+
+`.env.example` documents all four. `.env.local` is gitignored.
 
 ---
 
-## 9. Mock Data
+## 8. Roles & Permissions
 
-All mock data lives in `src/mock-data/`.
+Seven roles, defined in `src/shared/lib/types.ts`:
 
-| File                  | Contents                                                       |
-| --------------------- | -------------------------------------------------------------- |
-| `samples.ts`          | ~20 lab samples + `deriveMarketingRows()` helper.              |
-| `clients.ts`          | Saudi companies (Al-Marai, Aramco, Ajmal, SADL, etc.).         |
-| `analysts.ts`         | 5+ analysts with Arabic names.                                 |
-| `sampleTypes.ts`      | Sample type ↔ test mappings.                                   |
-| `specifications.ts`   | Spec library.                                                  |
-| `reagents.ts`         | Inventory.                                                     |
-| `reports.ts`          | COA records.                                                   |
-| `invoices.ts`         | ZATCA-ready invoices in SAR.                                   |
-| `accounts.ts`         | Chart of accounts.                                             |
-| `journals.ts`         | Journal entries.                                               |
-| `expenses.ts`         | Expense records.                                               |
-| `tenants.ts`          | Multi-tenant SaaS data.                                        |
-| `notifications.ts`    | Notification feed.                                             |
-| `rolePermissions.ts`  | Role → permission matrix.                                      |
-| `menuPermissions.ts`  | Role → menu visibility.                                        |
+```ts
+export type Role =
+  | "superadmin" | "admin" | "lab_manager" | "analyst"
+  | "client" | "accountant" | "receptionist";
+```
 
-> **Anchor date**: `ANCHOR_TODAY = "2026-08-14"` keeps date math
-> deterministic when deriving progress % and due dates.
+| Role | Sees |
+|---|---|
+| `superadmin` | Minimal sandbox — admin/users, admin/roles, settings |
+| `admin` | Everything except tenant-level superadmin tooling |
+| `lab_manager` | As admin, minus Billing / Accounting / SaaS Admin |
+| `analyst` | Dashboard, Samples, Workflow, Reports, My Submissions |
+| `receptionist` | Dashboard, Samples (→ receiving), Client Requests, Clients, Reports, Inventory |
+| `client` | Client Portal, My Samples, My Reports, My Invoices |
+| `accountant` | Finance Dashboard, Invoices, Journals, Ledger, Reports, Accounts Tree |
+
+**Gating happens at two levels:**
+
+1. **Route level** — `ProtectedRoute` wraps every non-auth route, with an
+   optional `roles={[…]}` array. 18 routes across 6 groups carry an explicit
+   array. Enforced in `App.tsx`.
+2. **Menu level** — the sidebar filters nav items by role, then applies per-user
+   menu overrides (`useEffectiveMenuVisibility`).
+
+> Every one of the 49 routes is wrapped in `ProtectedRoute`. It used to be
+> documented as "unguarded" — that has not been true since the auth refactor.
+
+---
+
+## 9. Pages & Routes
+
+**49 routes** registered in `src/App.tsx`.
+
+**Auth** (no layout): `/login`, `/superadmin`, `/register`,
+`/forgot-password`, `/otp-verify`
+
+**Core** — `/dashboard`, `/dashboard/marketing`, `/samples`,
+`/samples/receiving`, `/samples/*`, `/samples/*/report`, `/workflow`,
+`/clients`, `/reports`, `/reports/:id`, `/inventory`, `/invoices`,
+`/invoices/:id`, `/analytics`, `/settings`
+
+**Approvals** — `/approvals`, `/approvals/my-submissions`
+
+**Specifications** — `/specifications`, `/specifications/new`,
+`/specifications/library`, `/specifications/approval`,
+`/specifications/history`, `/specifications/test-master`,
+`/specifications/test-parameters`
+
+**Role-gated groups:**
+
+| Routes | Roles |
+|---|---|
+| `/quotations*` (3 routes) | `admin`, `lab_manager` |
+| `/admin*` (4 routes) | `admin`, `superadmin` |
+| `/client-portal` | `client` |
+| `/accounting/*` (5 routes) | `admin`, `accountant` |
+| `/client-requests*` (3 routes) | `admin`, `lab_manager`, `receptionist` |
+| `/technical-evaluation*` (2 routes) | `admin`, `lab_manager` |
+
+> **Sample ids contain slashes** (`FD/2024/0001`), so the detail route is
+> registered as `/samples/*`, not `/samples/:id` — a `:id` segment would not
+> match. The splat arrives under the literal key `"*"` from
+> wouter/regexparam.
+
+### Registering a new page
+
+1. Create `src/presentation/pages/<area>/<page>.tsx`
+2. Register the route in `src/App.tsx`, wrapped in
+   `<ProtectedRoute roles={[…]}>`
+3. Add a `Sidebar.tsx` nav entry for the roles that should see it
+4. Run all three gates
 
 ---
 
 ## 10. Core Modules
 
-### 10.1 Sample Lifecycle
+| Domain | Covers | Has rules? |
+|---|---|---|
+| `sample` | Samples, tests, parameters, parameter review status, 3-stage approval | ✅ |
+| `client` | Customers — the join anchor for samples/quotations/invoices | — |
+| `accounting` | Invoices, journals, ledger, chart of accounts | ✅ |
+| `quotation` | Quotation lifecycle, pricing, totals | ✅ |
+| `identity` | Users, roles, menu permissions, auth session | — |
+| `testParameter` | The Test Parameter Catalogue | — |
+
+### `rules.ts` — pure business logic, extracted from where it used to live
+
+These were originally embedded in mock data or UI components. They now live in
+`domain/` as side-effect-free functions, which is what makes them testable:
+
+```ts
+// domain/sample/rules.ts
+currentStage(test)            // which approval stage must act right now
+roleForStage(stage)           // the role that owns a stage
+nextStage(stage)              // lab_supervisor → tech_manager → qa
+statusAfterApproval(stage)    // where the review status lands
+canApprove(test, role)        // the gating rule, in one place
+
+// domain/accounting/rules.ts
+vatFor(net, rate = 0.15)      // 15% KSA VAT
+isBalanced(entry)             // Σdebits === Σcredits — the invariant that was never checked
+invoicePosting(...)           // double-entry posting
+isOverdue(invoice, today?)
+
+// domain/quotation/rules.ts
+computeTotals(lines)          // subtotal + VAT
+canTransition(from, to)       // quotation state machine
+```
+
+### The 3-stage approval chain
 
 ```
-Received → Testing → Review → Approved → Reported → Invoiced
+Analyst submits
+  → Lab Supervisor      (approvals.lab_supervisor)
+    → Technical Manager (approvals.tech_manager)
+      → QA              (approvals.qa)  →  reviewStatus: "qa_approved"
 ```
 
-State transitions are tracked in `MockSample.status`. The Kanban board
-(`/workflow`) is the visual control surface; the Sample detail page
-(`/samples/:id`) shows the chain-of-custody timeline plus the active
-tabs.
+Each test carries three sign-off slots plus an append-only `reviewHistory`.
+`currentStage()` is the single source of truth for "who acts next";
+`roleForStage()` maps each stage to the role that owns it. The gating rule
+itself — `canApprove(test, role)` — lives in the domain, not in a component.
 
-### 10.2 Test Approvals
+### The Test Parameter Catalogue
 
-Approval chains live in `src/components/approvals/` and
-`src/hooks/test-approvals/`:
-
-- `ApprovalChainPanel` renders the ordered reviewers.
-- `TestReviewDrawer` opens the test for review.
-- `RejectTestDialog` captures the rejection reason.
-- `store.ts` exports `findSample(id)` and `notifyStoreChanged()` so
-  any mutation re-renders all subscribed views.
-
-### 10.3 Specifications
-
-A specification is a reusable set of test + parameter definitions that
-can be attached to a sample. The
-`/specifications/{library,test-master,new,approval,history}` flow
-moves a draft through approval before it becomes attachable.
-
-### 10.4 Accounting
-
-`src/lib/accounting-utils.ts` holds the ZATCA FATOORA helpers
-(VAT 15 %, QR / TLV generation, totals). Pages under
-`/accounting/*` consume it.
+The one module with a genuinely live backend contract
+(`docs/test_parameter_api.md`). It calls the real FastAPI API when
+`VITE_USE_API=true` and falls back to fixtures otherwise. This is the seam the
+next port (`TestParameterRepository`) will formalise.
 
 ---
 
 ## 11. Bilingual (EN / AR) + RTL
 
-- `AppContext.language` ∈ `"en" | "ar"`.
-- Components flip layouts via the helper `isRtl = language === "ar"`,
-  swap margins / paddings, and choose between English and Arabic
-  labels (e.g. `"Edit"` ↔ `"تعديل"`).
-- The `<html dir>` attribute is updated by the context provider.
+`language: "en" | "ar"` lives in `AppContext`; setting it to `"ar"` sets
+`<html dir="rtl">` and toggles an `.rtl` class on the root element.
+
+**Two label patterns coexist:**
+
+1. **Inline paired objects** (legacy, ~75 files):
+   ```tsx
+   const LABEL = { en: "Edit", ar: "تعديل" };
+   {isRtl ? LABEL.ar : LABEL.en}
+   ```
+
+2. **Typed `useTranslation`** (the target):
+   ```tsx
+   // presentation/hooks/i18n/useTranslation.ts
+   const labels = { en: {...}, ar: {...} };
+   const { t, isRtl } = useTranslation(labels);
+   ```
+
+Label modules live per-vertical in `shared/i18n/domains/<vertical>/`. The
+Arabic table is typed as `{ [K in keyof typeof enLabels]: string }`, so a
+missing or misspelled Arabic key is a **compile error** rather than a blank
+label discovered in review.
+
+Only `samples/` is migrated so far — it is a working proof of the pattern.
+**Prefer it in new code.**
+
+> Do **not** introduce `react-i18next`. i18n is hand-rolled via
+> `AppContext.language` by design.
+
+**RTL rule:** use logical Tailwind properties (`ms-*`, `me-*`, `start-*`,
+`end-*`), never `ml-*` / `mr-*`.
 
 ---
 
-## 12. Theming
+## 12. Reusable Components
 
-Dark + Light are handled by `next-themes` with a class-based strategy.
-The provider sits in `App.tsx` and the toggle lives in
-`components/shared/RoleSwitcher.tsx` (and the settings page).
-
----
-
-## 13. Reusable Components
-
-| Component             | Where                                          |
-| --------------------- | ---------------------------------------------- |
-| `DataTable`           | `components/shared/DataTable.tsx`              |
-| `KpiCard`             | `components/shared/KpiCard.tsx`                |
-| `StatusBadge`         | `components/shared/StatusBadge.tsx`            |
-| `RoleSwitcher`        | `components/shared/RoleSwitcher.tsx`           |
-| `SampleTimeline`      | `components/shared/SampleTimeline.tsx`         |
-| `BarcodeMock` / `QrCodeMock` | `components/shared/`                   |
-| `Button`, `Card`, `Dialog`, `Select`, `Tabs`, `Table`, `Checkbox`, `Popover`, `ScrollArea`, `Badge` | `components/ui/*` (shadcn/ui) |
+| Component | Location | Purpose |
+|---|---|---|
+| `DataTable` | `presentation/components/shared/` | Generic list table with search, sort, pagination, CSV export. **Prefer this over reinventing table JSX.** Accepts `searchKey` as `keyof T` or `(item: T) => string` |
+| `KpiCard` | `presentation/components/shared/` | Metric tile with an optional numeric trend |
+| `StatusBadge` | `presentation/components/shared/` | Coloured status pill |
+| `RoleSwitcher` | `presentation/components/shared/` | Demo-mode role picker |
+| `SampleTimeline` | `presentation/components/shared/` | Chain-of-custody visualization |
+| `ProtectedRoute` | `presentation/components/auth/` | Route guard with optional `roles` allow-list |
+| `PermissionMatrix` | `presentation/components/features/admin/` | Role × menu-key grid |
+| 55 shadcn primitives | `shared/ui/` | button, card, dialog, select, table, … |
 
 ---
 
-## 14. State Management
+## 13. State Management
 
-There is **no Redux / Zustand**. The app uses:
+There is no Redux. Three mechanisms cover everything:
 
-- **React Context** (`AppContext`, `NotificationContext`) for cross-app
-  concerns (role, language, notifications).
-- **In-memory mutation** through `findSample(id)` +
-  `notifyStoreChanged()` from `src/hooks/test-approvals/store.ts`.
-  Pages call these directly to update shared sample state.
-- **Local component state** for filters, drawers, dialogs.
+**1. React context for ambient app state** — `AppContext` (role, language,
+theme), `AuthContext` (session), `NotificationContext`.
 
-To make sure a page re-renders after a mutation, call
-`notifyStoreChanged()` after `findSample(id)` writes back to
-`sample.tests`.
-
----
-
-## 15. Sample Test Replicate Workflow
-
-The `Replicate to Samples` button on `/samples/:id` opens
-`components/samples/ReplicateTestsDialog.tsx`.
-
-1. Source tests are **deep-copied** with `cloneTests()`:
-   - Fresh IDs for both the test and every parameter.
-   - Approval state dropped (`reviewStatus = "pending"`).
-   - Parameter values blanked, parameter status reset to `"pending"`.
-2. The user picks one or more **target samples** from a searchable
-   list with checkboxes + Select all / Clear shortcuts.
-3. On confirm: each target's tests are appended, then
-   `notifyStoreChanged()` re-renders every subscriber.
-4. A toast confirms the count: `"Replicated X tests to N samples"`.
-
-> Disabled when the source sample has zero tests.
-
----
-
-## 16. Role-Based Per-Test Editing
-
-For users with role `admin`, `lab_manager`, or `superadmin`, each row
-in the test table on `/samples/:id` exposes three actions:
-
-- 👁 **View** — opens `TestDrawer` for read-only inspection.
-- ✏ **Edit** — opens the same drawer in edit mode + info toast.
-- 🗑 **Delete** — removes the test from the sample (with toast); the
-  shared store is notified via `notifyStoreChanged()`.
-
-For all other roles, only the **View** button renders. The gating is
-implemented once in `components/tests/TestTable.tsx`:
+**2. An in-memory store for sample data** —
+`infrastructure/mock/repositories/sampleStore.ts`:
 
 ```ts
-const canModifyTest =
-  currentRole === "admin" ||
-  currentRole === "lab_manager" ||
-  currentRole === "superadmin";
+samplesStore            // deep copy of the seed fixtures — NOT the seed itself
+subscribe(fn)          // register a listener
+getStoreSnapshot()     // read for useSyncExternalStore
+notifyStoreChanged()   // call after every mutation
+findSample(id)
+findTestById(id)
+resetStore()
 ```
 
-and threaded down through `SampleTabs → TestTable → TestRowExpandable`
-via `onEdit`/`onDelete` props.
+Components read it through `useSyncExternalStore`:
 
----
-
-## 17. Accounting (ZATCA)
-
-- Currency: **SAR** with **15 % VAT**.
-- Invoice numbering, QR / TLV encoding, and Phase-2 readiness are
-  implemented in `src/lib/accounting-utils.ts`.
-- Routes: `/invoices`, `/invoices/:id`, plus the
-  `/accounting/{dashboard,journals,ledger,reports,chart-of-accounts}`
-  suite for accountants.
-
----
-
-## 18. Marketing Reports Dashboard
-
-`/dashboard` ends with a **Marketing Reports** section
-(`components/dashboard/MarketingReports.tsx`) that:
-
-- Filters by From / To date, Client, Issuance, Status, Type, and a free
-  text search.
-- Renders a 10-column table (Sample#, Client, Product, Test, Received,
-  Reported, Priority, Status, Progress, Marketing Status).
-- Exports the filtered set to **CSV** or **Excel** via Blob downloads.
-- Paginates at 10 rows per page.
-- Shares locale handling with the rest of the app.
-
-The data comes from `deriveMarketingRows(nowIso, samples)` in
-`src/mock-data/samples.ts`, which is also reused by the Samples
-Manager table.
-
----
-
-## 19. Build & Typecheck
-
-```bash
-# Build
-npm run build
-
-# Type-check only
-npx tsc --noEmit
+```tsx
+const samples = useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot);
 ```
 
-A clean build emits `dist/index.html` + hashed JS/CSS assets. CI exit
-code `0` and `✓ built in <time>s` indicate success.
+The store lives in `infrastructure/` rather than `presentation/hooks/` because
+the mock repository adapter has to import it — and adapters must never reach
+into the UI layer. It has no React dependency, which is what made that move
+possible.
+
+> **Phase 3 moved this file** from `presentation/hooks/test-approvals/store.ts`.
+> 14 import sites were rewritten. If you find an import pointing at the old
+> path, it's stale.
+
+**3. TanStack Query for the API-backed seams** — `infrastructure/api/tanstack-queries.ts`.
+Its hooks still gate on `enabled: isApiEnabled()`; porting them is the natural
+Phase 5 slice.
+
+> A hard browser refresh resets the store by design. A newly registered sample
+> that vanishes was never persisted — writes must go through
+> `container.samples.create()` / `.update()`, not local `useState`.
 
 ---
 
-## 20. Legacy / Backup Artifacts
+## 14. Key Workflows
 
-Three directories at the repo root hold an **unused** Express 5 +
-Drizzle ORM + OpenAPI backend from a prior pnpm workspace attempt:
+### Sample registration
 
-- `.backup_artifacts/api-server/`
-- `.backup_artifacts/greenlims-ksa/`
-- `.backup_artifacts/mockup-sandbox/`
-- `.backup_lib/`, `.backup_scripts/`
+1. `pages/samples/index.tsx` → `onSubmit`
+2. The spec auto-loads when a sample type is selected (matching `productName`)
+3. `container.samples.create(...)` persists to the store
+4. The adapter mints the id via `generateSampleId` — format
+   `<PREFIX>/<YYYY>/<NNNN>`, serial scoped per category per year
 
-They are kept for historical reference only — the shipped frontend
-makes **zero** API calls.
+> The **adapter** owns id generation, not the form. `generateSampleId` needs
+> the full corpus to derive the next serial, and a real backend would assign
+> its own id anyway — so keeping it in presentation would leak a mock-only
+> concept upward.
+
+### Approval workflow
+
+`useApproveTest` / `useRejectTest` / `useSubmitTest` mutate the live store and
+call `notifyStoreChanged()`. Subscribed views re-render on the store tick.
+
+### Reissue & supplementary
+
+Both clone a sample, keeping all test work (approvals, history, parameter
+values) intact and refreshing only the wrapper fields:
+
+- **Reissue** → new id `<base>-R<n>`, status `Reissue`
+- **Supplementary** → new id `<base>-S<n>`, status `Supplementary`, designed
+  to receive additional tests
+
+Both surface a lineage banner on the detail page linking back to the source.
+
+### Replicate tests to other samples
+
+Deep-copies tests with **fresh ids**, resets `reviewStatus` to `pending`, and
+blanks parameter values — so the copy can be run independently.
 
 ---
 
-## 21. Roadmap
+## 15. Accounting (ZATCA)
 
-Planned follow-ups (not yet implemented):
+Currency **SAR**, VAT **15%**. `isBalanced()` enforces Σdebits = Σcredits — an
+invariant that had never previously been checked anywhere.
 
-- Real backend integration (Express + Drizzle scaffold already
-  exists under `.backup_artifacts/`).
-- Server-side approval webhooks + email notifications.
-- Barcode / QR scanner integration for sample receiving.
-- Role gating on the **Samples Manager Action** column (currently
-  shown to all non-client roles; could be tightened to
-  admin / lab_manager / superadmin only).
-- Dedicated edit-only `TestDrawer` mode (currently reuses the view
-  drawer with a toast).
+> ⚠️ **Recorded, not fixed — and deliberately so.** Two functions in
+> `shared/lib/accounting-utils.ts` are *simulations*, not implementations:
+>
+> - `ZatcaService.generateHash` returns `Math.random()` despite being labelled a
+>   "SHA-256 simulation". It is not a hash.
+> - `generateQR` is a base64 pipe-delimited string, not ZATCA TLV, and is
+>   therefore not FATOORA-compliant.
+> - `postInvoice` debits `invoice.total` and credits `subtotal + vat`. This is
+>   probably balanced but was unverified.
+>
+> Real ZATCA compliance requires a real backend and the actual spec. It is not
+> achievable with a frontend patch, so these are documented rather than
+> quietly "improved".
 
 ---
 
-## 22. License
+## 16. Mock Data
 
-Internal project — see repository owner for licensing terms.
+23 fixture files in `src/infrastructure/mock/data/`, re-exported through
+`index.ts`:
+
+```
+accounts  analysts  clients  expenses  index  invoices  journals
+menuPermissions  notifications  quotations  reagents  reports
+role-menu-permissions  rolePermissions  samples  sampleTypes  specifications
+tenants  testQueue  user-menu-overrides  users  workOrders  workOrderStore
+```
+
+The corpus is Saudi-realistic: Al-Marai, Saudi Aramco, Ajmal Perfumes, SWCC,
+Tabuk Pharmaceuticals. It supports mutation, sharing, and cross-references, so
+it behaves as a *de-fee in-memory database* rather than static fixtures — which
+is what made wrapping it in repository ports worthwhile.
+
+> **Which entities earn a port, and why.** Six do: accounting (VAT math is pure
+> and untested), sample (the status lifecycle was scattered `if` chains), client
+> (a five-way join anchor), testParameter (a live backend contract already
+> exists), quotation (an existing state machine), identity (four permission
+> tables joined ad-hoc). The other ~16 stay plain fixtures — forcing a
+> repository interface onto a static lookup table is ceremony, not
+> architecture.
+
+### Adding mock data
+
+1. Add `src/infrastructure/mock/data/<entity>.ts` with a typed collection
+2. Type it from `domain/<entity>/model.ts` — **never** declare a local
+   duplicate interface. The domain owns the type; the fixture implements it
+3. Re-export it from `src/infrastructure/mock/data/index.ts`
 
 ---
 
-## 23. AI / Agent Context
+## 17. Adding Features
 
-This repository is configured for both Claude Code and Puku CLI agent sessions.
-Each harness reads a dedicated context file at session start — **do not move,
-rename, or delete them**:
+### A new repository
 
-- **[`CLAUDE.md`](./CLAUDE.md)** — canonical, full project context (16 sections,
-  stack, conventions, recipes, do-not list, open gaps). Read this for any
-  non-trivial task.
-- **[`puku.md`](./puku.md)** — slim session-start index for Puku CLI sessions.
-  Points back to `CLAUDE.md` and adds Puku-specific notes (skills, plans,
-  enabled plugins). Read this first when starting a new Puku session, then
-  follow the pointer to `CLAUDE.md` for depth.
+1. Declare the port in `domain/<entity>/ports.ts`
+2. Implement the mock adapter in `infrastructure/mock/repositories/`
+3. Implement the HTTP adapter in `infrastructure/api/repositories/`
+4. Wire both into `infrastructure/di/container.ts`
+5. Consume via `container.<name>`
 
-When making changes that touch either file, update both cross-references so
-future sessions discover the convention.
-include test case.
+> **Rule of thumb: presentation never imports a concrete adapter.** If a page
+> needs a repository, it imports the container. If you find yourself importing
+> from `infrastructure/` in a component to get data, that's the signal you've
+> skipped a port.
+
+### A new page
+
+See [Pages & Routes](#pages--routes).
+
+### A bilingual component
+
+Prefer the typed `useTranslation` pattern over inline `{en, ar}` objects, and
+logical CSS properties for RTL. See
+[Bilingual](#11-bilingual-en--ar--rtl).
+
+### A new domain entity
+
+1. `domain/<entity>/model.ts` — types only, no behaviour
+2. `domain/<entity>/rules.ts` — pure functions, if it has any logic
+3. `domain/<entity>/ports.ts` — interfaces the outside world must satisfy
+4. `domain/index.ts` — add to the barrel only if it's cross-cutting
+
+---
+
+## 18. Current State & Roadmap
+
+### Working, gated, and verified
+
+- ✅ `npm run typecheck` — **0 errors** under `strict: true`
+- ✅ `npm run lint:layers` — **0 violations**
+- ✅ `npm run build` — green
+
+### Not yet done — the honest list
+
+- 🔴 **No tests. Zero. No framework installed.** The domain `rules.ts`
+  functions were extracted *specifically* to make them testable. Vitest would
+  cost ~5 lines in `vite.config.ts`; the highest-value first targets are
+  `isBalanced` (Σdebits === Σcredits, never checked) and VAT rounding. **This
+  is the single largest remaining gap.**
+- 🔴 **`UserRepository` and `RoleRegistry` are declared but not implemented.**
+  Five components still read `isApiEnabled()` directly and juggle three
+  overlapping user shapes (`SaaSUser`, API `User`, domain `User`):
+  `admin/users`, `admin/users/[id]`, `admin/roles`,
+  `specifications/test-master`, `specifications/test-parameters`, plus the
+  notification bell in `components/layout/Header.tsx`.
+  `infrastructure/api/tanstack-queries.ts` also still gates every hook on
+  `enabled: isApiEnabled()`. Porting these is the natural next slice.
+- 🟡 **`TestParameterRepository` port** — the API seam exists but isn't behind
+  a port yet, so it doesn't get the race guard or the mock/HTTP symmetry auth
+  has.
+- 🟡 **`pages/samples/report.tsx`** still reads the store directly
+  (`samplesStore`, `findSample`) rather than through the port.
+- 🟡 **Four oversized pages** remain unsplit:
+  `specifications/test-parameters.tsx` (1190L), `admin/roles.tsx` (1152L),
+  `samples/index.tsx` (1142L), `admin/users.tsx` (1049L). Splitting a
+  controlled form into a child component can silently make it uncontrolled —
+  **`tsc` will not catch this**, so each split needs a manual form walkthrough.
+- 🟡 **i18n migration incomplete** — only the `samples` vertical uses the typed
+  pattern; ~75 files still use inline `{en, ar}` objects.
+
+### Known issues deliberately left visible
+
+- **ZATCA hash/QR are simulations**, not spec-compliant — see
+  [Accounting](#15-accounting-zatca).
+- **`MenuEntry.iconName` is correctly a `string`**, but the existing
+  `menuPermissions.ts` registry still imports real `lucide-react` components.
+  That's a layering violation the guard can't catch, because the fixture lives
+  in `infrastructure/` — which is *allowed* to import React.
+- **Bundle is a single ~2.3 MB chunk.** No `manualChunks` config;
+  code-splitting is a straightforward win if load time matters.
+- **`CLAUDE.md` and `PUKU.md` predate the architecture work.** Where they
+  disagree with this README, this README is correct — but the real fix is to
+  rewrite them.
+
+---
+
+## 19. Troubleshooting
+
+**`npm run typecheck` passes but the app misbehaves.**
+Always run it — the build only strips types, it does not check them.
+
+**Layering guard reports `must not depend on …`.**
+The architecture is right and the import is wrong. Move the file to the
+correct layer rather than suppressing the rule. Every violation the guard has
+ever raised was a genuine design error.
+
+**Sample changes don't appear.**
+Sample data lives in `samplesStore` (a deep copy of the seed, *not* the seed
+itself). Call `notifyStoreChanged()` after mutating, and make sure the
+component subscribes via
+`useSyncExternalStore(subscribe, getStoreSnapshot, getStoreSnapshot)`.
+
+**A newly registered sample disappears.**
+It wasn't persisted. Writes must go through `container.samples.create()` /
+`.update()`, not local component state — `useState` is not a store.
+
+**The sample detail page shows the wrong sample.**
+Don't fall back to `mockSamples[0]` when an id doesn't resolve. Show an explicit
+"not found" / "loading" state instead. `pages/samples/[id].tsx` does this now;
+copy the pattern.
+
+**`VITE_USE_API=true` but nothing changes.**
+The flag is read once at module load. Restart the dev server after changing
+`.env` — an HMR update will not re-evaluate the container.
+
+**Auth race on a slow network.**
+Already handled. `httpAuthSession` tracks a monotonic generation counter, so a
+slow `/auth/me` can never overwrite a newer successful login. This replaced a
+2-second timestamp heuristic in `AuthContext` that was duplicated across three
+call sites and could discard a legitimate login on a slow connection. Don't
+"simplify" it back.
+
+**Login error messages look wrong.**
+`AuthSession.signIn` throws `ApiError` / `TypeError` *unchanged* on purpose —
+`login.tsx` branches on that distinction to show "invalid password" versus
+"backend unreachable" (including the Vite-proxy URL hint). Wrapping either in a
+`RepositoryError` collapses both into one useless message.
+
+**Imports fail after a refactor.**
+Check for stale `@/mock-data`, `@/hooks`, `@/context`, `@/components/ui`, or
+`@/lib` paths — those directories no longer exist. Current aliases are
+`@/shared/*`, `@/domain/*`, `@/infrastructure/*`, `@/presentation/*`.
+
+**Stale docs.**
+`CLAUDE.md` / `PUKU.md` / `.puku-cli/skills/*` still teach the old flat
+structure. This README is the current source of truth.
+
+---
+
+## 20. License
+
+Internal project — contact the repository owner.
