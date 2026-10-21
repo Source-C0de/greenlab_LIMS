@@ -1,15 +1,23 @@
-import { useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { Checkbox } from "@/shared/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/shared/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -25,9 +33,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import { Pencil, Archive, Plus, Trash2 } from "lucide-react";
+import { Pencil, Archive, Plus, Trash2, ListChecks } from "lucide-react";
 import { toast } from "sonner";
-import { RolePermissionMatrix } from "@/presentation/components/features/admin/PermissionMatrix";
 import { useRoleMenuMatrix } from "@/presentation/hooks/useRoleMenuMatrix";
 import { useRoleAdmin, SLUG_PATTERN, type CreateRoleError } from "@/presentation/hooks/useRoleAdmin";
 import {
@@ -44,10 +51,12 @@ import {
   useDeleteRole,
   useAdminMenuKeys,
   usePutRoleMenuPermissions,
+  useRoleMenuPermissionsApi,
 } from "@/infrastructure/api/tanstack-queries";
 import { describeApiError } from "@/infrastructure/api/errors";
 import { SEED_ADMIN_MENU_KEYS, type AdminMenuKey } from "@/shared/lib/adminMenuKeys";
 import type { Role as ApiRole, RoleIconName } from "@/infrastructure/api/clients/rolesApi";
+import type { MenuKey } from "@/infrastructure/mock/data/menuPermissions";
 
 interface EditForm {
   labelEn: string;
@@ -184,20 +193,49 @@ export default function RolesAdmin() {
     return r ? !r.isActive : false;
   }
 
-  // The matrix needs an `isRoleEnabled` predicate. In API mode the answer
-  // is fetched per-role; in mock mode it comes from the local store.
-  const matrixKeys: AdminMenuKey[] = api
-    ? (menuKeysQuery.data?.map((k) => ({
-        key: k.key,
-        labelEn: k.labelEn,
-        labelAr: k.labelAr,
-        group: k.group,
-        href: k.href,
-        displayOrder: k.displayOrder,
-      })) ?? SEED_ADMIN_MENU_KEYS)
-    : SEED_ADMIN_MENU_KEYS;
+  // ---------------------------------------------------------------------
+  // The 10-key admin menu catalogue the "Assign Menus" modal edits.
+  //
+  // Deliberately the ADMIN catalogue (the backend's own model, fetched
+  // from `GET /admin/menu-keys`) rather than the SPA's 32-key
+  // `MENU_REGISTRY`. That keeps the modal contract identical in both
+  // modes and matches what `PUT /admin/roles/:role/menu-permissions`
+  // replaces. Falls back to the seed until the query resolves, so the
+  // modal is never empty.
+  // ---------------------------------------------------------------------
+  const menuKeys: AdminMenuKey[] =
+    menuKeysQuery.data && menuKeysQuery.data.length > 0
+      ? menuKeysQuery.data.map((k) => ({
+          key: k.key,
+          labelEn: k.labelEn,
+          labelAr: k.labelAr,
+          group: k.group,
+          href: k.href,
+          displayOrder: k.displayOrder,
+        }))
+      : SEED_ADMIN_MENU_KEYS;
 
-  const matrixRoles = useMemo(() => roleList.map((r) => r.slug), [roleList]);
+  // ---------------------------------------------------------------------
+  // "Assign Menus" modal — per-role menu assignment.
+  //
+  // `null` means closed, matching the `editingRole` / `archiveRole` /
+  // `deleteRole` pattern used by the other dialogs on this page.
+  // ---------------------------------------------------------------------
+  const [assignMenusRole, setAssignMenusRole] = useState<ToggleableRole | null>(null);
+  // Draft = the keys the user has ticked but not yet saved.
+  const [draftKeys, setDraftKeys] = useState<Set<string>>(new Set());
+  // Set once the user touches a checkbox. A late GET must not clobber
+  // their edits — this is the guard for that.
+  const hasEditedDraft = useRef(false);
+  // Snapshot of the keys at open time, used to revert the optimistic
+  // local mirror if the PUT fails. Reverting to a *fresh read* would be
+  // a no-op, because by then the store already holds the new value.
+  const preSaveKeys = useRef<string[]>([]);
+
+  // API mode: the server is authoritative for this role's cells. Passing
+  // `null` when the modal is closed keeps the query disabled, so no
+  // wasted request.
+  const permissionsQuery = useRoleMenuPermissionsApi(api ? assignMenusRole : null);
 
   // ---------------------------------------------------------------------
   // Dialog state.
@@ -475,42 +513,88 @@ export default function RolesAdmin() {
     }
   }
 
-  // For the matrix, in API mode we keep the local store as a UI buffer
-  // and PUT the full matrix for that role on every cell toggle. In mock
-  // mode we use the existing local matrix hook directly.
-  function isRoleEnabledForMatrix(role: string, key: string): boolean {
-    return localMatrix.isRoleEnabled(
-      role,
-      key as Parameters<typeof localMatrix.isRoleEnabled>[1],
-    );
+  // --- Assign Menus handlers (per-role menu assignment) ---
+  //
+  // The server contract is FULL REPLACE — `PUT` takes the complete
+  // `cells[]`, not a per-key delta — so the modal holds a draft set and
+  // only writes on Save. In mock mode there is no server, so the draft is
+  // written straight into the local matrix store.
+
+  function openAssignMenus(role: ToggleableRole) {
+    // Seed the draft from whichever source is authoritative in this mode:
+    // the local store in mock, the GET response (arriving shortly) in API.
+    const seeded = localMatrix.getRoleKeys(role).map(String);
+    preSaveKeys.current = seeded;
+    hasEditedDraft.current = false;
+    setDraftKeys(new Set(seeded));
+    setAssignMenusRole(role);
   }
-  function toggleMatrixCell(role: string, key: string) {
-    const current = localMatrix.getRoleKeys(role);
-    // `getRoleKeys(role: string): MenuKey[]` — MenuKey is the *return* element
-    // type, not a parameter, so it comes from `ReturnType<...>[number]`.
-    const typedKey = key as ReturnType<typeof localMatrix.getRoleKeys>[number];
-    const next = current.includes(typedKey)
-      ? current.filter((k) => k !== typedKey)
-      : [...current, typedKey];
+
+  function closeAssignMenus() {
+    setAssignMenusRole(null);
+    setDraftKeys(new Set());
+    hasEditedDraft.current = false;
+  }
+
+  function toggleDraft(key: string) {
+    hasEditedDraft.current = true;
+    setDraftKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function saveMenus() {
+    if (!assignMenusRole) return;
+    const role = assignMenusRole;
+    const keys = [...draftKeys];
+
     if (api) {
-      // Mirror locally so the UI updates immediately, then PUT the
-      // full new matrix. Cells are sent as a complete replace per spec.
-      localMatrix.setRole(role, next);
+      // Mirror locally so the table's count badge and any re-open reflect
+      // the change immediately, then PUT the full replace. Revert to the
+      // pre-save snapshot (not a fresh read) if the server rejects it.
+      localMatrix.setRole(role, keys as MenuKey[]);
       putMatrixMut.mutate(
-        { slug: role, body: { cells: next.map((k) => ({ menuKey: k, enabled: true })) } },
         {
+          slug: role,
+          body: { cells: keys.map((menuKey) => ({ menuKey, enabled: true })) },
+        },
+        {
+          onSuccess: () => toast.success(t("Menus updated", "تم تحديث القوائم")),
           onError: (e) => {
             const m = describeApiError(e, isRtl ? "ar" : "en");
             toast.error(isRtl ? m.ar : m.en);
-            // Revert on failure.
-            localMatrix.setRole(role, current);
+            localMatrix.setRole(role, preSaveKeys.current as MenuKey[]);
           },
         },
       );
     } else {
-      localMatrix.toggle(role, typedKey);
+      localMatrix.setRole(role, keys as MenuKey[]);
+      toast.success(t("Menus updated", "تم تحديث القوائم"));
     }
+    closeAssignMenus();
   }
+
+  // Seed the draft from the server once the GET lands — but only while the
+  // user has not touched anything, so a slow response cannot discard edits.
+  useEffect(() => {
+    if (!api || !assignMenusRole) return;
+    if (permissionsQuery.isPending || !permissionsQuery.data) return;
+    if (hasEditedDraft.current) return;
+    const fromServer = permissionsQuery.data.cells
+      .filter((c) => c.enabled)
+      .map((c) => c.menuKey);
+    hasEditedDraft.current = true; // server state is now the baseline
+    setDraftKeys(new Set(fromServer));
+    preSaveKeys.current = fromServer;
+  }, [
+    api,
+    assignMenusRole,
+    permissionsQuery.isPending,
+    permissionsQuery.data,
+  ]);
 
   const errorText = (code: CreateRoleError) =>
     isRtl ? ERROR_MESSAGES_AR[code] : ERROR_MESSAGES_EN[code];
@@ -535,116 +619,249 @@ export default function RolesAdmin() {
         </Button>
       </div>
 
-      {/* Role cards — seeds + custom roles with bilingual labels + icons. */}
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {roleList.map((entry) => {
-          const Icon = localRegistry.getIcon(entry.slug as ToggleableRole);
-          const archived = !entry.isActive;
-          const isCustom = entry.isCustom;
-          const cardLabel = isRtl ? entry.labelAr : entry.labelEn;
-          return (
-            <Card
-              key={entry.slug}
-              data-testid={`role-card-${entry.slug}`}
-              className={archived ? "opacity-60" : undefined}
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-                      <span>{cardLabel}</span>
-                      {isCustom && (
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                          {t("Custom", "مخصص")}
-                        </span>
-                      )}
-                      {archived && (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                          {t("Archived", "مؤرشف")}
-                        </span>
-                      )}
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-                      {isRtl ? entry.descriptionAr : entry.descriptionEn}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground font-mono mt-1">
-                      {entry.slug}
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => openEdit(entry.slug)}
-                  className="gap-2"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  {t("Edit", "تعديل")}
-                </Button>
-                {archived ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleRestore(entry.slug)}
-                  >
-                    {t("Restore", "استعادة")}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openArchive(entry.slug)}
-                    className="gap-2 text-destructive hover:text-destructive"
-                  >
-                    <Archive className="h-3.5 w-3.5" />
-                    {t("Archive", "أرشفة")}
-                  </Button>
-                )}
-                {isCustom && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openDelete(entry.slug)}
-                    className="gap-2 text-destructive hover:text-destructive ms-auto"
-                    data-testid={`role-delete-${entry.slug}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {t("Delete", "حذف")}
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
+      {/* Role list — a table of roles with per-row actions. Menu
+          assignment lives in the per-role "Assign Menus" modal below. */}
       <Card>
         <CardHeader>
-          <CardTitle>
-            {t("Menu Permission Matrix", "مصفوفة صلاحيات القائمة")}
-          </CardTitle>
-          <CardDescription>
-            {t(
-              `${roleList.length} roles × ${matrixKeys.length} menu items. Changes save automatically to the browser.`,
-              `${roleList.length} أدوار × ${matrixKeys.length} عنصر قائمة. تُحفظ التغييرات تلقائيًا في المتصفح.`,
-            )}
-          </CardDescription>
+          <CardTitle>{t("Roles", "الأدوار")}</CardTitle>
         </CardHeader>
-        <CardContent>
-          <RolePermissionMatrix
-            roles={matrixRoles}
-            isRoleEnabled={isRoleEnabledForMatrix}
-            toggle={toggleMatrixCell}
-            resetAll={localMatrix.resetAll}
-            menuKeys={matrixKeys}
-          />
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="ps-4 text-start">
+                  {t("Role", "الدور")}
+                </TableHead>
+                <TableHead className="text-start">
+                  {t("Description", "الوصف")}
+                </TableHead>
+                <TableHead className="text-center w-[110px]">
+                  {t("Menus", "القوائم")}
+                </TableHead>
+                <TableHead className="text-start w-[130px]">
+                  {t("Status", "الحالة")}
+                </TableHead>
+                <TableHead className="text-end pe-4">
+                  {t("Actions", "الإجراءات")}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {roleList.map((entry) => {
+                const Icon = localRegistry.getIcon(entry.slug as ToggleableRole);
+                const archived = !entry.isActive;
+                const isCustom = entry.isCustom;
+                const rowLabel = isRtl ? entry.labelAr : entry.labelEn;
+                // Menu-count badge. In mock mode this is free (local store),
+                // so we always know it. In API mode the count would cost one
+                // request per role, so we show `—` until the modal has been
+                // opened — the modal is the authoritative view in both modes.
+                const count = localMatrix.getRoleKeys(entry.slug).length;
+                return (
+                  <TableRow
+                    key={entry.slug}
+                    data-testid={`role-row-${entry.slug}`}
+                    className={archived ? "opacity-60" : undefined}
+                  >
+                    <TableCell className="ps-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-md bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{rowLabel}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">
+                            {entry.slug}
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[280px]">
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {isRtl ? entry.descriptionAr : entry.descriptionEn}
+                      </p>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span
+                        className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
+                        title={
+                          api
+                            ? t(
+                                "Open “Assign Menus” to view the count.",
+                                "افتح «تعيين القوائم» لعرض العدد.",
+                              )
+                            : undefined
+                        }
+                      >
+                        {api ? "—" : `${count} / ${menuKeys.length}`}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1.5">
+                        {isCustom && (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                            {t("Custom", "مخصص")}
+                          </span>
+                        )}
+                        <span
+                          className={
+                            archived
+                              ? "text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
+                              : "text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-500/15 text-green-700 dark:text-green-400"
+                          }
+                        >
+                          {archived ? t("Archived", "مؤرشف") : t("Active", "نشط")}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="pe-4">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openAssignMenus(entry.slug)}
+                          className="gap-1.5"
+                          data-testid={`role-assign-menus-${entry.slug}`}
+                        >
+                          <ListChecks className="h-3.5 w-3.5" />
+                          {t("Assign Menus", "تعيين القوائم")}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEdit(entry.slug)}
+                          aria-label={`${t("Edit", "تعديل")} ${rowLabel}`}
+                          title={t("Edit", "تعديل")}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        {archived ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRestore(entry.slug)}
+                            title={t("Restore", "استعادة")}
+                          >
+                            {t("Restore", "استعادة")}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openArchive(entry.slug)}
+                            aria-label={`${t("Archive", "أرشفة")} ${rowLabel}`}
+                            title={t("Archive", "أرشفة")}
+                          >
+                            <Archive className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {isCustom && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openDelete(entry.slug)}
+                            aria-label={`${t("Delete", "حذف")} ${rowLabel}`}
+                            title={t("Delete", "حذف")}
+                            className="text-destructive hover:text-destructive"
+                            data-testid={`role-delete-${entry.slug}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
+
+      {/* Assign Menus dialog — per-role menu permission editor.
+          Flat checkbox list of all admin menu keys; the server contract is
+          full-replace, so we hold a draft set and PUT the whole thing on
+          Save. Cancel discards the draft and the dialog is uncontrolled. */}
+      <Dialog
+        open={assignMenusRole !== null}
+        onOpenChange={(open) => {
+          if (!open) closeAssignMenus();
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>
+              {assignMenusRole
+                ? `${t("Assign Menus", "تعيين القوائم")} — ${assignMenusRole}`
+                : t("Assign Menus", "تعيين القوائم")}
+            </DialogTitle>
+            <DialogDescription>
+              {t(
+                "Choose which menu sections this role can see. Changes apply on save.",
+                "اختر أقسام القائمة التي يمكن لهذا الدور رؤيتها. تُطبَّق التغييرات عند الحفظ.",
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* API-mode loading + error states. In mock mode the local
+              store is synchronous so neither renders. */}
+          {api && permissionsQuery.isPending && (
+            <p className="text-sm text-muted-foreground py-2">
+              {t("Loading…", "جارٍ التحميل…")}
+            </p>
+          )}
+          {api && permissionsQuery.isError && (
+            <p className="text-sm text-destructive py-2">
+              {(() => {
+                const m = describeApiError(permissionsQuery.error, isRtl ? "ar" : "en");
+                return isRtl ? m.ar : m.en;
+              })()}
+            </p>
+          )}
+
+          <div className="max-h-[50vh] overflow-y-auto divide-y rounded-md border">
+            {menuKeys.map((k) => (
+              <label
+                key={k.key}
+                className="flex items-center gap-3 py-2.5 px-3 cursor-pointer hover:bg-muted/40"
+                data-testid={`assign-menus-row-${k.key}`}
+              >
+                <Checkbox
+                  checked={draftKeys.has(k.key)}
+                  onCheckedChange={() => toggleDraft(k.key)}
+                />
+                <span className="flex-1 text-sm">
+                  {isRtl ? k.labelAr : k.labelEn}
+                </span>
+                <span
+                  className="text-xs text-muted-foreground font-mono"
+                  dir="ltr"
+                >
+                  {k.key}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <span className="me-auto text-xs text-muted-foreground tabular-nums">
+              {t(
+                `${draftKeys.size} / ${menuKeys.length} selected`,
+                `${draftKeys.size} / ${menuKeys.length} مُحدَّد`,
+              )}
+            </span>
+            <Button variant="outline" onClick={closeAssignMenus}>
+              {t("Cancel", "إلغاء")}
+            </Button>
+            <Button
+              onClick={saveMenus}
+              disabled={api && putMatrixMut.isPending}
+            >
+              {t("Save", "حفظ")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit dialog */}
       <Dialog
@@ -1120,9 +1337,7 @@ export default function RolesAdmin() {
 }
 
 /**
- * Local hook for the matrix PUT. Lives here so we can call
- * `usePutRoleMenuPermissions` only inside the `RolesAdmin` body, not in
- * the `toggleMatrixCell` helper (rules of hooks).
+ * Local label + children wrapper for the Edit and Add dialogs.
  */
 function EditField({
   id,
