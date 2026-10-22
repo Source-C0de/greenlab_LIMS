@@ -46,6 +46,7 @@ import {
   setToken,
   type LoginResponse,
 } from "@/infrastructure/api/auth";
+import { ApiError } from "@/infrastructure/api/api";
 
 // ---------------------------------------------------------------------------
 // Monotonic generation — the race guard
@@ -146,15 +147,37 @@ export const httpAuthSession: AuthSession = {
       currentSession = { user: normaliseUser(raw), token, expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString() };
       publish();
       return currentSession;
-    } catch {
+    } catch (err) {
       if (authGeneration !== startedAt) return currentSession; // superseded
-      // Any failure (401, network, 5xx) means "no usable session". Clearing
-      // the token prevents a permanently-broken credential from being retried
-      // on every subsequent mount.
-      clearToken();
-      currentSession = null;
-      publish();
-      return null;
+
+      // ── Only a real 401 invalidates the credential ──────────────────────
+      // The previous code used a bare `catch`, so a 500, a network blip, a
+      // CORS failure, a timeout, or a fetch aborted by Vite HMR / a tab
+      // suspend all called `clearToken()`. Any of those transient blips on
+      // page load permanently destroyed a perfectly valid session — and
+      // because `subscribe()` was never wired into React, the UI never even
+      // learned it had happened. The user saw "not authorized" pages and
+      // empty tables while still believing they were logged in.
+      //
+      // The server is the ONLY authority on whether the token is genuinely
+      // dead, and it says so with a 401. Everything else means "we could not
+      // find out", which is not the same as "no" — so keep the token.
+      if (err instanceof ApiError && err.status === 401) {
+        clearToken();
+        currentSession = null;
+        publish();
+        return null;
+      }
+
+      // Transient failure: keep the token and the current session so the
+      // user is not logged out by a hiccup. Report the existing session
+      // (or anonymous if we never had one) WITHOUT publishing, so a network
+      // blip cannot itself become a state change.
+      console.warn(
+        "[auth] Session restore failed transiently; keeping the stored token.",
+        err,
+      );
+      return currentSession;
     }
   },
 

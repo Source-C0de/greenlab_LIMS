@@ -29,6 +29,7 @@ import {
   type ReactNode,
 } from "react";
 import { useAppContext } from "@/presentation/providers/AppContext";
+import { currentMockRole } from "@/infrastructure/mock/repositories/authSession";
 import { container } from "@/infrastructure/di/container";
 import type { AuthUser } from "@/domain/identity/model";
 import type { Session } from "@/domain/identity/ports";
@@ -37,6 +38,14 @@ import {
   type LoginRequest,
   type LoginResponse,
 } from "@/infrastructure/api/auth";
+
+/**
+ * Role to fall back to when there is no authenticated user. Matches the
+ * fallback `AppProvider` itself uses on a fresh mount, so an anonymous app
+ * renders exactly as it does on first paint — no stale role leaking through
+ * from a previous session.
+ */
+const DEFAULT_ROLE = currentMockRole();
 
 // ---------------------------------------------------------------------------
 // State machine — unchanged shape, so every consumer keeps working
@@ -84,6 +93,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState({ status: "authenticated", user: session.user });
         setCurrentRole(session.user.role);
       } else {
+        // Reset the role on the anonymous branch too. Previously it was left
+        // as-is, so a failed restore rendered the app with a role that no
+        // longer matched the (now anonymous) auth state — which is what made
+        // role-gated pages flash "غير مصرح" for a user who never logged out.
+        setCurrentRole(DEFAULT_ROLE);
         setState({ status: "anonymous" });
       }
     });
@@ -95,6 +109,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Runs once. `setCurrentRole` is stable for the lifetime of the provider,
     // and re-running the bootstrap would risk re-introducing the very race the
     // adapter now guards against.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---------------------------------------------------------------------
+  // Mirror adapter-side session changes into React state.
+  // ---------------------------------------------------------------------
+  // `container.auth.subscribe` was implemented by both adapters but never
+  // called, so every `publish()` in the adapter fired into an empty listener
+  // set. That left the adapter's `currentSession` and this provider's `state`
+  // as two independent copies that could silently diverge — the root cause of
+  // the "logged in but unauthorized" symptom. Wiring the port closes that gap:
+  // any mutation the adapter makes (sign-in, sign-out, OTP adoption, a genuine
+  // 401 during restore) now updates the UI.
+  useEffect(() => {
+    const unsubscribe = container.auth.subscribe((session) => {
+      if (!mounted.current) return;
+      if (session) {
+        setState({ status: "authenticated", user: session.user });
+        setCurrentRole(session.user.role);
+      } else {
+        setCurrentRole(DEFAULT_ROLE);
+        setState({ status: "anonymous" });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+    // Runs once for the provider's lifetime. `setCurrentRole` is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
