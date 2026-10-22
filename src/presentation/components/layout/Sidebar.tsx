@@ -15,7 +15,6 @@ import {
   Calculator,
   ClipboardCheck,
   ClipboardList,
-  LogOut,
   UserCog,
   type LucideIcon,
 } from "lucide-react";
@@ -23,7 +22,6 @@ import { useAppContext, type Role } from "@/presentation/providers/AppContext";
 import { useAuth } from "@/presentation/providers/AuthContext";
 import { useRolePermissions } from "@/presentation/hooks/useRolePermissions";
 import { useEffectiveMenuVisibility } from "@/presentation/hooks/useEffectiveMenuVisibility";
-import { RoleAvatar } from "@/presentation/components/auth/RoleAvatar";
 import type { MenuKey } from "@/infrastructure/mock/data/menuPermissions";
 import type { ToggleableRole } from "@/infrastructure/mock/data/rolePermissions";
 
@@ -50,9 +48,13 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen }: SidebarProps) {
-  const [location, setLocation] = useLocation();
+  // `location` reads the current path for active-link styling. We no
+  // longer need `setLocation` here — logout moved to the header dropdown.
+  const [location] = useLocation();
   const { currentRole, language } = useAppContext();
-  const { user, logout } = useAuth();
+  // `user` is still read here for per-user menu overrides; `logout`
+  // moved out with the footer (see `Header.tsx`).
+  const { user } = useAuth();
   const rolePerms = useRolePermissions();
   const visibility = useEffectiveMenuVisibility();
   const isRtl = language === "ar";
@@ -64,21 +66,6 @@ export function Sidebar({ isOpen }: SidebarProps) {
       ? currentRole
       : "admin";
   const isSuperadmin = effectiveRole === "superadmin";
-
-  const handleLogout = async () => {
-    // Clear the sandbox permission toggles so a different user (or the same
-    // user, fresh) doesn't inherit them.
-    try {
-      window.localStorage.removeItem("glims_role_permissions_v1");
-      window.localStorage.removeItem("glims_menu_permissions_v1");
-      window.localStorage.removeItem("glims_role_menu_matrix_v1");
-      window.localStorage.removeItem("glims_user_menu_overrides_v1");
-    } catch {
-      // ignore — localStorage may be unavailable
-    }
-    await logout();
-    setLocation("/login");
-  };
 
   const getNavItems = (): NavItem[] => {
     // Superadmin gets a minimal sidebar (SaaS Admin + Settings). The
@@ -269,35 +256,6 @@ export function Sidebar({ isOpen }: SidebarProps) {
             );
           })}
         </nav>
-      </div>
-
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            {user ? (
-              <RoleAvatar user={user} showRole={false} />
-            ) : (
-              <>
-                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold shrink-0">
-                  {effectiveRole.charAt(0).toUpperCase()}
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-medium text-sidebar-foreground truncate">
-                    {effectiveRole.replace("_", " ").toUpperCase()}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{isRtl ? "وضع تجريبي" : "Demo mode"}</span>
-                </div>
-              </>
-            )}
-          </div>
-          <button
-            onClick={handleLogout}
-            className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-            title={isRtl ? "تسجيل الخروج" : "Logout"}
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
-        </div>
       </div>
     </aside>
   );
