@@ -241,7 +241,7 @@ export default function Login() {
                         : "Show password"
                     }
                     aria-pressed={showPassword}
-                    className="absolute inset-y-0 end-0 flex items-center justify-center w-10 text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-e-md"
+                    className="absolute inset-y-0 inset-e-0 flex items-center justify-center w-10 text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-e-md"
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" aria-hidden="true" />

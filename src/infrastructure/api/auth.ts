@@ -184,6 +184,70 @@ export const superadminLogout = (): Promise<void> => {
 export const me = (): Promise<AuthUser> =>
   unwrap<AuthUser>("/auth/me");
 
+/**
+ * Exchange a refresh token for a fresh token pair.
+ *
+ * The backend issues SHORT-LIVED access tokens (15 minutes, per the JWT `exp`
+ * claim) alongside a longer-lived refresh token. Without redeeming the refresh
+ * token, every session dies 15 minutes after login and the user is forced back
+ * to the login screen on the next page load.
+ *
+ * Two contract details the caller must honour:
+ *  - **The refresh token ROTATES.** Every response carries a NEW
+ *    `refresh_token`; the previous one is invalidated. Persist the new value or
+ *    the next refresh will fail.
+ *  - **The response includes `user`**, so a successful refresh restores both
+ *    the session and the user identity without a second `/auth/me` round-trip.
+ *
+ * `skipAuth: true` — the access token is expired or expiring, so sending it
+ * would be pointless (and could mask a real 401 with a confusing one).
+ *
+ * Note: this endpoint is implemented by the backend but is NOT yet listed in
+ * `docs/api/endpoints.md` or `docs/api/openapi.yaml`.
+ */
+export const refresh = (body: { refresh_token: string }): Promise<LoginResponse> =>
+  unwrap<LoginResponse>("/auth/refresh", {
+    method: "POST",
+    body,
+    skipAuth: true,
+  });
+
+/**
+ * Read the `exp` claim from a JWT without verifying it.
+ *
+ * This is a CLIENT-SIDE hint only — it decides whether to proactively renew a
+ * token, never whether to trust one. The server remains the sole authority on
+ * whether a token is valid; this just avoids spending a doomed `/auth/me`
+ * request to find out.
+ *
+ * Returns the expiry as epoch milliseconds, or `null` when the token is not a
+ * parseable JWT (in which case the caller falls back to the reactive path).
+ */
+export function getTokenExpiry(token: string | null): number | null {
+  if (!token) return null;
+  const parts = token.split(".");
+  // A JWT is header.payload.signature — we only need the payload.
+  if (parts.length !== 3) return null;
+  try {
+    // base64url → base64: restore padding and swap the URL-safe alphabet.
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), "=");
+    // `atob` yields a binary string; decode it as UTF-8 so non-ASCII claims
+    // (e.g. a name with an accent) don't corrupt the JSON.
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+    const json = new TextDecoder().decode(bytes);
+    const payload = JSON.parse(json) as { exp?: unknown };
+    if (typeof payload.exp !== "number" || !Number.isFinite(payload.exp)) {
+      return null;
+    }
+    return payload.exp * 1000;
+  } catch {
+    // Not a JWT we can read — fall back to the reactive refresh path.
+    return null;
+  }
+}
+
 export const requestRegister = (body: RegisterRequest): Promise<void> =>
   unwrap<void>("/auth/register", { method: "POST", body, skipAuth: true });
 

@@ -39,9 +39,11 @@ import {
   clearToken,
   getRefreshToken,
   getToken,
+  getTokenExpiry,
   login as loginRequest,
   logout as logoutRequest,
   me as meRequest,
+  refresh as refreshRequest,
   setRefreshToken,
   setToken,
   type LoginResponse,
@@ -124,6 +126,66 @@ function publish(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Token renewal
+// ---------------------------------------------------------------------------
+
+/**
+ * Treat a token as expired slightly BEFORE it actually is, so a request is
+ * never sent with a token that will expire while it is in flight.
+ */
+const EXPIRY_SKEW_MS = 30_000;
+
+/**
+ * Exchange the stored refresh token for a fresh token pair.
+ *
+ * Returns the new session, or `null` when renewal is impossible (no refresh
+ * token stored, or the backend rejected it).
+ *
+ * The refresh token ROTATES: the response carries a new `refresh_token` and
+ * the old one is invalidated, so both new values must be persisted here or the
+ * next renewal fails.
+ */
+async function refreshSession(): Promise<Session | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const response = await refreshRequest({ refresh_token: refreshToken });
+    if (!response?.access_token) return null;
+
+    setToken(response.access_token);
+    if (response.refresh_token) setRefreshToken(response.refresh_token);
+
+    const session: Session = {
+      user: normaliseUser(response.user as RawAuthUser),
+      token: response.access_token,
+      expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+    };
+    currentSession = session;
+    publish();
+    return session;
+  } catch (err) {
+    // The refresh token itself is dead (revoked, expired, malformed). There is
+    // nothing to salvage — the caller must fall back to a full sign-out.
+    console.warn("[auth] Token refresh failed; the session cannot be renewed.", err);
+    return null;
+  }
+}
+
+/**
+ * True when the stored access token is missing, expired, or about to expire.
+ *
+ * Purely a client-side hint used to renew BEFORE spending a doomed request.
+ * The server remains the authority on validity — see `getTokenExpiry`.
+ */
+function tokenNeedsRenewal(token: string): boolean {
+  const expiry = getTokenExpiry(token);
+  // No readable `exp` claim — we cannot tell, so let the server decide.
+  if (expiry === null) return false;
+  return Date.now() >= expiry - EXPIRY_SKEW_MS;
+}
+
+// ---------------------------------------------------------------------------
 // Adapter
 // ---------------------------------------------------------------------------
 
@@ -139,6 +201,28 @@ export const httpAuthSession: AuthSession = {
       currentSession = null;
       publish();
       return null;
+    }
+
+    // ── Proactive renewal ────────────────────────────────────────────────
+    // The backend issues 15-minute access tokens. If the stored one has
+    // already expired (the common case after the user has been working for a
+    // while), renew BEFORE calling `/auth/me` — otherwise every refresh
+    // spends a guaranteed 401 and then has to recover from it.
+    if (tokenNeedsRenewal(token)) {
+      // Bump the generation FIRST: a `signIn()` that lands while the refresh
+      // is in flight must not be clobbered by the renewed session (or vice
+      // versa) — whichever started later wins.
+      const generation = nextGeneration();
+      const renewed = await refreshSession();
+      if (renewed) {
+        // A newer mutation landed while we were refreshing — that newer
+        // session wins, not ours.
+        if (authGeneration !== generation) return currentSession;
+        return renewed;
+      }
+      // Renewal failed and there is no usable session. If something superseded
+      // us meanwhile (e.g. the user signed in again), that newer state wins.
+      if (authGeneration !== generation) return currentSession;
     }
 
     try {
@@ -163,6 +247,27 @@ export const httpAuthSession: AuthSession = {
       // dead, and it says so with a 401. Everything else means "we could not
       // find out", which is not the same as "no" — so keep the token.
       if (err instanceof ApiError && err.status === 401) {
+        // The access token is rejected. Before signing the user out, try to
+        // renew it — the access token expires every 15 minutes, so a 401 on
+        // a page load is usually just "the token aged out", not "the session
+        // is over". Without this, every session died after 15 minutes and
+        // the user was bounced to the login screen on the next refresh.
+        //
+        // Bump the generation BEFORE the refresh so a concurrent `signIn()`
+        // cannot have its fresh session overwritten by the renewal. The
+        // renewal is the newer operation and therefore wins — but if the
+        // user signed in while this was in flight, the sign-in is newer
+        // still, and the check below hands control back to it.
+        const generation = nextGeneration();
+        const renewed = await refreshSession();
+        if (renewed) {
+          // A newer mutation landed while we were refreshing — that newer
+          // session wins, not ours.
+          if (authGeneration !== generation) return currentSession;
+          return renewed;
+        }
+        // No refresh token, or renewal failed — the session really is over.
+        if (authGeneration !== generation) return currentSession;
         clearToken();
         currentSession = null;
         publish();

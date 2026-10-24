@@ -73,7 +73,23 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { setCurrentRole } = useAppContext();
-  const [state, setState] = useState<AuthState>({ status: "anonymous" });
+
+  // The initial state MUST be "loading", not "anonymous".
+  //
+  // The bootstrap `restore()` below runs in a `useEffect`, which React invokes
+  // AFTER the first render. So on the very first render the session has not
+  // been checked yet, and the correct state to report is "we don't know" —
+  // i.e. still loading. Starting as "anonymous" made `ProtectedRoute` render
+  // `<Redirect to="/login" />` on that first paint, before `/auth/me` had even
+  // been requested. The bootstrap then completed successfully (the `/auth/me`
+  // 200 was visible in the network tab) but the redirect had already fired,
+  // so refreshing the browser always landed on the login screen even though
+  // the session was valid the whole time.
+  //
+  // "loading" is also the safe default: `ProtectedRoute` renders nothing while
+  // loading, so a logged-in user sees a blank frame for a moment instead of a
+  // wrong-page flash.
+  const [state, setState] = useState<AuthState>({ status: "loading" });
 
   // Guards the one-shot bootstrap network call below against resolving after the
   // provider unmounts. Deliberately NOT used by the subscription effect further
@@ -85,7 +101,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------
   useEffect(() => {
     mounted.current = true;
-    setState({ status: "loading" });
+    // No `setState({ status: "loading" })` here — the initial state is already
+    // "loading" (see above), which is what keeps the very first render from
+    // redirecting an authenticated user to /login before `/auth/me` is asked.
 
     let cancelled = false;
     void container.auth.restore().then((session) => {
