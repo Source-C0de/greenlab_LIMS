@@ -75,8 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { setCurrentRole } = useAppContext();
   const [state, setState] = useState<AuthState>({ status: "anonymous" });
 
-  // Kept so the effect below can ignore redundant re-subscriptions without
-  // re-running the bootstrap on every render.
+  // Guards the one-shot bootstrap network call below against resolving after the
+  // provider unmounts. Deliberately NOT used by the subscription effect further
+  // down — see the note there for why sharing it broke login.
   const mounted = useRef(true);
 
   // ---------------------------------------------------------------------
@@ -122,9 +123,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // the "logged in but unauthorized" symptom. Wiring the port closes that gap:
   // any mutation the adapter makes (sign-in, sign-out, OTP adoption, a genuine
   // 401 during restore) now updates the UI.
+  //
+  // NOTE: deliberately NOT guarded by `mounted`. That ref is owned by the
+  // bootstrap effect above, and its cleanup sets it to `false` when the
+  // provider unmounts. The subscriber must not consult it:
+  //
+  // `publish()` fires *synchronously* from inside `signIn()`, i.e. while the
+  // user is mid-login. If `mounted.current` was false at that moment, the
+  // subscriber silently discarded the brand-new session, React state stayed
+  // `anonymous`, and the navigation that followed was bounced straight back
+  // to `/login` by ProtectedRoute. The backend reported success but the SPA
+  // never advanced, with no error shown anywhere. Before ProtectedRoute
+  // existed this was invisible, because every page rendered regardless of
+  // auth state.
+  //
+  // Nothing needs guarding here: `publish()` only fires in response to calls
+  // this provider itself makes (never a late-resolving network call), and
+  // React 18 does not warn on setState-after-unmount.
   useEffect(() => {
     const unsubscribe = container.auth.subscribe((session) => {
-      if (!mounted.current) return;
       if (session) {
         setState({ status: "authenticated", user: session.user });
         setCurrentRole(session.user.role);
