@@ -60,6 +60,8 @@ type Label = { en: string; ar: string };
 const LABELS = {
   title:         { en: "Tests & line items",       ar: "الاختبارات وبنود العرض" } as Label,
   colName:       { en: "Item",                     ar: "البند" } as Label,
+  colDesc:       { en: "Description / notes (optional)", ar: "الوصف / ملاحظات (اختياري)" } as Label,
+  colCode:       { en: "Code",                     ar: "الرمز" } as Label,
   colSource:     { en: "Source",                   ar: "المصدر" } as Label,
   colQty:        { en: "Qty",                      ar: "الكمية" } as Label,
   colUnit:       { en: "Unit price",               ar: "سعر الوحدة" } as Label,
@@ -124,7 +126,9 @@ export function LineItemTable({ quotation, catalog, onChange }: LineItemTablePro
       source: "catalog",
       specificationId: spec.id,
       name: spec.name,
-      description: spec.code,
+      specCode: spec.code,
+      productName: spec.productName,
+      description: "",
       quantity: 1,
       unitPrice: spec.defaultPrice ?? 0,
       lineTotal: spec.defaultPrice ?? 0,
@@ -200,10 +204,15 @@ export function LineItemTable({ quotation, catalog, onChange }: LineItemTablePro
                       disabled={li.source === "catalog"}
                       className="h-8"
                     />
+                    {li.specCode && (
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        {pick(LABELS.colCode)}: {li.specCode}
+                      </div>
+                    )}
                     <Input
                       value={li.description ?? ""}
                       onChange={(e) => updateLine(li.id, { description: e.target.value })}
-                      placeholder={isRtl ? "الوصف / الكود" : "Description / code"}
+                      placeholder={pick(LABELS.colDesc)}
                       className="h-7 text-xs"
                     />
                   </TableCell>

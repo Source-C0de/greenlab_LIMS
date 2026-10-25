@@ -32,6 +32,14 @@ export interface Client {
   readonly contactPerson?: string;
   readonly address: string;
   readonly city: string;
+  /** Building name or number. */
+  readonly building?: string;
+  /** District / area / street. */
+  readonly area?: string;
+  /** Postal code (5 digits). */
+  readonly postalCode?: string;
+  /** Country name. */
+  readonly country?: string;
 }
 
 /**

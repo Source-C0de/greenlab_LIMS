@@ -4,6 +4,10 @@
  * Mirrors `infrastructure/mock/data/quotations.ts`. The money arithmetic
  * (`computeTotals`) is EXTRACTED to `rules.ts` rather than reinvented — Phase 7
  * will test the rounding behaviour, which is a classic defect surface.
+ *
+ * NOTE: this is an *unwired* mirror. The live Quotation model today is the one
+ * in `infrastructure/mock/data/quotations.ts`; nothing imports this file yet.
+ * Keep it in sync when that model changes.
  */
 
 export type QuotationStatus = "draft" | "issued" | "expired" | "superseded";
@@ -16,6 +20,10 @@ export interface QuotationLineItem {
   readonly specificationId: string | null;
   /** Display name — copied from the spec at add time, typed for custom. */
   readonly name: string;
+  /** Catalog code of the source specification. Catalog only. */
+  readonly specCode?: string;
+  /** Human-readable product name from the source specification. Catalog only. */
+  readonly productName?: string;
   readonly description?: string;
   /** Always >= 1. */
   readonly quantity: number;
@@ -29,6 +37,13 @@ export interface QuotationClientSnapshot {
   readonly nameEn: string;
   readonly nameAr?: string;
   readonly vatNo?: string;
+  readonly address?: string;
+  readonly city?: string;
+  readonly mobile?: string;
+  readonly building?: string;
+  readonly area?: string;
+  readonly postalCode?: string;
+  readonly country?: string;
   readonly contactPerson?: string;
   readonly email?: string;
   readonly phone?: string;
@@ -62,6 +77,8 @@ export interface Quotation {
 
   readonly notes?: string;
   readonly terms?: string;
+  readonly paymentTerms?: string;
+  readonly subject?: string;
 
   readonly status: QuotationStatus;
   /** YYYY-MM-DD */

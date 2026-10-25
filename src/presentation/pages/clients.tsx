@@ -65,7 +65,14 @@ export default function ClientsList() {
     setTimeout(() => {
       const newClient = {
         id: `C00${clients.length + 1}`,
-        ...data
+        ...data,
+        // The add-client form doesn't collect the structured address parts
+        // (building / area / postal code / country) — those are split out of
+        // the address line on the seeded clients only.
+        building: "",
+        area: "",
+        postalCode: "",
+        country: "",
       };
       setClients([newClient, ...clients]);
       setIsSubmiting(false);

@@ -24,7 +24,11 @@ export interface QuotationLineItem {
   specificationId: string | null;
   /** Display name. Copied from spec at add time, typed for custom. */
   name: string;
-  /** Optional secondary line, e.g. method or note. */
+  /** Catalog code of the source specification (e.g. "SPEC-001"). Catalog only. */
+  specCode?: string;
+  /** Human-readable product name from the source specification. Catalog only. */
+  productName?: string;
+  /** Optional free-text note from the BDM — method, reference, extra detail. */
   description?: string;
   /** Always >= 1. */
   quantity: number;
@@ -37,9 +41,25 @@ export interface QuotationLineItem {
 export interface QuotationClientSnapshot {
   nameEn: string;
   nameAr?: string;
+  /** Client's own 15-digit ZATCA VAT registration number. */
   vatNo?: string;
+  /** Full postal address line, shown in the quotation's client-info block. */
+  address?: string;
+  /** City, shown alongside the address. */
+  city?: string;
+  /** Mobile / contact number. Copied from the client's `contactPhone`. */
+  mobile?: string;
+  /** Building name or number (e.g. "Exit 7", "Savola Tower"). */
+  building?: string;
+  /** District / area / street (e.g. "Al Kharj Road", "Second Industrial City"). */
+  area?: string;
+  /** Postal code (Saudi: 5 digits, e.g. "11432"). */
+  postalCode?: string;
+  /** Country name. Saudi clients: "Kingdom of Saudi Arabia". */
+  country?: string;
   contactPerson?: string;
   email?: string;
+  /** Office landline. Distinct from `mobile`. */
   phone?: string;
 }
 
@@ -80,6 +100,15 @@ export interface Quotation {
   notes?: string;
   /** Free-text terms, shown on the printout. */
   terms?: string;
+  /** Payment terms, e.g. "Net 30 days from invoice date". */
+  paymentTerms?: string;
+  /**
+   * Quotation-level subject line ("Subject of quotation"). Deliberately NOT
+   * called `description` — `QuotationLineItem.description` already exists and
+   * means the per-line-item note, and the printed items table already labels
+   * its name column "Description".
+   */
+  subject?: string;
 
   status: QuotationStatus;
   issueDate: string; // YYYY-MM-DD

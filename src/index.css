@@ -279,6 +279,14 @@
     print-color-adjust: exact;
   }
 
+  /* The printable region is a flat document — drop the card chrome so the
+     printed page has no rounded corners or surrounding border. */
+  [data-printable] {
+    box-shadow: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+
   /* When printing, constrain the page to A4 portrait. */
   @page {
     size: A4 portrait;

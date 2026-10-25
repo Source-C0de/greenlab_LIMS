@@ -29,9 +29,17 @@ export interface ClientLike {
   nameEn: string;
   nameAr?: string;
   vatNo?: string;
+  address?: string;
+  city?: string;
+  /** Mobile / contact number. Maps to the client's `contactPhone`. */
+  contactPhone?: string;
   contactPerson?: string;
   email?: string;
   phone?: string;
+  building?: string;
+  area?: string;
+  postalCode?: string;
+  country?: string;
 }
 
 interface ClientPickerProps {
@@ -62,6 +70,13 @@ const LABELS = {
   contact:   { en: "Contact person",                   ar: "الشخص المسؤول" } as Label,
   email:     { en: "Email",                            ar: "البريد الإلكتروني" } as Label,
   phone:     { en: "Phone",                            ar: "الهاتف" } as Label,
+  mobile:    { en: "Mobile number",                    ar: "رقم الجوال" } as Label,
+  address:   { en: "Address",                          ar: "العنوان" } as Label,
+  city:      { en: "City",                             ar: "المدينة" } as Label,
+  building:  { en: "Building",                         ar: "المبنى" } as Label,
+  area:      { en: "Area / District",                  ar: "المنطقة / الحي" } as Label,
+  postalCode: { en: "Postal code",                     ar: "الرمز البريدي" } as Label,
+  country:   { en: "Country",                          ar: "الدولة" } as Label,
 } as const;
 
 function matches(client: ClientLike, term: string): boolean {
@@ -85,6 +100,13 @@ function snapshotOf(c: ClientLike): QuotationClientSnapshot {
     nameEn: c.nameEn,
     nameAr: c.nameAr,
     vatNo: c.vatNo,
+    address: c.address,
+    city: c.city,
+    mobile: c.contactPhone,
+    building: c.building,
+    area: c.area,
+    postalCode: c.postalCode,
+    country: c.country,
     contactPerson: c.contactPerson,
     email: c.email,
     phone: c.phone,
@@ -209,6 +231,13 @@ function AddClientDialog({ onCancel, onCreate }: AddClientDialogProps) {
   const [contact, setContact] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [building, setBuilding] = useState("");
+  const [area, setArea] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+  const [country, setCountry] = useState("");
 
   const canSubmit = nameEn.trim().length > 0;
 
@@ -219,9 +248,16 @@ function AddClientDialog({ onCancel, onCreate }: AddClientDialogProps) {
       nameEn: nameEn.trim(),
       nameAr: nameAr.trim() || undefined,
       vatNo: vatNo.trim() || undefined,
+      address: address.trim() || undefined,
+      city: city.trim() || undefined,
+      building: building.trim() || undefined,
+      area: area.trim() || undefined,
+      postalCode: postalCode.trim() || undefined,
+      country: country.trim() || undefined,
       contactPerson: contact.trim() || undefined,
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
+      contactPhone: contactPhone.trim() || undefined,
     });
   };
 
@@ -276,6 +312,60 @@ function AddClientDialog({ onCancel, onCreate }: AddClientDialogProps) {
           <div className="grid gap-1.5">
             <Label htmlFor="new-client-phone">{pick(LABELS.phone)}</Label>
             <Input id="new-client-phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-client-mobile">{pick(LABELS.mobile)}</Label>
+            <Input
+              id="new-client-mobile"
+              value={contactPhone}
+              onChange={(e) => setContactPhone(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-client-building">{pick(LABELS.building)}</Label>
+            <Input
+              id="new-client-building"
+              value={building}
+              onChange={(e) => setBuilding(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="new-client-address">{pick(LABELS.address)}</Label>
+          <Input
+            id="new-client-address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-client-city">{pick(LABELS.city)}</Label>
+            <Input id="new-client-city" value={city} onChange={(e) => setCity(e.target.value)} />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-client-area">{pick(LABELS.area)}</Label>
+            <Input id="new-client-area" value={area} onChange={(e) => setArea(e.target.value)} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-client-postal">{pick(LABELS.postalCode)}</Label>
+            <Input
+              id="new-client-postal"
+              value={postalCode}
+              onChange={(e) => setPostalCode(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-client-country">{pick(LABELS.country)}</Label>
+            <Input
+              id="new-client-country"
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+            />
           </div>
         </div>
       </div>

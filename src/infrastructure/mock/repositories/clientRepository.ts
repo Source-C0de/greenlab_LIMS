@@ -62,6 +62,10 @@ interface ClientFixture {
   contactPerson?: string;
   address: string;
   city: string;
+  building?: string;
+  area?: string;
+  postalCode?: string;
+  country?: string;
 }
 
 function toClient(row: ClientFixture): Client {
@@ -77,6 +81,10 @@ function toClient(row: ClientFixture): Client {
     contactPerson: row.contactPerson,
     address: row.address,
     city: row.city,
+    building: row.building,
+    area: row.area,
+    postalCode: row.postalCode,
+    country: row.country,
   };
 }
 

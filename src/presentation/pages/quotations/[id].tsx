@@ -73,6 +73,9 @@ export default function QuotationDetail() {
           author: "Green Lab KSA",
           subject: "Laboratory Quotation",
         },
+        // The document is text-heavy with thin rules and small mono numerals —
+        // scale 3 keeps them crisp in the rasterised PDF.
+        scale: 3,
         filename: `Quotation_${quotation.id ?? quotation.draftId ?? "draft"}.pdf`,
       });
     } catch (err) {

@@ -35,6 +35,8 @@ import {
   addDays,
   DEFAULT_TERMS_AR,
   DEFAULT_TERMS_EN,
+  DEFAULT_PAYMENT_TERMS_AR,
+  DEFAULT_PAYMENT_TERMS_EN,
   DEFAULT_VALIDITY_DAYS,
   localUid,
   nextReferenceNumber,
@@ -76,6 +78,8 @@ const LABELS = {
   print:        { en: "Print",                  ar: "طباعة" } as const,
   pdf:          { en: "Download PDF",           ar: "تحميل PDF" } as const,
   notes:        { en: "Notes (optional)",       ar: "ملاحظات (اختياري)" } as const,
+  subject:      { en: "Subject of quotation",   ar: "موضوع عرض السعر" } as const,
+  paymentTerms: { en: "Payment terms",          ar: "شروط الدفع" } as const,
   terms:        { en: "Terms & conditions",     ar: "الشروط والأحكام" } as const,
   validity:     { en: "Validity (days)",        ar: "مدة الصلاحية (أيام)" } as const,
   issued:       { en: "Quotation issued.",      ar: "تم إصدار عرض السعر." } as const,
@@ -103,6 +107,8 @@ function blankQuotation(createdBy: string): Quotation {
     total: 0,
     notes: "",
     terms: DEFAULT_TERMS_EN,
+    paymentTerms: DEFAULT_PAYMENT_TERMS_EN,
+    subject: "",
     status: "draft",
     issueDate: today,
     validUntil: addDays(today, DEFAULT_VALIDITY_DAYS),
@@ -180,14 +186,7 @@ export default function NewQuotation() {
         ...blankQuotation(createdBy),
         clientId: client?.id ?? "",
         clientSnapshot: client
-          ? {
-              nameEn: client.nameEn,
-              nameAr: client.nameAr,
-              vatNo: client.vatNo,
-              contactPerson: client.contactPerson,
-              email: client.email,
-              phone: client.phone,
-            }
+          ? snapshotOf(client)
           : { nameEn: wo.clientName, nameAr: "" },
         workOrderId: wo.id,
         lineItems,
@@ -308,6 +307,9 @@ export default function NewQuotation() {
           author: "Green Lab KSA",
           subject: "Laboratory Quotation",
         },
+        // The document is text-heavy with thin rules and small mono numerals —
+        // scale 3 keeps them crisp in the rasterised PDF.
+        scale: 3,
         filename: `Quotation_${q.id ?? q.draftId ?? "draft"}.pdf`,
       });
     } catch (err) {
@@ -436,6 +438,30 @@ export default function NewQuotation() {
                     }}
                   />
                 </div>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="subject">{pick(LABELS.subject)}</Label>
+                <Input
+                  id="subject"
+                  value={q.subject ?? ""}
+                  onChange={(e) => updateField("subject", e.target.value)}
+                  placeholder={
+                    isRtl
+                      ? "مثال: فحص الدقائق الدقيقة — تحليل كيميائي"
+                      : "e.g. Microplastics screening — chemical analysis"
+                  }
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="payment-terms">{pick(LABELS.paymentTerms)}</Label>
+                <Input
+                  id="payment-terms"
+                  value={q.paymentTerms ?? ""}
+                  onChange={(e) => updateField("paymentTerms", e.target.value)}
+                  placeholder={
+                    isRtl ? DEFAULT_PAYMENT_TERMS_AR : DEFAULT_PAYMENT_TERMS_EN
+                  }
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="notes">{pick(LABELS.notes)}</Label>
