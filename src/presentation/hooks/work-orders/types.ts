@@ -7,6 +7,7 @@ import type {
   WorkOrderStage,
   WorkOrderTestRow,
   WorkOrderRole,
+  WorkOrderAttachment,
 } from "@/infrastructure/mock/data/workOrders";
 
 export interface CreateWorkOrderInput {
@@ -21,6 +22,11 @@ export interface CreateWorkOrderInput {
   receivedVia: "Email" | "Phone" | "In-Person" | "Portal";
   requestedAt: string;
   testRows: Omit<WorkOrderTestRow, "id">[];
+  /**
+   * Files attached to the request. Metadata only — the mock app never reads
+   * or stores file contents. `id` and `addedAt` are assigned on save.
+   */
+  attachments?: Omit<WorkOrderAttachment, "id" | "addedAt">[];
   preparedByName: string;
   preparedByPosition: string;
   checkedByName: string;

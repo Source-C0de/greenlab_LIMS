@@ -1,16 +1,18 @@
 // =========================================================================
-// Client Requests — New Request form (catalog-driven)
+// Client Requests — New Request form
 // =========================================================================
-// Tests are NOT typed in by hand anymore. Instead, the user picks one or
-// more tests from the technical-specification catalog (filtered by sample
-// type), and the resulting WorkOrderTestRow[] is derived from each picked
-// TestMaster on submit.
+// The CSR registers the request: who it is for, what the sample is, and any
+// supporting documents (PDF / docs / images) the client sent along.
+//
+// Tests are NOT chosen here. Per the current process the request is created
+// with an empty test list and the required tests are added during Technical
+// Evaluation, where the lab manager picks them from the catalog or enters
+// them by hand.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import { mockClients, sampleTypes } from "@/infrastructure/mock/data";
-import { testMasterData, type TestMaster } from "@/infrastructure/mock/data/specifications";
 import { useCreateWorkOrder } from "@/presentation/hooks/work-orders/useCreateWorkOrder";
 import { useAdvanceWorkOrder } from "@/presentation/hooks/work-orders/useAdvanceWorkOrder";
 import { Button } from "@/shared/ui/button";
@@ -25,15 +27,13 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
-import {
-  ClipboardList,
-  Save,
-  ArrowRight,
-  FlaskConical,
-} from "lucide-react";
+import { ClipboardList, Save, ArrowRight, Paperclip } from "lucide-react";
 import { toast } from "sonner";
-import { TestCatalogPicker } from "@/presentation/components/features/work-orders/TestCatalogPicker";
-import { testMasterToRow } from "@/presentation/hooks/work-orders/useWorkOrderTestsFromCatalog";
+import { ClientCombobox, type ClientSelection } from "@/presentation/components/features/client-requests/ClientCombobox";
+import {
+  AttachmentsPicker,
+  type AttachmentDraft,
+} from "@/presentation/components/features/client-requests/AttachmentsPicker";
 
 const ALLOWED_ROLES = new Set(["admin", "lab_manager", "receptionist"]);
 
@@ -45,7 +45,7 @@ export default function NewClientRequest() {
   const { create } = useCreateWorkOrder();
   const { advance } = useAdvanceWorkOrder();
 
-  const [clientId, setClientId] = useState("");
+  const [client, setClient] = useState<ClientSelection | null>(null);
   const [sampleName, setSampleName] = useState("");
   const [sampleType, setSampleType] = useState("Food");
   const [description, setDescription] = useState("");
@@ -66,16 +66,9 @@ export default function NewClientRequest() {
   const [checkedByName, setCheckedByName] = useState("Dr. Shymaa Ali");
   const [checkedByPosition, setCheckedByPosition] = useState("CHEM. LM");
 
-  // Selected TestMaster ids (from the catalog). The actual WorkOrderTestRow[]
-  // is derived at submit time via testMasterToRow().
-  const [selectedTestIds, setSelectedTestIds] = useState<string[]>([]);
-
-  // Resolve the picked ids back to TestMaster records so we can map to
-  // rows on save. The picker is a sibling; the picker only needs ids.
-  const pickedMasters = useMemo<TestMaster[]>(
-    () => testMasterData.filter((t) => selectedTestIds.includes(t.id)),
-    [selectedTestIds],
-  );
+  // Files the client sent with the request (metadata only — see
+  // AttachmentsPicker).
+  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
 
   if (!ALLOWED_ROLES.has(currentRole)) {
     return (
@@ -86,7 +79,7 @@ export default function NewClientRequest() {
   }
 
   const handleSubmit = (alsoStartDraft: boolean) => {
-    if (!clientId || !sampleName) {
+    if (!client || !sampleName) {
       toast.error(
         isRtl
           ? "يرجى ملء العميل واسم العينة"
@@ -94,23 +87,18 @@ export default function NewClientRequest() {
       );
       return;
     }
-    if (selectedTestIds.length === 0) {
-      toast.error(
-        isRtl
-          ? "يرجى اختيار اختبار واحد على الأقل من الكتالوج"
-          : "Please pick at least one test from the catalog.",
-      );
-      return;
-    }
 
-    const client = mockClients.find((c) => c.id === clientId);
-    const clientName = client
-      ? isRtl
-        ? client.nameAr
-        : client.nameEn
-      : clientId;
+    // An existing directory client keeps its id. A manually typed client has
+    // no id — only the name travels with the request.
+    const existing =
+      client.kind === "existing"
+        ? mockClients.find((c) => c.id === client.clientId)
+        : undefined;
+    const clientId = existing?.id ?? "";
+    const clientName =
+      existing?.[isRtl ? "nameAr" : "nameEn"] ??
+      (client.kind === "manual" ? client.name : "");
 
-    const derivedRows = pickedMasters.map(testMasterToRow);
 
     const wo = create({
       clientId,
@@ -122,7 +110,9 @@ export default function NewClientRequest() {
       aofNumber,
       receivedVia,
       requestedAt,
-      testRows: derivedRows,
+      // Tests are added during Technical Evaluation.
+      testRows: [],
+      attachments,
       preparedByName,
       preparedByPosition,
       checkedByName,
@@ -166,18 +156,11 @@ export default function NewClientRequest() {
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label>{isRtl ? "العميل" : "Client"} *</Label>
-            <Select value={clientId} onValueChange={setClientId}>
-              <SelectTrigger>
-                <SelectValue placeholder={isRtl ? "اختر عميل" : "Pick a client"} />
-              </SelectTrigger>
-              <SelectContent>
-                {mockClients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {isRtl ? c.nameAr : c.nameEn}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ClientCombobox
+              value={client}
+              onChange={setClient}
+              isRtl={isRtl}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>{isRtl ? "نوع العينة" : "Sample type"} *</Label>
@@ -266,21 +249,20 @@ export default function NewClientRequest() {
         <CardHeader>
           <CardTitle className="text-base">
             <span className="inline-flex items-center gap-2">
-              <FlaskConical className="h-4 w-4 text-primary" />
-              {isRtl ? "اختر الاختبارات من الكتالوج" : "Pick tests from catalog"}
+              <Paperclip className="h-4 w-4 text-primary" />
+              {isRtl ? "المرفقات" : "Attachments"}
             </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-3">
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
             {isRtl
-              ? `يتم عرض الاختبارات المسجلة في المواصفات الفنية لنوع العينة "${sampleType}". كل اختبار يتم اختياره سيضاف تلقائياً للطلب مع تعبئة الحقول من المواصفة.`
-              : `Showing tests from the technical specifications catalog for sample type "${sampleType}". Each picked test is auto-filled into the request from the spec.`}
+              ? "أرفق المستندات التي أرسلها العميل مع الطلب (مثل خطاب الطلب أو صور العينات)."
+              : "Attach the documents the client sent with the request (e.g. the request letter or sample photos)."}
           </p>
-          <TestCatalogPicker
-            sampleType={sampleType}
-            selectedIds={selectedTestIds}
-            onChange={setSelectedTestIds}
+          <AttachmentsPicker
+            files={attachments}
+            onChange={setAttachments}
             isRtl={isRtl}
           />
         </CardContent>

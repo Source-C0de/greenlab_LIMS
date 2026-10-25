@@ -1,13 +1,12 @@
 // =========================================================================
-// Client Requests — Detail page (catalog-driven, read-only rows)
+// Client Requests — Detail page (read-only rows)
 // =========================================================================
-// Per product decision: tests on the Client Request are derived from the
-// technical-specification catalog — they are NOT free-form rows. The detail
-// page displays the current rows read-only and, when in `csr_drafting` or
-// `te_rejected`, exposes a "Sync tests from catalog" panel so CSR / lab
-// manager can re-derive the row set from the catalog.
+// The CSR registers the request; the required tests are added during
+// Technical Evaluation. This page therefore displays the test rows
+// read-only — whatever TE has recorded — and never offers a way to author
+// them from here.
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { Link as WLink, useParams, useLocation } from "wouter";
 import {
   workOrdersStore,
@@ -15,10 +14,8 @@ import {
   getWorkOrdersSnapshot,
   findWorkOrder,
 } from "@/infrastructure/mock/data/workOrderStore";
-import { testMasterData } from "@/infrastructure/mock/data/specifications";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import { useAdvanceWorkOrder } from "@/presentation/hooks/work-orders/useAdvanceWorkOrder";
-import { useWorkOrderTestsFromCatalog } from "@/presentation/hooks/work-orders/useWorkOrderTestsFromCatalog";
 import { StatusBadge } from "@/presentation/components/shared/StatusBadge";
 import { Button } from "@/shared/ui/button";
 import {
@@ -35,10 +32,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/ui/table";
-import { ArrowRight, ClipboardList, RefreshCcw, FlaskConical } from "lucide-react";
+import { ArrowRight, ClipboardList, FlaskConical, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import type { WorkOrderStage } from "@/infrastructure/mock/data/workOrders";
-import { TestCatalogPicker } from "@/presentation/components/features/work-orders/TestCatalogPicker";
+import { AttachmentsList } from "@/presentation/components/features/client-requests/AttachmentsPicker";
 
 const ALLOWED_ROLES = new Set(["admin", "lab_manager", "receptionist"]);
 
@@ -80,7 +77,6 @@ export default function ClientRequestDetail() {
   );
 
   const { advance } = useAdvanceWorkOrder();
-  const { syncFromCatalog } = useWorkOrderTestsFromCatalog();
 
   const wo = useMemo(() => findWorkOrder(id ?? ""), [id, workOrdersStore.length]);
 
@@ -102,35 +98,7 @@ export default function ClientRequestDetail() {
   const stageLabel = (s: WorkOrderStage) =>
     isRtl ? STAGE_LABEL_AR[s] : STAGE_LABEL_EN[s];
 
-  const canSyncCatalog =
-    wo.stage === "csr_drafting" || wo.stage === "te_rejected";
   const canSendToTe = wo.stage === "csr_drafting";
-
-  // Catalog sync state.
-  const [syncOpen, setSyncOpen] = useState(false);
-  // Pre-check: TestMaster ids whose testName already matches an existing
-  // row's testRequired (best-effort back-link to the catalog).
-  const [selectedTestIds, setSelectedTestIds] = useState<string[]>(() => {
-    const names = new Set(wo.testRows.map((r) => r.testRequired));
-    return testMasterData
-      .filter((t) => names.has(t.testName))
-      .map((t) => t.id);
-  });
-
-  const handleSyncSave = () => {
-    const picked = testMasterData.filter((t) => selectedTestIds.includes(t.id));
-    const result = syncFromCatalog(wo.id, picked);
-    if (result.ok) {
-      toast.success(
-        isRtl
-          ? `تمت مزامنة ${result.rows.length} اختبار من الكتالوج`
-          : `Synced ${result.rows.length} tests from catalog.`,
-      );
-      setSyncOpen(false);
-    } else {
-      toast.error(isRtl ? "فشلت المزامنة" : "Sync failed.");
-    }
-  };
 
   const handleAdvance = (toStage: WorkOrderStage, note?: string) => {
     const result = advance({ workOrderId: wo.id, toStage, note });
@@ -189,29 +157,13 @@ export default function ClientRequestDetail() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="md:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+          <CardHeader>
             <CardTitle className="text-base">
               <span className="inline-flex items-center gap-2">
                 <FlaskConical className="h-4 w-4 text-primary" />
-                {isRtl ? "الاختبارات (من المواصفات)" : "Tests (from specifications)"}
+                {isRtl ? "الاختبارات" : "Tests"}
               </span>
             </CardTitle>
-            {canSyncCatalog && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSyncOpen((s) => !s)}
-              >
-                <RefreshCcw className="h-4 w-4 me-1" />
-                {syncOpen
-                  ? isRtl
-                    ? "إخفاء"
-                    : "Hide"
-                  : isRtl
-                    ? "مزامنة من الكتالوج"
-                    : "Sync from catalog"}
-              </Button>
-            )}
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -242,8 +194,8 @@ export default function ClientRequestDetail() {
                         className="text-center text-sm text-muted-foreground py-6"
                       >
                         {isRtl
-                          ? "لا توجد اختبارات بعد. استخدم زر «مزامنة من الكتالوج» لإضافة اختبارات من المواصفات."
-                          : 'No tests yet. Use "Sync from catalog" to add tests from the specifications.'}
+                          ? "لا توجد اختبارات بعد. ستتم إضافة الاختبارات المطلوبة خلال التقييم الفني."
+                          : "No tests yet. The required tests will be added during Technical Evaluation."}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -271,33 +223,6 @@ export default function ClientRequestDetail() {
                 </TableBody>
               </Table>
             </div>
-
-            {canSyncCatalog && syncOpen && (
-              <div className="mt-4 rounded-md border border-dashed p-3 space-y-3">
-                <div className="text-sm font-medium">
-                  {isRtl
-                    ? "مزامنة الاختبارات من الكتالوج"
-                    : "Sync tests from the catalog"}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {isRtl
-                    ? "سيتم استبدال قائمة الاختبارات الحالية بالكامل بناءً على اختيارك من الكتالوج."
-                    : "The current test list will be fully replaced based on your catalog selection."}
-                </p>
-                <TestCatalogPicker
-                  sampleType={wo.sampleType}
-                  selectedIds={selectedTestIds}
-                  onChange={setSelectedTestIds}
-                  isRtl={isRtl}
-                />
-                <div className="flex justify-end">
-                  <Button onClick={handleSyncSave}>
-                    <RefreshCcw className="h-4 w-4 me-1" />
-                    {isRtl ? "تطبيق المزامنة" : "Apply sync"}
-                  </Button>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -335,6 +260,20 @@ export default function ClientRequestDetail() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            <span className="inline-flex items-center gap-2">
+              <Paperclip className="h-4 w-4 text-primary" />
+              {isRtl ? "المرفقات" : "Attachments"}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AttachmentsList attachments={wo.attachments} isRtl={isRtl} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

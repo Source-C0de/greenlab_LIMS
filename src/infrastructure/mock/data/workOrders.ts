@@ -56,6 +56,23 @@ export interface WorkOrderStageEntry {
   note?: string;
 }
 
+/**
+ * A file attached to a work order.
+ *
+ * Metadata only — the app is mock-only and has no backend, so the file
+ * *contents* are never read, stored, or uploaded. We keep the name, byte
+ * size and an ISO timestamp so the UI can render a faithful attachment list.
+ */
+export interface WorkOrderAttachment {
+  id: string;
+  /** Original file name, e.g. "request-letter.pdf". */
+  name: string;
+  /** Size in bytes. */
+  size: number;
+  /** ISO timestamp of when the attachment was added. */
+  addedAt: string;
+}
+
 export interface WorkOrder {
   id: string;
   clientId: string;
@@ -70,6 +87,8 @@ export interface WorkOrder {
   stage: WorkOrderStage;
   stageHistory: WorkOrderStageEntry[];
   testRows: WorkOrderTestRow[];
+  /** Files attached to the request (metadata only — see WorkOrderAttachment). */
+  attachments: WorkOrderAttachment[];
   preparedByName: string;
   preparedByPosition: string;
   checkedByName: string;
@@ -203,6 +222,14 @@ export const mockWorkOrders: WorkOrder[] = [
     preparedByPosition: "QC supervisor",
     checkedByName: "Dr. Shymaa Ali",
     checkedByPosition: "CHEM. LM",
+    attachments: [
+      {
+        id: "ATT-001",
+        name: "food-sample-request.pdf",
+        size: 248320,
+        addedAt: "2026-09-02T08:30:00Z",
+      },
+    ],
   },
   {
     id: "WO-2026-0002",
@@ -262,6 +289,7 @@ export const mockWorkOrders: WorkOrder[] = [
     preparedByPosition: "CSR",
     checkedByName: "Dr. Shymaa Ali",
     checkedByPosition: "CHEM. LM",
+    attachments: [],
   },
   {
     id: "WO-2026-0003",
@@ -289,5 +317,6 @@ export const mockWorkOrders: WorkOrder[] = [
     preparedByPosition: "CSR",
     checkedByName: "Dr. Shymaa Ali",
     checkedByPosition: "CHEM. LM",
+    attachments: [],
   },
 ];

@@ -12,6 +12,7 @@ export const workOrdersStore: WorkOrder[] = mockWorkOrders.map((w) => ({
   ...w,
   stageHistory: [...w.stageHistory],
   testRows: w.testRows.map((r) => ({ ...r })),
+  attachments: [...(w.attachments ?? [])],
 }));
 
 const listeners = new Set<() => void>();
@@ -96,6 +97,7 @@ export function resetWorkOrdersStore() {
       ...w,
       stageHistory: [...w.stageHistory],
       testRows: w.testRows.map((r) => ({ ...r })),
+      attachments: [...(w.attachments ?? [])],
     })),
   );
   notifyWorkOrdersChanged();

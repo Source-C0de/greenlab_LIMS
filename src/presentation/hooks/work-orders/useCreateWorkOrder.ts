@@ -17,6 +17,11 @@ function nextRowId(): string {
   return `WOTR-${String(rowCounter++).padStart(3, "0")}`;
 }
 
+let attachmentCounter = 1;
+function nextAttachmentId(): string {
+  return `ATT-${String(attachmentCounter++).padStart(3, "0")}`;
+}
+
 export function useCreateWorkOrder() {
   const { currentRole, language } = useAppContext();
   const isRtl = language === "ar";
@@ -67,6 +72,11 @@ export function useCreateWorkOrder() {
           testRows: input.testRows.map((r) => ({
             ...r,
             id: nextRowId(),
+          })),
+          attachments: (input.attachments ?? []).map((a) => ({
+            ...a,
+            id: nextAttachmentId(),
+            addedAt: now,
           })),
           preparedByName: input.preparedByName,
           preparedByPosition: input.preparedByPosition,
