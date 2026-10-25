@@ -132,7 +132,7 @@ export default function UsersAdmin() {
 
   // In API mode the source of truth is the server.
   const users: SaaSUser[] = api
-    ? (usersQuery.data?.data ?? []).map(apiUserToRow)
+    ? (usersQuery.data?.items ?? []).map(apiUserToRow)
     : mockList;
 
   // Dialog + form state (shared by both modes).
@@ -324,7 +324,7 @@ export default function UsersAdmin() {
     });
     setFormErrors({});
     // Capture updatedAt for If-Match when in API mode.
-    const serverRow = usersQuery.data?.data.find((r) => r.id === u.id);
+    const serverRow = usersQuery.data?.items.find((r) => r.id === u.id);
     setEditingUpdatedAt(serverRow?.updatedAt ?? null);
     setDialogOpen(true);
   }
@@ -513,7 +513,7 @@ export default function UsersAdmin() {
 
   function handleStatus(u: SaaSUser, target: UserStatus) {
     if (api) {
-      const serverRow = usersQuery.data?.data.find((r) => r.id === u.id);
+      const serverRow = usersQuery.data?.items.find((r) => r.id === u.id);
       const vars = { id: u.id, updatedAt: serverRow?.updatedAt };
       const mut = target === "active" ? activateMut : suspendMut;
       mut.mutate(vars, {

@@ -7,7 +7,10 @@
  */
 
 import { ApiError } from "@/infrastructure/api/api";
-import { getApiErrorCode } from "@/infrastructure/api/clients/usersApi";
+import {
+  extractValidationIssues,
+  getApiErrorCode,
+} from "@/infrastructure/api/response";
 
 type Lang = "en" | "ar";
 
@@ -24,6 +27,12 @@ const CODE_MESSAGES: Record<string, { en: string; ar: string }> = {
   stale_write: { en: "This record was changed by someone else. Please refresh and retry.", ar: "تم تعديل هذا السجل من قِبل مستخدم آخر. حدِّث الصفحة وأعِد المحاولة." },
   locked: { en: "This account is locked. Contact support.", ar: "هذا الحساب مقفل. تواصل مع الدعم." },
   validation: { en: "Please check the form fields and try again.", ar: "يُرجى التحقق من حقول النموذج وإعادة المحاولة." },
+  validation_error: { en: "Please check the form fields and try again.", ar: "يُرجى التحقق من حقول النموذج وإعادة المحاولة." },
+  bad_request: { en: "The request was rejected. Please check the values you sent.", ar: "تم رفض الطلب. يُرجى التحقق من القيم المُرسلة." },
+  conflict: { en: "That record already exists.", ar: "هذا السجل موجود بالفعل." },
+  gone: { en: "That file is no longer available.", ar: "هذا الملف لم يعد متاحًا." },
+  rate_limited: { en: "Too many requests. Please slow down and try again shortly.", ar: "عدد كبير جدًا من الطلبات. يُرجى الانتظار قليلًا والمحاولة مرة أخرى." },
+  internal_error: { en: "Something went wrong on our side. Please try again.", ar: "حدث خطأ في الخادم. يُرجى المحاولة مرة أخرى." },
 
   // Roles — §2
   slug_reserved: { en: "This slug is reserved by a built-in role.", ar: "هذا المعرّف محجوز لدور مدمج." },
@@ -67,4 +76,47 @@ export function describeApiError(err: unknown, lang: Lang = "en"): {
     ar: serverMsg ?? err.message,
     code,
   };
+}
+/**
+ * A detailed, single-string description of an API error — for surfaces that
+ * show one error block (a form, a dialog) rather than a bilingual toast.
+ *
+ * This is deliberately a *different* function from `describeApiError`: the two
+ * serve genuinely different UI needs (toast vs. inline block), and they used
+ * to share a name, which made the call sites ambiguous.
+ */
+export function describeApiErrorDetailed(
+  err: unknown,
+  fallback: string,
+): { title: string; description?: string } {
+  const status =
+    err && typeof err === "object" && "status" in err
+      ? Number((err as { status: unknown }).status) || 0
+      : 0;
+
+  const body =
+    err && typeof err === "object" && "body" in err
+      ? (err as { body: unknown }).body
+      : undefined;
+
+  const issues = extractValidationIssues(body);
+  if (issues.length > 0) {
+    return {
+      title: `${status} — ${issues.length} validation ${
+        issues.length === 1 ? "issue" : "issues"
+      }`,
+      description: issues
+        .map((v) => `${v.loc?.join(".") || "field"}: ${v.msg ?? "invalid"}`)
+        .join("\n"),
+    };
+  }
+
+  const message =
+    err instanceof ApiError && err.message
+      ? err.message
+      : err instanceof Error
+        ? err.message
+        : fallback;
+
+  return { title: `${status || "Error"} — ${message || fallback}` };
 }

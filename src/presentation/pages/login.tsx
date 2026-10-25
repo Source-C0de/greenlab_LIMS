@@ -95,12 +95,11 @@ export default function Login() {
         setLoginError(pick(LABELS.invalid));
         triggerShake();
       } else if (err instanceof ApiError) {
-        // Backend replied with a non-401 status — surface the status + body.
-        const detail =
-          err.body && typeof err.body === "object" && "detail" in err.body
-            ? String((err.body as { detail: unknown }).detail)
-            : err.message;
-        setLoginError(`${err.status} — ${detail}`);
+        // Backend replied with a non-401 status — surface the status + the
+        // server's message. `ApiError.message` is already the canonical
+        // `error.message` (or the legacy `detail` string), so there is no
+        // need to reach into the body here.
+        setLoginError(`${err.status} — ${err.message}`);
         triggerShake();
       } else if (err instanceof TypeError) {
         // "Failed to fetch" — the browser could not open a network

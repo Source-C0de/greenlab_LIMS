@@ -7,6 +7,13 @@
  */
 
 import { apiFetch } from "@/infrastructure/api/api";
+import {
+  getApiErrorCode as sharedGetApiErrorCode,
+  unwrapData,
+  unwrapPage,
+  type Pagination as WirePagination,
+  type SuccessEnvelope,
+} from "@/infrastructure/api/response";
 
 // ---------------------------------------------------------------------------
 // Types — mirror docs/api/users.md §5
@@ -79,20 +86,21 @@ export interface ListUsersFilters {
   pageSize?: number;
 }
 
-export interface Pagination {
-  page: number;
-  pageSize: number;
-  total: number;
-  totalPages: number;
-}
+/**
+ * The pagination window, as the backend reports it.
+ *
+ * This is the shared wire type (`{limit, offset, total}`) re-exported under
+ * a local name so the presentation layer can keep using `Page<T>` without
+ * importing the whole response module.
+ */
+export type Pagination = WirePagination;
 
+/**
+ * A page of results: the items plus the window they were taken from.
+ */
 export interface Page<T> {
-  data: T[];
+  items: T[];
   pagination: Pagination;
-}
-
-export interface Envelope<T> {
-  data: T;
 }
 
 /**
@@ -152,30 +160,31 @@ export interface ApiErrorBody {
   code: string;
   message: string;
   details?: unknown;
+  /** Only present under the `modern` contract; `enveloped` puts it in `meta`. */
   requestId?: string;
 }
 
 export interface ApiErrorEnvelope {
   error: ApiErrorBody;
+  meta?: { request_id?: string };
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Tolerate the `{ data: T }` envelope (same dual-shape pattern as
- * `src/lib/auth.ts:unwrap`). The spec §"Response envelopes" mandates it for
- * success responses; for DELETE the server may return `{ data: null }`. */
+/**
+ * Fetch and unwrap the canonical envelope.
+ *
+ * `T` may be `null` (a DELETE returns `{"data": null}`) — that is a typed
+ * null, not a missing payload.
+ */
 async function unwrap<T>(
   path: string,
   init?: Parameters<typeof apiFetch>[1],
 ): Promise<T> {
-  const env = await apiFetch<Envelope<T> | T | null>(path, init);
-  if (env === null || env === undefined) return env as T;
-  if (typeof env === "object" && "data" in env) {
-    return (env as Envelope<T>).data;
-  }
-  return env as T;
+  const env = await apiFetch<SuccessEnvelope<T>>(path, init);
+  return unwrapData(env);
 }
 
 function buildListQuery(filters: ListUsersFilters): string {
@@ -193,18 +202,7 @@ function buildListQuery(filters: ListUsersFilters): string {
 
 /** Extract the error code string from a thrown ApiError, when present. */
 export function getApiErrorCode(err: unknown): string | null {
-  if (
-    err &&
-    typeof err === "object" &&
-    "body" in err &&
-    err.body &&
-    typeof err.body === "object" &&
-    "error" in (err.body as Record<string, unknown>)
-  ) {
-    const e = (err.body as ApiErrorEnvelope).error;
-    if (e && typeof e === "object" && typeof e.code === "string") return e.code;
-  }
-  return null;
+  return sharedGetApiErrorCode(err);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,11 +211,8 @@ export function getApiErrorCode(err: unknown): string | null {
 
 /** GET /admin/users — list with optional filters + pagination.
  *
- * The spec §1.1 mandates `{ data: User[], pagination: {...} }`. In practice
- * the backend sometimes returns alternative shapes (raw array, `{ items }`,
- * `{ users }`) — see the `*_api_response_shapes` regression on the
- * integration ticket. We normalize everything to `Page<User>` here so the
- * consumer (the page) can read `.data` and `.pagination` uniformly.
+ * The response is the canonical paginated envelope: the rows are in `data`
+ * and the window in `meta.pagination` (`{limit, offset, total}`).
  *
  * Each user row is also passed through `normalizeUser` so the
  * snake_case fields the backend actually emits (`full_name`, `is_active`,
@@ -225,16 +220,14 @@ export function getApiErrorCode(err: unknown): string | null {
  * declares. Without this, the table cells render empty because
  * `u.fullName` is `undefined` even when the server sent `full_name`.
  */
-export function listUsers(
+export async function listUsers(
   filters: ListUsersFilters = {},
 ): Promise<Page<User>> {
-  return unwrap<Page<User> | User[] | Record<string, unknown>>(
+  const env = await apiFetch<SuccessEnvelope<RawUser[]>>(
     `/admin/users${buildListQuery(filters)}`,
-  ).then((res) => {
-    const page = normalizeUserPage(res);
-    page.data = page.data.map(normalizeUser);
-    return page;
-  });
+  );
+  const { items, pagination } = unwrapPage(env);
+  return { items: items.map(normalizeUser), pagination };
 }
 
 /** GET /admin/users/:id — fetch one. */
@@ -265,75 +258,6 @@ export function normalizeUser(raw: RawUser): User {
     updatedAt: raw.updatedAt ?? raw.updated_at ?? now,
     tempPassword: raw.tempPassword ?? raw.temp_password ?? null,
   };
-}
-
-/** Reduce any plausible backend shape to `Page<User>`. */
-function normalizeUserPage(
-  res: Page<User> | User[] | Record<string, unknown> | null | undefined,
-): Page<User> {
-  if (res === null || res === undefined) {
-    return { data: [], pagination: { page: 1, pageSize: 0, total: 0, totalPages: 0 } };
-  }
-  if (Array.isArray(res)) {
-    return {
-      data: res as User[],
-      pagination: { page: 1, pageSize: res.length, total: res.length, totalPages: 1 },
-    };
-  }
-  if (typeof res === "object") {
-    const r = res as Record<string, unknown>;
-    // Canonical: { data: User[], pagination: {...} }
-    if (Array.isArray(r.data)) {
-      return {
-        data: r.data as User[],
-        pagination:
-          (r.pagination as Pagination | undefined) ??
-          {
-            page: 1,
-            pageSize: (r.data as unknown[]).length,
-            total: (r.data as unknown[]).length,
-            totalPages: 1,
-          },
-      };
-    }
-    // Some endpoints return { items: User[] } (test-parameter convention)
-    if (Array.isArray(r.items)) {
-      return {
-        data: r.items as User[],
-        pagination: {
-          page: 1,
-          pageSize: (r.items as unknown[]).length,
-          total: (r.items as unknown[]).length,
-          totalPages: 1,
-        },
-      };
-    }
-    // Some return { users: User[] }
-    if (Array.isArray(r.users)) {
-      return {
-        data: r.users as User[],
-        pagination: {
-          page: 1,
-          pageSize: (r.users as unknown[]).length,
-          total: (r.users as unknown[]).length,
-          totalPages: 1,
-        },
-      };
-    }
-    // Some return { results: User[] } (Django REST convention)
-    if (Array.isArray(r.results)) {
-      return {
-        data: r.results as User[],
-        pagination: {
-          page: 1,
-          pageSize: (r.results as unknown[]).length,
-          total: (r.results as unknown[]).length,
-          totalPages: 1,
-        },
-      };
-    }
-  }
-  return { data: [], pagination: { page: 1, pageSize: 0, total: 0, totalPages: 0 } };
 }
 
 /** POST /admin/users — create. Returns the new user + one-time tempPassword. */

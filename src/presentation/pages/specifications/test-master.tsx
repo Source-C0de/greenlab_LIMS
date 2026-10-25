@@ -709,8 +709,8 @@ export default function TestMasterPage() {
                 <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                 <span className="text-muted-foreground">
                   {isRtl
-                    ? `متصل بالـ API — إجمالي ${testListQuery.data?.total ?? rows.length} سجل`
-                    : `Live API — ${testListQuery.data?.total ?? rows.length} record(s) from DB`}
+                    ? `متصل بالـ API — إجمالي ${testListQuery.data?.pagination.total ?? rows.length} سجل`
+                    : `Live API — ${testListQuery.data?.pagination.total ?? rows.length} record(s) from DB`}
                 </span>
               </>
             )}

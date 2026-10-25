@@ -41,12 +41,12 @@ import {
   TableRow,
 } from "@/shared/ui/table";
 import { isApiEnabled } from "@/infrastructure/api/api";
+import { describeApiErrorDetailed } from "@/infrastructure/api/errors";
 import {
   type ListFilters,
   type TestParameter,
   type TestParameterCreate,
   type TestParameterUpdate,
-  getErrorDetail,
 } from "@/infrastructure/api/clients/testParametersApi";
 import {
   useTestParameters,
@@ -72,23 +72,7 @@ function truncateUuid(id: string): string {
   return id.slice(0, 8);
 }
 
-function describeApiError(
-  err: unknown,
-  fallback: string,
-): { title: string; description?: string } {
-  const { status, message, validation } = getErrorDetail(err);
-  if (validation && validation.length > 0) {
-    return {
-      title: `${status} — ${validation.length} validation ${
-        validation.length === 1 ? "issue" : "issues"
-      }`,
-      description: validation
-        .map((v) => `${v.loc?.join(".") || "field"}: ${v.msg}`)
-        .join("\n"),
-    };
-  }
-  return { title: `${status || "Error"} — ${message || fallback}` };
-}
+
 
 export default function TestParameterCatalogue() {
   const { language, currentRole } = useAppContext();
@@ -142,7 +126,7 @@ export default function TestParameterCatalogue() {
   // pretend the catalogue is silently broken.
   useEffect(() => {
     if (isError) {
-      const d = describeApiError(error, "Failed to load test parameters");
+      const d = describeApiErrorDetailed(error, "Failed to load test parameters");
       toast.error(d.title, { description: d.description });
     }
   }, [isError, error]);
@@ -218,7 +202,7 @@ export default function TestParameterCatalogue() {
       );
       resetAdd();
     } catch (err) {
-      const d = describeApiError(err, "Failed to create test parameter");
+      const d = describeApiErrorDetailed(err, "Failed to create test parameter");
       toast.error(d.title, { description: d.description });
     }
   };
@@ -266,7 +250,7 @@ export default function TestParameterCatalogue() {
       );
       setEditTarget(null);
     } catch (err) {
-      const d = describeApiError(err, "Failed to save changes");
+      const d = describeApiErrorDetailed(err, "Failed to save changes");
       toast.error(d.title, { description: d.description });
     }
   };
@@ -289,7 +273,7 @@ export default function TestParameterCatalogue() {
     } catch (err) {
       toast.error(
         isRtl ? "فشل تغيير الحالة" : "Failed to change status",
-        { description: describeApiError(err, "").title },
+        { description: describeApiErrorDetailed(err, "").title },
       );
     }
   };
@@ -306,7 +290,7 @@ export default function TestParameterCatalogue() {
       setDeleteTarget(null);
     } catch (err) {
       toast.error(isRtl ? "فشل الحذف" : "Delete failed", {
-        description: describeApiError(err, "").title,
+        description: describeApiErrorDetailed(err, "").title,
       });
     }
   };
@@ -317,7 +301,7 @@ export default function TestParameterCatalogue() {
   // server-reported totals (`page.total`) rather than counting rows locally.
   // Active/inactive splits aren't available from the server, so those two
   // cards stay scoped to the visible page and are labelled as such.
-  const grandTotal = page?.total ?? 0;
+  const grandTotal = page?.pagination.total ?? 0;
   const totalActive = rows.filter((r) => r.is_active).length;
   const totalInactive = rows.length - totalActive;
 
@@ -512,7 +496,7 @@ export default function TestParameterCatalogue() {
                       {isRtl ? "فشل تحميل الكتالوج" : "Failed to load catalogue"}
                     </p>
                     <p className="text-xs">
-                      {describeApiError(error, "Network error").title}
+                      {describeApiErrorDetailed(error, "Network error").title}
                     </p>
                     <Button
                       variant="outline"

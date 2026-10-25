@@ -73,6 +73,44 @@ interface ApiFetchInit extends Omit<RequestInit, "body"> {
 }
 
 /**
+ * Read the human-readable message out of an error body.
+ *
+ * The canonical contract nests it at `error.message`; the legacy contract
+ * puts a bare string at `detail`. Reading only a *top-level* `message` (as
+ * this used to) meant every error surfaced as the literal "HTTP 404".
+ */
+function readErrorMessage(body: unknown, status: number): string {
+  if (body && typeof body === "object") {
+    const b = body as Record<string, unknown>;
+
+    const error = b.error;
+    if (error && typeof error === "object") {
+      const message = (error as { message?: unknown }).message;
+      if (typeof message === "string" && message.length > 0) return message;
+    }
+
+    if (typeof b.message === "string" && b.message.length > 0) return b.message;
+
+    if (typeof b.detail === "string" && b.detail.length > 0) return b.detail;
+  }
+  return `HTTP ${status}`;
+}
+
+/**
+ * Read the request id out of an error body.
+ *
+ * The `X-Request-ID` header is canonical — it is the only channel that also
+ * covers 204 responses and file downloads, which have no body. `meta.request_id`
+ * is the in-body copy under the `enveloped` contract, used as a fallback.
+ */
+function readErrorRequestId(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const meta = (body as { meta?: { request_id?: unknown } }).meta;
+  if (meta && typeof meta.request_id === "string") return meta.request_id;
+  return null;
+}
+
+/**
  * Typed fetch against the backend. Adds:
  *  - base URL prefix
  *  - Bearer auth from VITE_API_TOKEN (unless caller opts out)
@@ -85,6 +123,13 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promis
 
   const headers = new Headers(rawHeaders);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
+
+  // Opt into the canonical response contract. Set as a *default* so a caller
+  // can still negotiate `legacy` (or `modern`) per request by setting the
+  // header itself.
+  if (!headers.has("X-LIMS-API-Version")) {
+    headers.set("X-LIMS-API-Version", "enveloped");
+  }
 
   // Bearer token: prefer the runtime value (set on login), fall back to the
   // build-time env var for dev convenience. Reading on every call means
@@ -122,12 +167,9 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promis
   const parsed: unknown = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {
-    const requestId = response.headers.get("X-Request-ID");
-    const message =
-      isJson && typeof parsed === "object" && parsed !== null && "message" in parsed
-        ? String((parsed as { message: unknown }).message)
-        : `HTTP ${response.status}`;
-    throw new ApiError(response.status, message, parsed, requestId);
+    const requestId =
+      response.headers.get("X-Request-ID") ?? readErrorRequestId(parsed);
+    throw new ApiError(response.status, readErrorMessage(parsed, response.status), parsed, requestId);
   }
 
   return parsed as T;

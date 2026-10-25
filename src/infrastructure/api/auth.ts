@@ -10,6 +10,7 @@
 
 import type { Role } from "@/shared/lib/types";
 import { apiFetch } from "@/infrastructure/api/api";
+import { unwrapData, type SuccessEnvelope } from "@/infrastructure/api/response";
 
 const TOKEN_KEY = "glims_auth_token";
 const REFRESH_KEY = "glims_auth_refresh";
@@ -134,18 +135,15 @@ export interface RegisterRequest {
 // Envelope unwrap
 // ---------------------------------------------------------------------------
 
-interface Envelope<T> { data: T }
-
+/**
+ * Every endpoint the frontend calls answers with the canonical `enveloped`
+ * contract, so the payload is always at `data`. Unwrapping is explicit here
+ * (rather than hidden inside `apiFetch`) so a call site that wants a list, a
+ * page, or a `null` says which one it expects.
+ */
 async function unwrap<T>(path: string, init?: Parameters<typeof apiFetch>[1]): Promise<T> {
-  const env = await apiFetch<Envelope<T> | T>(path, init);
-  // Backend contract (docs/api/openapi.yaml §Components §DataEnvelope) wraps
-  // every response in `{ data: T }`, but in practice some endpoints (notably
-  // login) currently return the raw object. Peel the envelope only when it's
-  // actually present so both shapes work.
-  if (env !== null && typeof env === "object" && "data" in env) {
-    return (env as Envelope<T>).data;
-  }
-  return env as T;
+  const env = await apiFetch<SuccessEnvelope<T>>(path, init);
+  return unwrapData(env);
 }
 
 // ---------------------------------------------------------------------------

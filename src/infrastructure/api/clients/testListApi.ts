@@ -11,6 +11,13 @@
  */
 
 import { apiFetch } from "@/infrastructure/api/api";
+import {
+  extractValidationIssues,
+  unwrapData,
+  unwrapPage,
+  type Pagination,
+  type SuccessEnvelope,
+} from "@/infrastructure/api/response";
 
 // ---------------------------------------------------------------------------
 // Types — mirror the backend's TestListOut / TestListCreate / TestListUpdate
@@ -38,12 +45,19 @@ export interface TestListItem {
   updated_at: string;
 }
 
-/** `GET /test-list` → 200. Backend uses limit/offset, not page/pageSize. */
+/**
+ * `GET /test-list` → 200.
+ *
+ * The window is `{limit, offset, total}` — the shared wire type. The items
+ * live in `data` and the window in `meta.pagination` on the wire; the
+ * `listTestList` call site unwraps both.
+ */
+export type { Pagination };
+
+/** A page of catalogue rows plus the window they came from. */
 export interface Paginated<T> {
   items: T[];
-  total: number;
-  limit: number;
-  offset: number;
+  pagination: Pagination;
 }
 
 /** `POST /test-list` body. `code` + `parameter` are required. */
@@ -83,21 +97,13 @@ export interface TestListFilters {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Tolerate the `{ data: T }` envelope (same dual-shape pattern as
- *  `@/lib/auth` and `@/lib/testParametersApi`). */
-interface Envelope<T> {
-  data: T;
-}
-
+/** Fetch and unwrap the canonical envelope. */
 async function unwrap<T>(
   path: string,
   init?: Parameters<typeof apiFetch>[1],
 ): Promise<T> {
-  const env = await apiFetch<Envelope<T> | T>(path, init);
-  if (env !== null && typeof env === "object" && "data" in env) {
-    return (env as Envelope<T>).data;
-  }
-  return env as T;
+  const env = await apiFetch<SuccessEnvelope<T>>(path, init);
+  return unwrapData(env);
 }
 
 function buildQuery(filters: TestListFilters): string {
@@ -116,7 +122,10 @@ function buildQuery(filters: TestListFilters): string {
 }
 
 /**
- * Best-effort extract of the `{ detail: ... }` body of an ApiError. Mirrors
+ * Best-effort extract of an ApiError's message.
+ *
+ * Reads the canonical `error.message` (and `error.details.errors` for a
+ * validation failure), falling back to the error's own message. Mirrors
  * `getErrorDetail` in `@/lib/testParametersApi` so the page's error toast
  * behaves identically across both API-backed catalogues.
  */
@@ -127,15 +136,14 @@ export function getTestListErrorDetail(err: unknown): {
   if (err && typeof err === "object" && "status" in err && "body" in err) {
     const e = err as { status: number; body: unknown; message: string };
     const body = e.body;
-    if (body && typeof body === "object" && "detail" in body) {
-      const detail = (body as { detail: unknown }).detail;
-      if (typeof detail === "string") return { status: e.status, message: detail };
-      if (Array.isArray(detail) && detail.length > 0) {
-        const first = detail[0] as { loc?: unknown[]; msg?: string };
-        const loc = Array.isArray(first.loc) ? first.loc.join(".") : "field";
-        return { status: e.status, message: `${loc}: ${first.msg ?? "invalid"}` };
-      }
+
+    const issues = extractValidationIssues(body);
+    if (issues.length > 0) {
+      const first = issues[0];
+      const loc = Array.isArray(first.loc) ? first.loc.join(".") : "field";
+      return { status: e.status, message: `${loc}: ${first.msg ?? "invalid"}` };
     }
+
     return { status: e.status, message: e.message };
   }
   return {
@@ -149,10 +157,14 @@ export function getTestListErrorDetail(err: unknown): {
 // ---------------------------------------------------------------------------
 
 /** GET /test-list — list with filters + limit/offset pagination. */
-export function listTestList(
+export async function listTestList(
   filters: TestListFilters = {},
 ): Promise<Paginated<TestListItem>> {
-  return unwrap<Paginated<TestListItem>>(`/test-list${buildQuery(filters)}`);
+  const env = await apiFetch<SuccessEnvelope<TestListItem[]>>(
+    `/test-list${buildQuery(filters)}`,
+  );
+  const { items, pagination } = unwrapPage(env);
+  return { items, pagination };
 }
 
 /** GET /test-list/{id} — fetch one. */

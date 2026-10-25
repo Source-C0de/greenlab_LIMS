@@ -3,9 +3,18 @@
  *
  * Sibling to `usersApi.ts` — same envelope, same bearer auth, same
  * `isApiEnabled()` gating strategy.
+ *
+ * WIRE FORMAT
+ * -----------
+ * The backend sends **snake_case** (`label_en`, `icon_name`, `is_active`,
+ * `display_order`) — see `app/domains/roles/schemas.py::RoleOut`. This
+ * module's *public* types stay camelCase so the presentation layer is
+ * unaffected; `normalizeRole` / `normalizeMenuKey` bridge the two at the
+ * boundary, exactly as `usersApi.normalizeUser` already does.
  */
 
 import { apiFetch } from "@/infrastructure/api/api";
+import { unwrapData, type SuccessEnvelope } from "@/infrastructure/api/response";
 
 // ---------------------------------------------------------------------------
 // Types — mirror docs/api/users.md §2 + §5
@@ -29,6 +38,19 @@ export interface Role {
   isActive: boolean;
   isCustom: boolean;
   updatedAt: string;
+}
+
+/** The shape the backend actually sends (snake_case). */
+interface RawRole {
+  role: string;
+  label_en: string;
+  label_ar: string;
+  description_en: string;
+  description_ar: string;
+  icon_name: string;
+  is_active: boolean;
+  is_custom: boolean;
+  updated_at: string;
 }
 
 export interface RoleUpdate {
@@ -66,10 +88,6 @@ export interface RoleMenuPermissionsReplace {
   cells: RoleMenuCell[];
 }
 
-interface Envelope<T> {
-  data: T;
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -78,12 +96,28 @@ async function unwrap<T>(
   path: string,
   init?: Parameters<typeof apiFetch>[1],
 ): Promise<T> {
-  const env = await apiFetch<Envelope<T> | T | null>(path, init);
-  if (env === null || env === undefined) return env as T;
-  if (typeof env === "object" && "data" in env) {
-    return (env as Envelope<T>).data;
-  }
-  return env as T;
+  const env = await apiFetch<SuccessEnvelope<T>>(path, init);
+  return unwrapData(env);
+}
+
+/**
+ * Bridge the backend's snake_case role row to this module's camelCase type.
+ *
+ * Without this the roles page renders empty labels — the backend never sent
+ * `labelEn`, and nothing translated it.
+ */
+function normalizeRole(raw: RawRole): Role {
+  return {
+    role: raw.role,
+    labelEn: raw.label_en,
+    labelAr: raw.label_ar,
+    descriptionEn: raw.description_en,
+    descriptionAr: raw.description_ar,
+    iconName: raw.icon_name as RoleIconName,
+    isActive: raw.is_active,
+    isCustom: raw.is_custom,
+    updatedAt: raw.updated_at,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -103,9 +137,31 @@ export interface AdminMenuKeyResponse {
   displayOrder: number;
 }
 
+/** The shape the backend actually sends (snake_case). */
+interface RawMenuKey {
+  key: string;
+  label_en: string;
+  label_ar: string;
+  group: string;
+  href: string;
+  display_order: number;
+}
+
+function normalizeMenuKey(raw: RawMenuKey): AdminMenuKeyResponse {
+  return {
+    key: raw.key,
+    labelEn: raw.label_en,
+    labelAr: raw.label_ar,
+    group: raw.group as AdminMenuKeyResponse["group"],
+    href: raw.href,
+    displayOrder: raw.display_order,
+  };
+}
+
 /** GET /admin/menu-keys */
-export function listMenuKeys(): Promise<AdminMenuKeyResponse[]> {
-  return unwrap<AdminMenuKeyResponse[]>("/admin/menu-keys");
+export async function listMenuKeys(): Promise<AdminMenuKeyResponse[]> {
+  const raw = await unwrap<RawMenuKey[]>("/admin/menu-keys");
+  return raw.map(normalizeMenuKey);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,42 +169,47 @@ export function listMenuKeys(): Promise<AdminMenuKeyResponse[]> {
 // ---------------------------------------------------------------------------
 
 /** GET /admin/roles */
-export function listRoles(): Promise<Role[]> {
-  return unwrap<Role[]>("/admin/roles");
+export async function listRoles(): Promise<Role[]> {
+  const raw = await unwrap<RawRole[]>("/admin/roles");
+  return raw.map(normalizeRole);
 }
 
 /** GET /admin/roles/:role */
-export function getRole(slug: string): Promise<Role> {
-  return unwrap<Role>(`/admin/roles/${encodeURIComponent(slug)}`);
+export async function getRole(slug: string): Promise<Role> {
+  const raw = await unwrap<RawRole>(`/admin/roles/${encodeURIComponent(slug)}`);
+  return normalizeRole(raw);
 }
 
 /** PATCH /admin/roles/:role — edit metadata. `If-Match` for optimistic concurrency. */
-export function updateRole(
+export async function updateRole(
   slug: string,
   body: RoleUpdate,
   updatedAt?: string,
 ): Promise<Role> {
-  return unwrap<Role>(`/admin/roles/${encodeURIComponent(slug)}`, {
+  const raw = await unwrap<RawRole>(`/admin/roles/${encodeURIComponent(slug)}`, {
     method: "PATCH",
     body,
     headers: updatedAt ? { "If-Match": updatedAt } : undefined,
   });
+  return normalizeRole(raw);
 }
 
 /** PATCH /admin/roles/:role/status — archive / restore. */
-export function setRoleStatus(
+export async function setRoleStatus(
   slug: string,
   body: RoleStatusUpdate,
 ): Promise<Role> {
-  return unwrap<Role>(`/admin/roles/${encodeURIComponent(slug)}/status`, {
+  const raw = await unwrap<RawRole>(`/admin/roles/${encodeURIComponent(slug)}/status`, {
     method: "PATCH",
     body,
   });
+  return normalizeRole(raw);
 }
 
 /** POST /admin/roles — create custom role. */
-export function createRole(body: RoleCreate): Promise<Role> {
-  return unwrap<Role>("/admin/roles", { method: "POST", body });
+export async function createRole(body: RoleCreate): Promise<Role> {
+  const raw = await unwrap<RawRole>("/admin/roles", { method: "POST", body });
+  return normalizeRole(raw);
 }
 
 /** DELETE /admin/roles/:role — hard delete. Returns void on 204. */

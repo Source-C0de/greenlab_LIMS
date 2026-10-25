@@ -9,6 +9,13 @@
  */
 
 import { apiFetch, ApiError } from "@/infrastructure/api/api";
+import {
+  extractValidationIssues,
+  unwrapData,
+  unwrapPage,
+  type Pagination,
+  type SuccessEnvelope,
+} from "@/infrastructure/api/response";
 
 // ---------------------------------------------------------------------------
 // Types — mirror the FastAPI contract in docs/test_parameter_api.md §2 + §4
@@ -52,11 +59,15 @@ export interface TestParameterUpdate {
   is_active?: boolean;
 }
 
+/**
+ * A page of catalogue rows plus the window they came from.
+ *
+ * The window is `{limit, offset, total}` — the shared wire type. On the wire
+ * the rows live in `data` and the window in `meta.pagination`.
+ */
 export interface Paginated<T> {
   items: T[];
-  total: number;
-  limit: number;
-  offset: number;
+  pagination: Pagination;
 }
 
 export interface ListFilters {
@@ -72,13 +83,13 @@ export interface ListFilters {
 // Server error shapes — docs §5.4, §5.5, §5.6, §5.7
 // ---------------------------------------------------------------------------
 
-/** Pydantic 422 envelope: `{ detail: [{ type, loc, msg, input }, ...] }`. */
-export interface ValidationIssue {
-  type: string;
-  loc: (string | number)[];
-  msg: string;
-  input?: unknown;
-}
+/**
+ * One entry from the server's validation-issue list.
+ *
+ * The canonical contract carries these at `error.details.errors`; the legacy
+ * contract carried them at `detail`. `extractValidationIssues` reads both.
+ */
+export type ValidationIssue = import("@/infrastructure/api/response").ValidationIssue;
 
 export interface ValidationErrorBody {
   detail: ValidationIssue[];
@@ -123,39 +134,30 @@ export function getErrorDetail(err: unknown): {
 } {
   if (err instanceof ApiError) {
     const body = err.body;
-    if (body && typeof body === "object") {
-      const detail = (body as { detail?: unknown }).detail;
-      if (typeof detail === "string") {
-        return { status: err.status, message: detail };
-      }
-      if (Array.isArray(detail)) {
-        const issues = detail as ValidationIssue[];
-        const first = issues[0];
-        const summary = first
-          ? `${first.loc?.join(".") || "field"}: ${first.msg}`
-          : err.message;
-        return { status: err.status, message: summary, validation: issues };
-      }
+
+    // A validation failure carries a list of issues — canonical location is
+    // `error.details.errors`, legacy location is a top-level `detail` array.
+    const issues = extractValidationIssues(body);
+    if (issues.length > 0) {
+      const first = issues[0];
+      const summary = first
+        ? `${first.loc?.join(".") || "field"}: ${first.msg}`
+        : err.message;
+      return { status: err.status, message: summary, validation: issues };
     }
+
     return { status: err.status, message: err.message };
   }
   return { status: 0, message: err instanceof Error ? err.message : String(err) };
 }
 
-/** Tolerate the `{ data: T }` envelope (same dual-shape pattern as @/lib/auth). */
-interface Envelope<T> {
-  data: T;
-}
-
+/** Fetch and unwrap the canonical envelope. */
 async function unwrap<T>(
   path: string,
   init?: Parameters<typeof apiFetch>[1],
 ): Promise<T> {
-  const env = await apiFetch<Envelope<T> | T>(path, init);
-  if (env !== null && typeof env === "object" && "data" in env) {
-    return (env as Envelope<T>).data;
-  }
-  return env as T;
+  const env = await apiFetch<SuccessEnvelope<T>>(path, init);
+  return unwrapData(env);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,61 +165,14 @@ async function unwrap<T>(
 // ---------------------------------------------------------------------------
 
 /** GET /test-parameters — list with filters. */
-export function listTestParameters(
+export async function listTestParameters(
   filters: ListFilters = {},
 ): Promise<Paginated<TestParameter>> {
-  // The contract (§3.1) says the response is `200 Paginated<TestParameter>`.
-  // Some FastAPI implementations skip the envelope and return a raw array
-  // instead. Be tolerant of both shapes and normalize to `Paginated<T>`.
-  return unwrap<Paginated<TestParameter> | TestParameter[]>(
+  const env = await apiFetch<SuccessEnvelope<TestParameter[]>>(
     `/test-parameters${buildQuery(filters)}`,
-  ).then((res) => normalizePaginated(res, filters));
-}
-
-/** Coerce a possibly-raw-array response into the documented envelope. */
-function normalizePaginated(
-  res: Paginated<TestParameter> | TestParameter[] | unknown,
-  filters: ListFilters,
-): Paginated<TestParameter> {
-  if (Array.isArray(res)) {
-    warnOnce(
-      "test-parameters",
-      "Backend returned a raw array for GET /test-parameters. " +
-        "The contract (§3.1) expects { items, total, limit, offset }. " +
-        "Wrapping locally — please update the API to match the contract.",
-    );
-    const items = res as TestParameter[];
-    return {
-      items,
-      total: items.length,
-      limit: filters.limit ?? items.length,
-      offset: filters.offset ?? 0,
-    };
-  }
-  if (
-    res &&
-    typeof res === "object" &&
-    "items" in (res as Record<string, unknown>) &&
-    Array.isArray((res as { items: unknown }).items)
-  ) {
-    return res as Paginated<TestParameter>;
-  }
-  // Unknown shape — surface as a structured empty page so the UI can render
-  // a clear error rather than silently show zero results.
-  warnOnce(
-    "test-parameters",
-    `Unexpected GET /test-parameters response shape: ${typeof res}. ` +
-      "Expected Paginated<TestParameter> or TestParameter[].",
   );
-  return { items: [], total: 0, limit: 0, offset: 0 };
-}
-
-let warnedKeys: Record<string, boolean> = {};
-function warnOnce(key: string, message: string): void {
-  if (warnedKeys[key]) return;
-  warnedKeys[key] = true;
-  // eslint-disable-next-line no-console
-  console.warn(`[greenlablims/test-parameters] ${message}`);
+  const { items, pagination } = unwrapPage(env);
+  return { items, pagination };
 }
 
 /** GET /test-parameters/{id} — fetch one. */

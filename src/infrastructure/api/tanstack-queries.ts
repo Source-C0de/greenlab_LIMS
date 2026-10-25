@@ -13,6 +13,7 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { apiFetch, isApiEnabled, ApiError } from "@/infrastructure/api/api";
+import { unwrapData, type SuccessEnvelope } from "@/infrastructure/api/response";
 import type { AuthUser } from "@/infrastructure/api/auth";
 import {
   type ListFilters,
@@ -84,7 +85,8 @@ export interface HealthResponse {
 export function useHealth(): UseQueryResult<HealthResponse> {
   return useQuery<HealthResponse>({
     queryKey: ["api", "health"],
-    queryFn: () => apiFetch<HealthResponse>("/health"),
+    queryFn: () =>
+      apiFetch<SuccessEnvelope<HealthResponse>>("/health").then(unwrapData),
     enabled: isApiEnabled(),
     refetchOnWindowFocus: false,
     retry: 1,
@@ -92,19 +94,13 @@ export function useHealth(): UseQueryResult<HealthResponse> {
   });
 }
 
-interface Envelope<T> { data: T }
-
-/** Helper: unwrap the standard `{ data: T }` envelope. */
+/** Helper: unwrap the canonical `{ data: T }` envelope. */
 async function fetchEnvelope<T>(
   path: string,
   init?: Parameters<typeof apiFetch>[1],
 ): Promise<T> {
-  const env = await apiFetch<Envelope<T> | T>(path, init);
-  // Same dual-shape tolerance as `unwrap` in `@/lib/auth` — see comment there.
-  if (env !== null && typeof env === "object" && "data" in env) {
-    return (env as Envelope<T>).data;
-  }
-  return env as T;
+  const env = await apiFetch<SuccessEnvelope<T>>(path, init);
+  return unwrapData(env);
 }
 
 /**

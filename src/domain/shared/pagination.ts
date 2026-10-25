@@ -18,6 +18,13 @@
  *
  * `total` is the count of ALL matching rows, not of the returned page — that is
  * what a pager needs to render "showing 1–20 of 347".
+ *
+ * NOTE: this is the **domain** pagination type for repository ports. It is
+ * deliberately NOT the wire type. The wire type is `Pagination` in
+ * `infrastructure/api/response.ts` (`{limit, offset, total}`), which travels
+ * inside the response envelope's `meta.pagination`. The two happen to agree
+ * on their fields today; the HTTP adapter maps one to the other, so the port
+ * interface never has to change when the wire contract does.
  */
 
 export interface Page<T> {
