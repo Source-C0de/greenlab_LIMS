@@ -219,6 +219,74 @@ export const DEFAULT_TERMS_AR =
   "هذا العرض صالح حتى التاريخ المذكور أعلاه. الأسعار بالريال السعودي وتشمل ضريبة القيمة المضافة ١٥٪ ما لم يُذكر خلاف ذلك. تبدأ مدة التنفيذ في المختبر من تاريخ استلام العينة وقبول أمر الشراء. شروط الدفع: صافي ٣٠ يومًا من تاريخ الفاتورة.";
 
 /**
+ * One numbered clause in the quotation's Terms & Conditions block.
+ *
+ * Each clause carries a heading in both languages plus the body text in both
+ * languages — the printed document shows both regardless of the app's
+ * language toggle.
+ */
+export interface QuotationTermClause {
+  /** Clause heading — English. */
+  titleEn: string;
+  /** Clause heading — Arabic. */
+  titleAr: string;
+  /** Clause body — English. */
+  bodyEn: string;
+  /** Clause body — Arabic. */
+  bodyAr: string;
+}
+
+/**
+ * The five standing clauses printed under Terms & Conditions.
+ *
+ * These are contractual boilerplate, not per-quotation data, so they live here
+ * beside the other terms constants rather than in the mock data or the
+ * component.
+ */
+export const QUOTATION_TERM_CLAUSES: readonly QuotationTermClause[] = [
+  {
+    titleEn: "Transportation",
+    titleAr: "النقل",
+    bodyEn:
+      "The client is responsible for delivering the sample(s) to the Green Lab site.",
+    bodyAr:
+      "العميل مسؤول عن تسليم العينة / العينات إلى موقع جرين لاب.",
+  },
+  {
+    titleEn: "Sampling",
+    titleAr: "أخذ العينات",
+    bodyEn:
+      "The Green Lab is not responsible for the source of the sample(s) and the procedure of sampling and transportation.",
+    bodyAr:
+      "جرين لاب ليست مسؤولة عن مصدر العينة / العينات وإجراءات أخذ العينات والنقل.",
+  },
+  {
+    titleEn: "Disposing",
+    titleAr: "الاتلاف",
+    bodyEn:
+      "Samples will be disposed of immediately after the completion of analysis.",
+    bodyAr:
+      "سيتم التخلص من العينات مباشرة بعد الانتهاء من التحليل.",
+  },
+  {
+    titleEn: "OOS",
+    titleAr: "الحيود",
+    bodyEn:
+      "The client will be informed of any OOS results that appear during analysis.",
+    bodyAr:
+      "سيتم إبلاغ العميل بأي ظهور حيود في النتائج أثناء التحليل.",
+  },
+  {
+    titleEn: "Outsource",
+    titleAr: "إسناد خارجي",
+    bodyEn:
+      "Any Test marked with (*) means that the test was performed outside The Green Lab facilities.",
+    bodyAr:
+      "أي اختبار يحمل علامة (*) يعني أنه تم إجراء الاختبار خارج مرافق جرين لاب.",
+  },
+] as const;
+
+/**
  * Look up a specification's defaultPrice by case-insensitive name match.
  * Returns 0 if no match. Used when seeding a quotation from a TE's
  * testRequired list (which carries a name but no price).

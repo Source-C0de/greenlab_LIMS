@@ -5,7 +5,7 @@
  * The layout follows the Green Lab quotation template:
  *
  *   header lockups → title + number → customer ǀ quotation details
- *   → items table → totals → terms (EN + AR) → signature → footer
+ *   → items table → totals → terms & conditions → signature → footer
  *
  * The customer and quotation blocks are `table-fixed` tables with a fixed
  * label column, so both value columns start at the same offset — that is what
@@ -24,10 +24,9 @@ import {
   formatNumber,
   VAT_RATE,
   SELLER_VAT_NO,
-  DEFAULT_TERMS_AR,
-  DEFAULT_TERMS_EN,
   DEFAULT_PAYMENT_TERMS_AR,
   DEFAULT_PAYMENT_TERMS_EN,
+  QUOTATION_TERM_CLAUSES,
 } from "@/infrastructure/domain-support/quotation-utils";
 import type { Quotation } from "@/infrastructure/mock/data/quotations";
 
@@ -37,6 +36,16 @@ interface QuotationPreviewProps {
 
 type Label = { en: string; ar: string };
 
+/**
+ * Every label carries both languages, and the printed document shows BOTH
+ * regardless of the app's language toggle — a Saudi quotation is issued to
+ * Arabic- and English-speaking audiences alike, so the PDF must not depend on
+ * which locale the BDM happened to be in.
+ *
+ * `pick` is therefore only used for values that genuinely differ by language
+ * (the terms boilerplate, the status wording); static labels always render
+ * their Arabic + English pair.
+ */
 const LABELS = {
   docTitle:          { en: "Quotation",                 ar: "عرض سعر" } as Label,
   quotationNumber:   { en: "Quotation number",          ar: "رقم عرض السعر" } as Label,
@@ -44,16 +53,17 @@ const LABELS = {
   // ---- The two-column info block: customer ǀ quotation details ----
   customerHeading:   { en: "Customer",                  ar: "العميل" } as Label,
   quotationHeading:  { en: "Quotation details",         ar: "بيانات عرض السعر" } as Label,
-  mobile:            { en: "Mobile no.",                ar: "رقم الجوال" } as Label,
+  customerName:      { en: "Customer Name",             ar: "اسم العميل" } as Label,
+  mobile:            { en: "Mobile",                   ar: "رقم الجوال" } as Label,
   building:          { en: "Building",                  ar: "المبنى" } as Label,
   address:           { en: "Address",                   ar: "العنوان" } as Label,
   city:              { en: "City",                      ar: "المدينة" } as Label,
   area:              { en: "Area",                      ar: "المنطقة" } as Label,
-  postalCode:        { en: "Postal code",               ar: "الرمز البريدي" } as Label,
+  postalCode:        { en: "Post code",                 ar: "الرمز البريدي" } as Label,
   country:           { en: "Country",                   ar: "الدولة" } as Label,
   vatRef:            { en: "VAT Ref.",                  ar: "الرقم الضريبي للعميل" } as Label,
-  quotationNo:       { en: "Quotation No.",             ar: "رقم عرض السعر" } as Label,
-  quotationDate:     { en: "Quotation date",            ar: "تاريخ عرض السعر" } as Label,
+  quotationNo:       { en: "Quot. No.",                 ar: "رقم عرض السعر" } as Label,
+  quotationDate:     { en: "Quot. date",                ar: "تاريخ عرض السعر" } as Label,
   paymentTerms:      { en: "Payment terms",             ar: "شروط الدفع" } as Label,
   validity:          { en: "Validity",                  ar: "مدة الصلاحية" } as Label,
   vatNo:             { en: "VAT No.",                   ar: "الرقم الضريبي" } as Label,
@@ -66,23 +76,22 @@ const LABELS = {
 
   itemsHdr:          { en: "Items",                     ar: "العناصر" } as Label,
   itemNo:            { en: "#",                         ar: "#" } as Label,
-  productCode:       { en: "Product code",              ar: "رمز المنتج" } as Label,
+  productCode:       { en: "Product Code",              ar: "رمز المنتج" } as Label,
   productName:       { en: "Product Name",              ar: "اسم المنتج" } as Label,
   description:       { en: "Description",               ar: "الوصف" } as Label,
-  amount:            { en: "Qty",                       ar: "الكمية" } as Label,
-  unitPrice:         { en: "Unit Price",                ar: "سعر الوحدة" } as Label,
-  discountPct:       { en: "Disc %",                    ar: "نسبة الخصم" } as Label,
+  amount:            { en: "QTY",                       ar: "الكمية" } as Label,
+  unitPrice:         { en: "Unit Price",                ar: "السعر" } as Label,
+  discountPct:       { en: "Disc",                      ar: "الخصم %" } as Label,
   lineTotal:         { en: "Total",                     ar: "الإجمالي" } as Label,
-  vatPct:            { en: "VAT %",                     ar: "نسبة الضريبة" } as Label,
-  vatAmount:         { en: "VAT Amount",                ar: "قيمة الضريبة" } as Label,
-  vatTotal:          { en: "VAT Total",                 ar: "الإجمالي مع الضريبة" } as Label,
+  vatPct:            { en: "VAT %",                     ar: "ضريبة %" } as Label,
+  vatAmount:         { en: "VAT",                       ar: "الضريبة" } as Label,
+  vatTotal:          { en: "Total (VAT)",               ar: "الإجمالي بالضريبة" } as Label,
   noItems:           { en: "No line items",             ar: "لا توجد بنود" } as Label,
   subtotal:          { en: "Subtotal",                  ar: "الإجمالي الفرعي" } as Label,
   discount:          { en: "Discount",                  ar: "الخصم" } as Label,
   vat:               { en: `VAT (${Math.round(VAT_RATE * 100)}%)`, ar: `ضريبة القيمة المضافة (${Math.round(VAT_RATE * 100)}٪)` } as Label,
   total:             { en: "Total",                     ar: "الإجمالي" } as Label,
   terms:             { en: "Terms and conditions",      ar: "الشروط والأحكام" } as Label,
-  importantInfo:     { en: "Important information",      ar: "معلومات هامة" } as Label,
   authorizedSig:     { en: "Authorized signature",      ar: "التوقيع المعتمد" } as Label,
   authorizedSigName: { en: "Authorized signature name", ar: "اسم الموقّع" } as Label,
   footerCr:          { en: "Tax No. 300012345600003 — GreenLab • www.greenlab.com.sa", ar: "الرقم الضريبي ٣٠٠٠١٢٣٤٥٦٠٠٠٠٣ — جرين لاب • www.greenlab.com.sa" } as Label,
@@ -92,8 +101,6 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
   function QuotationPreview({ quotation }, ref) {
     const { language } = useAppContext();
     const isRtl = language === "ar";
-    const pick = (l: Label) => (isRtl ? l.ar : l.en);
-
     const totals = computeTotals(
       quotation.lineItems,
       quotation.discountType,
@@ -121,13 +128,7 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
     const vatPctLabel = `${Math.round(quotation.vatRate * 100)}%`;
 
     const client = quotation.clientSnapshot;
-    const clientName = isRtl && client.nameAr ? client.nameAr : client.nameEn;
     const reference = quotation.id ?? quotation.draftId ?? "";
-
-    // The terms are shown twice — English and Arabic — like the template. A
-    // user-authored `terms` value only exists as free text, so it fills the
-    // English block and the Arabic block falls back to the default.
-    const termsEn = quotation.terms?.trim() || DEFAULT_TERMS_EN;
 
     // Payment terms fall back to the module default when the BDM hasn't
     // overridden them on the save step.
@@ -136,17 +137,18 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
       : DEFAULT_PAYMENT_TERMS_EN;
 
     // Every QuotationStatus gets its own word — mapping every non-draft status
-    // to "Issued" would mislabel expired and superseded quotations.
+    // to "Issued" would mislabel expired and superseded quotations. Both
+    // languages are shown, like every other label on the printed document.
     const statusLabel = (() => {
       switch (quotation.status) {
         case "draft":
-          return pick(LABELS.draft);
+          return LABELS.draft;
         case "issued":
-          return pick(LABELS.issued);
+          return LABELS.issued;
         case "expired":
-          return pick(LABELS.expired);
+          return LABELS.expired;
         case "superseded":
-          return pick(LABELS.superseded);
+          return LABELS.superseded;
       }
     })();
 
@@ -174,18 +176,22 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
           />
         </div>
 
-        <div className="px-4 md:px-5 py-8 space-y-7">
-          {/* 2 — Title + quotation number */}
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 border-b-2 border-black/80 pb-3">
+        <div className="px-4 md:px-5 py-8 space-y-5">
+          {/*
+            2 — Title. Centred under the header lockup: the subject line is
+            the first thing a reader looks for on a Saudi quotation, so it
+            sits on the page's centre line rather than tucked into the start
+            corner. `text-center` is direction-agnostic — the title stays
+            centred in both EN and AR mode, and the Arabic sub-line keeps its
+            own `dir="rtl"` so the letters and ligatures render correctly.
+          */}
+          <div className="border-b-2 border-black/80 pb-3 text-center">
             <h1 className="text-3xl font-bold tracking-tight uppercase">
-              {pick(LABELS.docTitle)}
+              {LABELS.docTitle.en}
+              <span dir="rtl" className="block text-xl font-bold tracking-normal normal-case">
+                {LABELS.docTitle.ar}
+              </span>
             </h1>
-            <div className="text-start md:text-end">
-              <p className="text-xs uppercase tracking-widest text-black/60">
-                {pick(LABELS.quotationNumber)}
-              </p>
-              <p className="text-xl font-mono font-bold">{reference}</p>
-            </div>
           </div>
 
           {/* 3 — Customer information ǀ Quotation details */}
@@ -195,47 +201,68 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
             English and on the RIGHT in Arabic — the customer-facing side in
             both languages. Do not reorder the DOM to "fix" this.
           */}
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 gap-8 -mt-2">
             {/* ---- Customer ---- */}
             <section className="border border-black/25">
               <header className="border-b border-black/25 bg-black/[0.03] px-4 py-2">
-                <h2 className="text-sm font-bold uppercase tracking-wide">
-                  {pick(LABELS.customerHeading)}
+                <h2 className="flex items-center justify-between gap-4 text-sm">
+                  <span dir="ltr" className="text-left">
+                    Customer
+                  </span>
+
+                  <span dir="rtl" className="text-right">
+                    العميل
+                  </span>
                 </h2>
               </header>
 
               <div className="px-4 py-3">
-                {/* Customer name — the block's anchor, not a label/value row */}
-                <p className="text-base font-bold leading-snug">{clientName || "—"}</p>
-                {isRtl && client.nameAr && client.nameEn !== client.nameAr && (
-                  <p className="text-xs text-black/60" dir="ltr">
-                    {client.nameEn}
-                  </p>
-                )}
-                {!isRtl && client.nameAr && (
-                  <p className="text-xs text-black/60" dir="rtl">
-                    {client.nameAr}
-                  </p>
-                )}
+                {/*
+                  The customer name is the block's anchor, not a label/value
+                  row. Both languages sit on one line, matching the inline
+                  labels below — a Saudi quotation goes to Arabic- and
+                  English-speaking recipients alike, so the printed document
+                  must not depend on the BDM's language toggle.
+                */}
+                {/* <p className="text-base font-bold leading-snug">
+                  <span dir="rtl">{client.nameAr || client.nameEn || "—"}</span>
+                  {client.nameAr && client.nameEn && client.nameAr !== client.nameEn && (
+                    <span dir="ltr" className="ms-2 text-sm font-medium text-black/70">
+                      {client.nameEn}
+                    </span>
+                  )}
+                </p> */}
 
-                <table className="mt-3 w-full table-fixed text-sm">
+                {/*
+                  `dir="ltr"` pins the column order to English-left / value-centre
+                  / Arabic-right in BOTH language modes — the document root
+                  flips to RTL in Arabic, but a table's column order follows DOM
+                  order, so the table-level override wins. See `InfoRow`.
+                */}
+                <table className="mt-0 w-full table-fixed text-sm" dir="ltr">
                   <colgroup>
-                    <col style={{ width: "9.5rem" }} />
-                    <col />
+                    <col style={{ width: "24%" }} />
+                    <col style={{ width: "52%" }} />
+                    <col style={{ width: "24%" }} />
                   </colgroup>
                   <tbody>
-                    <InfoRow label={pick(LABELS.mobile)} value={client.mobile} mono />
-                    <InfoRow label={pick(LABELS.building)} value={client.building} />
-                    <InfoRow label={pick(LABELS.address)} value={client.address} />
-                    <InfoRow label={pick(LABELS.city)} value={client.city} />
-                    <InfoRow label={pick(LABELS.area)} value={client.area} />
                     <InfoRow
-                      label={pick(LABELS.postalCode)}
+                      label={LABELS.customerName}
+                      value={client.nameEn}
+                      valueAr={client.nameAr}
+                    />
+                    <InfoRow label={LABELS.mobile} value={client.mobile} mono />
+                    <InfoRow label={LABELS.building} value={client.building} />
+                    <InfoRow label={LABELS.address} value={client.address} />
+                    <InfoRow label={LABELS.city} value={client.city} />
+                    <InfoRow label={LABELS.area} value={client.area} />
+                    <InfoRow
+                      label={LABELS.postalCode}
                       value={client.postalCode}
                       mono
                     />
-                    <InfoRow label={pick(LABELS.country)} value={client.country} />
-                    <InfoRow label={pick(LABELS.vatRef)} value={client.vatNo} mono />
+                    <InfoRow label={LABELS.country} value={client.country} />
+                    <InfoRow label={LABELS.vatRef} value={client.vatNo} mono />
                   </tbody>
                 </table>
               </div>
@@ -243,45 +270,62 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
 
             {/* ---- Quotation details ---- */}
             <section className="border border-black/25">
+              {/* <header className="border-b border-black/25 bg-black/[0.03] px-4 py-2">
+                <h2 className="text-sm">
+                  <BiInline label={LABELS.quotationHeading} />
+                </h2>
+              </header> */}
               <header className="border-b border-black/25 bg-black/[0.03] px-4 py-2">
-                <h2 className="text-sm font-bold uppercase tracking-wide">
-                  {pick(LABELS.quotationHeading)}
+                <h2 className="flex items-center justify-between gap-4 text-sm">
+                  <span dir="ltr" className="text-left">
+                    Quotation Details
+                  </span>
+
+                  <span dir="rtl" className="text-right">
+                    تفاصيل عرض السعر
+                  </span>
                 </h2>
               </header>
 
               <div className="px-4 py-3">
-                <table className="w-full table-fixed text-sm">
+                <table className="w-full table-fixed text-sm" dir="ltr">
                   <colgroup>
-                    <col style={{ width: "9.5rem" }} />
-                    <col />
+                    <col style={{ width: "24%" }} />
+                    <col style={{ width: "52%" }} />
+                    <col style={{ width: "24%" }} />
                   </colgroup>
                   <tbody>
-                    <InfoRow label={pick(LABELS.quotationNo)} value={reference} mono />
+                    <InfoRow label={LABELS.quotationNo} value={reference} mono />
                     <InfoRow
-                      label={pick(LABELS.quotationDate)}
+                      label={LABELS.quotationDate}
                       value={quotation.issueDate}
                       mono
                     />
                     <InfoRow
-                      label={pick(LABELS.paymentTerms)}
+                      label={LABELS.paymentTerms}
                       value={quotation.paymentTerms?.trim() || defaultPaymentTerms}
+                      valueAr={quotation.paymentTerms?.trim() ? undefined : DEFAULT_PAYMENT_TERMS_AR}
                     />
                     <InfoRow
-                      label={pick(LABELS.validity)}
+                      label={LABELS.validity}
                       value={quotation.validUntil}
                       mono
                     />
-                    <InfoRow label={pick(LABELS.vatNo)} value={SELLER_VAT_NO} mono />
+                    <InfoRow label={LABELS.vatNo} value={SELLER_VAT_NO} mono />
                     <InfoRow
-                      label={pick(LABELS.description)}
+                      label={LABELS.description}
                       value={quotation.subject?.trim() || quotation.notes?.trim()}
                     />
                     <InfoRow
-                      label={pick(LABELS.preparedBy)}
+                      label={LABELS.preparedBy}
                       value={quotation.createdBy}
                       mono
                     />
-                    <InfoRow label={pick(LABELS.status)} value={statusLabel} />
+                    <InfoRow
+                      label={LABELS.status}
+                      value={statusLabel.en}
+                      valueAr={statusLabel.ar}
+                    />
                   </tbody>
                 </table>
               </div>
@@ -298,36 +342,58 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
             proportions stay identical.
           */}
           <div>
-            <h2 className="font-bold uppercase tracking-wide text-sm border-b border-black/30 pb-1 mb-2">
-              {pick(LABELS.itemsHdr)}
+            <h2 className="border-b border-black/30 pb-1 mb-2">
+              <BiHeading_inline label={LABELS.itemsHdr} />
             </h2>
             <table className="w-full text-[11px] table-fixed border-collapse">
               <colgroup>
                 <col style={{ width: "3%" }} />
+                <col style={{ width: "11%" }} />
+                <col style={{ width: "16%" }} />
                 <col style={{ width: "10%" }} />
-                <col style={{ width: "19%" }} />
-                <col style={{ width: "13%" }} />
-                <col style={{ width: "4%" }} />
-                <col style={{ width: "9%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "9%" }} />
-                <col style={{ width: "5%" }} />
-                <col style={{ width: "8%" }} />
                 <col style={{ width: "10%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "6%" }} />
+                <col style={{ width: "9%" }} />
+                <col style={{ width: "15%" }} />
               </colgroup>
-              <thead>
-                <tr className="border-b border-black/40">
-                  <th className="text-start py-1.5 pe-1.5">{pick(LABELS.itemNo)}</th>
-                  <th className="text-start py-1.5 pe-1.5">{pick(LABELS.productCode)}</th>
-                  <th className="text-start py-1.5 pe-1.5">{pick(LABELS.productName)}</th>
-                  <th className="text-start py-1.5 pe-1.5">{pick(LABELS.description)}</th>
-                  <th className="text-end py-1.5 px-1">{pick(LABELS.amount)}</th>
-                  <th className="text-end py-1.5 px-1">{pick(LABELS.unitPrice)}</th>
-                  <th className="text-end py-1.5 px-1">{pick(LABELS.discountPct)}</th>
-                  <th className="text-end py-1.5 px-1">{pick(LABELS.lineTotal)}</th>
-                  <th className="text-end py-1.5 px-1">{pick(LABELS.vatPct)}</th>
-                  <th className="text-end py-1.5 px-1">{pick(LABELS.vatAmount)}</th>
-                  <th className="text-end py-1.5 ps-1.5">{pick(LABELS.vatTotal)}</th>
+                <thead>
+                  <tr className="border-t border-b border-black/40">
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    {LABELS.itemNo.en}
+                  </th>
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.productCode} />
+                  </th>
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.productName} />
+                  </th>
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.description} />
+                  </th>
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.amount} />
+                  </th>
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.unitPrice} />
+                  </th>
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.discountPct} />
+                  </th>
+                 <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.lineTotal} />
+                  </th>
+                 <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.vatPct} />
+                  </th>
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.vatAmount} />
+                  </th>
+                  <th className="border-x border-black/20 text-center py-1.5 px-1.5">
+                    <BiHeading_center label={LABELS.vatTotal} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -337,7 +403,8 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
                       colSpan={11}
                       className="py-6 text-center text-black/50 text-xs"
                     >
-                      {pick(LABELS.noItems)}
+                      {LABELS.noItems.en}
+                      <span dir="rtl" className="block">{LABELS.noItems.ar}</span>
                     </td>
                   </tr>
                 ) : (
@@ -345,35 +412,47 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
                     const row = lineTotals[idx];
                     return (
                       <tr key={li.id} className="border-b border-black/10">
-                        <td className="py-1.5 pe-1.5 text-black/60">{idx + 1}</td>
-                        <td className="py-1.5 pe-1.5 font-mono text-[10px]">
+                        {/* <td className="py-1.5 pe-1.5 text-black/60">{idx + 1}</td> */}
+                        <td className="border-l border-black/20 py-1.5 px-1.5 text-center text-black/60">
+                          {idx + 1}
+                        </td>
+                        {/* <td className="py-1.5 pe-1.5 font-mono text-[10px]"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1.5 font-mono text-[10px]">
                           {li.specCode || "—"}
                         </td>
-                        <td className="py-1.5 pe-1.5 font-medium">
+                        {/* <td className="py-1.5 pe-1.5 font-medium"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1.5 font-medium text-[10px]">
                           {li.productName || li.name || "—"}
                         </td>
-                        <td className="py-1.5 pe-1.5 text-black/70">
+                        {/* <td className="py-1.5 pe-1.5 text-black/70"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1.5 font-medium text-[10px]">
                           {li.description || "—"}
                         </td>
-                        <td className="text-end py-1.5 px-1 font-mono">
+                        {/* <td className="text-end py-1.5 px-1 font-mono"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1 font-mono text-end">
                           {formatNumber(li.quantity)}
                         </td>
-                        <td className="text-end py-1.5 px-1 font-mono">
+                        {/* <td className="text-end py-1.5 px-1 font-mono"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1 font-mono text-end">
                           {formatNumber(li.unitPrice)}
                         </td>
-                        <td className="text-end py-1.5 px-1 font-mono">
+                        {/* <td className="text-end py-1.5 px-1 font-mono"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1 font-mono text-end">
                           {discountPctLabel}
                         </td>
-                        <td className="text-end py-1.5 px-1 font-mono">
+                        <td className="border-x border-black/20 py-1.5 px-1 font-mono text-end">
                           {formatNumber(row.gross)}
                         </td>
-                        <td className="text-end py-1.5 px-1 font-mono">
+                        {/* <td className="text-end py-1.5 px-1 font-mono"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1 font-mono text-end">
                           {vatPctLabel}
                         </td>
-                        <td className="text-end py-1.5 px-1 font-mono">
+                        {/* <td className="text-end py-1.5 px-1 font-mono"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1 font-mono text-end">
                           {formatNumber(row.vatAmount)}
                         </td>
-                        <td className="text-end py-1.5 ps-1.5 font-mono font-semibold">
+                        {/* <td className="text-end py-1.5 ps-1.5 font-mono font-semibold"> */}
+                        <td className="border-x border-black/20 py-1.5 px-1 font-mono text-end">
                           {formatNumber(row.vatTotal)}
                         </td>
                       </tr>
@@ -388,13 +467,15 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
           <div className="flex justify-end">
             <div className="w-full max-w-xs text-sm space-y-1">
               <div className="flex justify-between gap-4">
-                <span>{pick(LABELS.subtotal)}</span>
+                <span>
+                  <BiHeading_center label={LABELS.subtotal} />
+                </span>
                 <span className="font-mono">{SAR(totals.subtotal)}</span>
               </div>
               {totals.discountAmount > 0 && (
                 <div className="flex justify-between gap-4 text-black/70">
                   <span>
-                    - {pick(LABELS.discount)}
+                    - <BiInline label={LABELS.discount} />
                     {quotation.discountType === "percent" && quotation.discountValue > 0
                       ? ` (${quotation.discountValue}%)`
                       : ""}
@@ -403,52 +484,98 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
                 </div>
               )}
               <div className="flex justify-between gap-4">
-                <span>{pick(LABELS.vat)}</span>
+                <span>
+                  <BiHeading_center label={LABELS.vat} />
+                </span>
                 <span className="font-mono">{SAR(totals.vatAmount)}</span>
               </div>
               <div className="flex justify-between gap-4 border-t-2 border-black/70 pt-2 mt-2 text-base font-bold">
-                <span>{pick(LABELS.total)}</span>
+                <span>
+                  <BiHeading_center label={LABELS.total} />
+                </span>
                 <span className="font-mono">{SAR(totals.total)}</span>
               </div>
             </div>
           </div>
 
-          {/* 6 — Terms (EN + AR) */}
-          <div className="grid md:grid-cols-2 gap-8 pt-4 border-t border-black/20">
-            <div>
-              <h2 className="font-bold uppercase tracking-wide text-sm border-b border-black/30 pb-1 mb-2">
-                {pick(LABELS.terms)}
-              </h2>
-              <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                {termsEn}
-              </p>
-            </div>
-            <div dir="rtl">
-              <h2 className="font-bold uppercase tracking-wide text-sm border-b border-black/30 pb-1 mb-2">
-                {pick(LABELS.importantInfo)}
-              </h2>
-              <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                {DEFAULT_TERMS_AR}
-              </p>
+          {/*
+            6 — Terms & Conditions.
+
+            Two columns: English on the left, Arabic on the right. The five
+            standing clauses (Transportation, Sampling, Disposing, OOS,
+            Outsource) are the whole block — there is no boilerplate paragraph
+            above them.
+
+            The clauses are separated by rules so each one reads as its own
+            item rather than running together as a wall of text.
+          */}
+          <div className="pt-4 border-t border-black/20">
+            <h2 className="border-b border-black/30 pb-1 mb-2">
+              <BiHeading_inline label={LABELS.terms} />
+            </h2>
+
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* ---- English ---- */}
+              <div>
+                {QUOTATION_TERM_CLAUSES.map((clause, idx) => (
+                  <div
+                    key={clause.titleEn}
+                    className={
+                      idx > 0 ? "border-t border-black/15 pt-2 mt-2" : undefined
+                    }
+                  >
+                    <p dir="ltr" className="text-xs font-semibold">
+                      {idx + 1}. {clause.titleEn}
+                    </p>
+                    <p dir="ltr" className="text-xs leading-relaxed">
+                      {clause.bodyEn}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* ---- Arabic ---- */}
+              <div>
+                {QUOTATION_TERM_CLAUSES.map((clause, idx) => (
+                  <div
+                    key={clause.titleAr}
+                    className={
+                      idx > 0 ? "border-t border-black/15 pt-2 mt-2" : undefined
+                    }
+                  >
+                    <p dir="rtl" className="text-xs font-semibold text-start">
+                      {idx + 1}. {clause.titleAr}
+                    </p>
+                    <p dir="rtl" className="text-xs leading-relaxed text-start">
+                      {clause.bodyAr}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* 7 — Signature */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pt-6">
             <div className="h-24 w-24 border border-dashed border-black/40 flex items-center justify-center text-[10px] text-black/40 text-center px-2">
-              {pick(LABELS.authorizedSig)}
+              <BiInline label={LABELS.authorizedSig} />
             </div>
             <div className="text-start sm:text-end">
               <div className="w-56 border-t border-black/60 pt-1">
-                <p className="text-xs font-semibold">{pick(LABELS.authorizedSig)}</p>
-                <p className="text-xs text-black/60">{pick(LABELS.authorizedSigName)}</p>
+                <p className="text-xs font-semibold">
+                  <BiInline label={LABELS.authorizedSig} />
+                </p>
+                <p className="text-xs text-black/60">
+                  <BiInline label={LABELS.authorizedSigName} />
+                </p>
               </div>
             </div>
           </div>
 
           {/* 8 — Footer */}
           <div className="text-center text-[10px] text-black/60 border-t border-black/20 pt-3">
-            {pick(LABELS.footerCr)}
+            <span dir="ltr" className="block">{LABELS.footerCr.en}</span>
+            <span dir="rtl" className="block">{LABELS.footerCr.ar}</span>
           </div>
         </div>
       </div>
@@ -457,7 +584,48 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
 );
 
 /**
- * One label/value row inside a customer- or quotation-info table.
+ * A column header carrying BOTH languages: Arabic on the first line, English
+ * on the second.
+ *
+ * Each line gets its own `dir` so the Arabic word renders in its natural
+ * right-to-left shape regardless of the document's writing direction — mixing
+ * an Arabic run into an LTR paragraph reverses the word's letters and breaks
+ * the ligatures. The block itself stays aligned to the column's text-align, so
+ * a right-aligned numeric column has both of its lines right-aligned.
+ */
+function BiHeader({ label }: { label: Label }) {
+  return (
+    <span className="block leading-tight">
+      <span dir="rtl" className="block font-semibold">
+        {label.ar}
+      </span>
+      <span dir="ltr" className="block text-[9px] font-normal uppercase tracking-wide text-black/55">
+        {label.en}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * One field row inside a customer- or quotation-info table.
+ *
+ * Three cells, reading across the row:
+ *
+ *     English label  │  Value (centred)  │  Arabic label
+ *
+ * Each label carries its own closing colon; the value carries none — the
+ * punctuation belongs to the labels, not to the value.
+ *
+ * The English label is the more prominent of the two (11px semibold, black);
+ * the Arabic label is present but secondary (10px semibold, 70% black) so the
+ * two don't compete.
+ *
+ * The English label is pinned to the *left* in both language modes — a printed
+ * Saudi form must not flip with the app's language toggle. That is enforced by
+ * `dir="ltr"` on the parent `<table>`: a table's column order follows DOM
+ * order, not writing direction, so the table-level override wins over the
+ * document root's `dir="rtl"`. Each cell still declares its own `dir` so the
+ * Arabic word keeps its natural letter order and ligatures.
  *
  * Renders nothing when the value is empty — the two blocks have different field
  * sets, so an empty row would leave a dangling label and a gap in the grid.
@@ -465,29 +633,147 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
 function InfoRow({
   label,
   value,
+  valueAr,
   mono = false,
 }: {
-  label: string;
+  label: Label;
   value?: string | null;
+  /**
+   * Arabic counterpart of `value`, shown as a second line under the value when
+   * the value has a built-in Arabic form (payment terms, status). Free-text
+   * values have no Arabic equivalent, so this stays undefined for them.
+   */
+  valueAr?: string;
   /** Render the value in the monospace face (VAT no., dates, refs). */
   mono?: boolean;
 }) {
   if (!value || !value.trim()) return null;
   return (
     <tr>
+      {/*
+        English label + its closing colon. The colon is `font-normal` so it
+        reads as punctuation rather than as part of the bold label.
+      */}
       <th
         scope="row"
-        className="align-top py-1 pe-3 text-start text-[10px] font-medium uppercase tracking-wide text-black/55"
+        dir="ltr"
+        className="align-top py-1 pe-2 text-start text-[11px] font-semibold whitespace-nowrap"
       >
-        {label}
+        {label.en}
+        <span className="font-normal">:</span>
       </th>
+
+      {/*
+        The value, centred. No colon here — the punctuation belongs to the
+        labels, not to the value.
+      */}
       <td
-        className={`align-top py-1 text-start text-[13px] leading-snug ${
+        className={`align-top py-1 text-center text-[13px] leading-snug ${
           mono ? "font-mono" : "font-medium"
         }`}
       >
         {value}
+        {valueAr && (
+          <span dir="rtl" className="block text-[11px] font-normal text-black/70">
+            {valueAr}
+          </span>
+        )}
       </td>
+
+      {/*
+        Arabic label, right-indented within its own column, closed by its own
+        colon.
+
+        The CELL is `dir="ltr"` so `text-right` resolves against the column's
+        box — that is what pushes the word to the column's right edge. The
+        INNER span is `dir="rtl"` so the Arabic keeps its natural letter order
+        and ligatures. The two are independent; flipping only the cell would
+        reverse the Arabic, and flipping only the span would leave the word
+        hugging the column's left edge.
+      */}
+      <th
+        scope="row"
+        dir="ltr"
+        className="align-top py-1 ps-2 text-right text-[10px] font-semibold text-black/70"
+      >
+        <span dir="rtl">{label.ar}</span>
+        <span className="font-normal">:</span>
+      </th>
     </tr>
+  );
+}
+
+/**
+ * A bilingual label rendered inline — Arabic and English side by side on one
+ * line. Used where a two-line stacked block would be too tall or would break
+ * the value alignment (the customer / quotation-details rows, the Totals
+ * rows, the signature block).
+ *
+ * The Arabic and English are separate `dir` runs so each keeps its natural
+ * letter order, and a literal separator sits between them rather than a
+ * margin — a margin would land on the wrong side once the parent flips to
+ * RTL.
+ */
+function BiInline({ label }: { label: Label }) {
+  return (
+    <span className="inline-block leading-tight">
+      <span dir="rtl" className="font-semibold">
+        {label.ar}
+      </span>
+      <span dir="ltr" className="text-[9px] font-normal uppercase tracking-wide text-black/55 ms-1">
+        {label.en}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A bilingual section heading — Arabic on top, English below, with a rule
+ * under both.
+ */
+function BiHeading({ label }: { label: Label }) {
+  return (
+    <span className="block leading-tight">
+      <span dir="rtl" className="block text-[11px] font-bold">
+        {label.ar}
+      </span>
+      <span dir="ltr" className="block text-[9px] font-semibold uppercase tracking-wide text-black/55">
+        {label.en}
+      </span>
+    </span>
+  );
+}
+function BiHeading_center({ label }: { label: Label }) {
+  return (
+    <span className="block text-center leading-tight">
+      <span dir="rtl" className="block text-center text-[11px] font-bold">
+        {label.ar}
+      </span>
+      <span
+        dir="ltr"
+        className="block text-center text-[9px] font-semibold uppercase tracking-wide text-black/55"
+      >
+        {label.en}
+      </span>
+    </span>
+  );
+}
+
+function BiHeading_inline({ label }: { label: Label }) {
+  return (
+    <span className="flex w-full items-center justify-between gap-2 leading-tight">
+      <span
+        dir="ltr"
+        className="text-left text-[9px] font-semibold uppercase tracking-wide text-black/55"
+      >
+        {label.en}
+      </span>
+      <span
+        dir="rtl"
+        className="text-right text-[11px] font-bold"
+      >
+        {label.ar}
+      </span>
+    </span>
   );
 }
