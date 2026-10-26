@@ -5,7 +5,15 @@
  * The layout follows the Green Lab quotation template:
  *
  *   header lockups → title + number → customer ǀ quotation details
- *   → items table → totals → terms & conditions → signature → footer
+ *   → items table → totals → approval & lab stamp → terms & conditions
+ *   → client requirements → footer
+ *
+ * The document is laid out as TWO pages, matching the Green Lab quotation
+ * template: page 1 carries the masthead through the totals, page 2 carries
+ * the approval & stamp band through the terms and the client requirements.
+ * Each page is wrapped in a `data-pdf-page` element so the PDF builder gives
+ * it exactly one A4 sheet, and the footer (accreditation line + "Page N of M")
+ * is repeated on both so no sheet is left without the lab's details.
  *
  * The customer and quotation blocks are `table-fixed` tables with a fixed
  * label column, so both value columns start at the same offset — that is what
@@ -42,6 +50,7 @@ import {
 } from "@/infrastructure/domain-support/quotation-utils";
 import type { Quotation } from "@/infrastructure/mock/data/quotations";
 import { mockBdms } from "@/infrastructure/mock/data";
+import type { PdfSection } from "@/shared/lib/pdf-report";
 
 interface QuotationPreviewProps {
   quotation: Quotation;
@@ -60,6 +69,25 @@ interface QuotationPreviewProps {
 }
 
 type Label = { en: string; ar: string };
+
+/**
+ * Collect the document's page sections for the PDF builder.
+ *
+ * The pages are marked with `data-pdf-page` in the markup, so the caller can
+ * find them without the component having to hand out a second set of refs.
+ * `buildAndDownloadPdf` takes one section per PDF page, so each marked node
+ * becomes exactly one A4 sheet.
+ */
+export function quotationPageSections(
+  root: HTMLElement | null,
+): PdfSection[] {
+  if (!root) return [];
+  const nodes = Array.from(root.querySelectorAll<HTMLDivElement>("[data-pdf-page]"));
+  return nodes.map((node, i) => ({
+    label: `Quotation page ${i + 1}`,
+    ref: { current: node },
+  }));
+}
 
 /**
  * Every label carries both languages, and the printed document shows BOTH
@@ -121,6 +149,14 @@ const LABELS = {
   authorizedSigName: { en: "Authorized signature name", ar: "اسم الموقّع" } as Label,
   footerCr:          { en: "Tax No. 300012345600003 — GreenLab • www.greenlab.com.sa", ar: "الرقم الضريبي ٣٠٠٠١٢٣٤٥٦٠٠٠٠٣ — جرين لاب • www.greenlab.com.sa" } as Label,
 } as const;
+
+/**
+ * How many `data-pdf-page` wrappers the document renders.
+ *
+ * Kept next to the markup so the footer's "Page N of M" can never drift from
+ * the number of pages actually produced.
+ */
+const PAGE_COUNT = 2;
 
 export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps>(
   function QuotationPreview({ quotation, onChange, editable = false }, ref) {
@@ -204,6 +240,50 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
       [quotation.approvedBy],
     );
 
+    /*
+      9 — Footer.
+
+      Rendered on EVERY page, not just the last one: a sheet without the
+      lab's accreditation line and contact details is not a valid standalone
+      page. The page number is dynamic so the design stays truthful.
+    */
+    const renderFooter = (pageNumber: number, total: number) => (
+      <div className="w-full border-t border-black/70 pt-2 text-black">
+        {/* Row 1: Certification and page number */}
+        <div className="flex items-center justify-between gap-4 px-3 text-[11px] font-bold leading-tight">
+          <span dir="ltr" className="truncate text-left">
+            ISO/IEC 17025:2017: Quality Management System
+          </span>
+
+          <span className="shrink-0 text-center">
+            Page {pageNumber} of {total}
+          </span>
+        </div>
+
+        {/* Divider */}
+        <div className="mt-1 border-t border-black/70" />
+
+        {/* Row 2: Contact information */}
+        <div className="flex items-center justify-between gap-4 px-1 pt-1 text-[11px] font-bold leading-tight">
+          <span dir="ltr" className="whitespace-nowrap">
+            29, New Industrial Area, Riyadh 14334 Saudi Arabia
+          </span>
+
+          <span dir="ltr" className="whitespace-nowrap">
+            +966 (11) 257 9379
+          </span>
+
+          <span dir="ltr" className="whitespace-nowrap">
+            bdm@greenlab.com.sa
+          </span>
+
+          <span dir="ltr" className="whitespace-nowrap">
+            www.greenlab.com.sa
+          </span>
+        </div>
+      </div>
+    );
+
     return (
       <div
         ref={ref}
@@ -212,6 +292,14 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
         style={{ backgroundColor: "#ffffff", color: "#000000" }}
         className="w-full overflow-hidden"
       >
+        {/*
+          ---- Page 1 ----
+          The masthead and the first half of the document. The page wrapper is
+          marked `data-pdf-page` so the PDF builder can find it and give it
+          exactly one A4 sheet; `print-a4-page` sizes it to a true A4 width
+          when the browser prints it.
+        */}
+        <div data-pdf-page="1" className="print-a4-page">
         {/* 1 — Business-card lockups: logo on the start side, company text on the end */}
 <div className="flex items-center gap-6 border-b border-black/20 px-4 py-4 md:px-5">
   {/* Left logo: keep current size */}
@@ -667,7 +755,19 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
               </table>
             </div>
           </div>
+        </div>
+          {renderFooter(1, PAGE_COUNT)}
+        </div>
 
+        {/*
+          ---- Page 2 ----
+          The second half: the approval & stamp band, the terms, and the
+          client requirements. It starts on a fresh sheet — the PDF builder
+          gives each `data-pdf-page` wrapper one A4 page, and
+          `print-break-before-page` does the same for the browser print.
+        */}
+        <div data-pdf-page="2" className="print-a4-page print-break-before-page">
+        <div className="px-4 md:px-5 py-8 space-y-5">
           {/*
             6 — Approval & lab stamp.
 
@@ -679,7 +779,7 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
             in Arabic and the layout would mirror itself.
           */}
           <div
-            dir="rtl"
+            dir="ltr"
             className="flex items-start justify-between gap-8 pt-4 border-t border-black/20"
           >
             {/* ---- Left: the Green Lab stamp ---- */}
@@ -827,40 +927,8 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
           </div> */}
 
           {/* 9 — Footer */}
-<div className="w-full border-t border-black/70 pt-2 text-black">
-  {/* Row 1: Certification and page number */}
-  <div className="flex items-center justify-between gap-4 px-3 text-[11px] font-bold leading-tight">
-    <span dir="ltr" className="truncate text-left">
-      ISO/IEC 17025:2017: Quality Management System
-    </span>
-
-    <span className="shrink-0 text-center">
-      Page 1 of 2
-    </span>
-  </div>
-
-  {/* Divider */}
-  <div className="mt-1 border-t border-black/70" />
-
-  {/* Row 2: Contact information */}
-  <div className="flex items-center justify-between gap-4 px-1 pt-1 text-[11px] font-bold leading-tight">
-    <span dir="ltr" className="whitespace-nowrap">
-      29, New Industrial Area, Riyadh 14334 Saudi Arabia
-    </span>
-
-    <span dir="ltr" className="whitespace-nowrap">
-      +966 (11) 257 9379
-    </span>
-
-    <span dir="ltr" className="whitespace-nowrap">
-      bdm@greenlab.com.sa
-    </span>
-
-    <span dir="ltr" className="whitespace-nowrap">
-      www.greenlab.com.sa
-    </span>
-  </div>
-</div>
+        </div>
+          {renderFooter(2, PAGE_COUNT)}
         </div>
       </div>
     );

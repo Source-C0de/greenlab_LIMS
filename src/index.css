@@ -253,12 +253,45 @@
  * - `.no-print` hides elements (toolbars, action buttons) when printing.
  * - `.print-break-before-page` / `.print-break-after-page` force logical page
  *   breaks so multi-page reports (e.g. lab COAs) don't split tables mid-row.
- * - `.print-a4` sizes a section to fit exactly one A4 portrait page so
- *   html2canvas captures a known-aspect element for the PDF builder.
+ * - `.print-a4-page` sizes a page wrapper to exactly one A4 portrait page
+ *   (210mm wide ≈ 794px at 96dpi) so both the browser print and the
+ *   html2canvas capture agree on the page geometry.
  * =========================================================================== */
 @media print {
   .no-print {
     display: none !important;
+  }
+
+  /* The app shell — sidebar, header, breadcrumb — must not print. Only the
+     `[data-printable]` document should reach the paper. These elements are
+     the app's chrome, not the document's, so they are hidden by tag rather
+     than by a class the layout components would have to opt into. */
+  header,
+  aside,
+  nav,
+  [role="navigation"] {
+    display: none !important;
+  }
+
+  /* The main region and its width constraints are screen layout. At print
+     time the document must be free to take the full A4 width — otherwise the
+     browser scales the whole quotation down to fit the sheet, which is the
+     same "shrunken single page" defect the PDF builder suffers from. */
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  main > div {
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  /* The wizard / detail container is a grandchild of `main > div`, so it
+     needs its own reset. */
+  .max-w-6xl,
+  .max-w-4xl {
+    max-width: none !important;
   }
 
   .print-break-before-page {
@@ -271,6 +304,17 @@
     page-break-after: always;
   }
 
+  /* One printed page = one A4 sheet at its true width (210mm ≈ 794px at
+     96dpi). The break-inside guard stops the browser from straddling a page
+     wrapper across a sheet boundary, which would split a table mid-row. */
+  .print-a4-page {
+    width: 210mm;
+    max-width: 100%;
+    margin: 0 auto;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   /* Preserve background colors (QR codes, logos, status pills) when printed
      or saved to PDF via the browser. Without this, Chrome strips background
      fills and the QR ends up transparent. */
@@ -280,11 +324,15 @@
   }
 
   /* The printable region is a flat document — drop the card chrome so the
-     printed page has no rounded corners or surrounding border. */
+     printed page has no rounded corners or surrounding border, and give it the
+     A4 width so it lines up with its page wrappers. */
   [data-printable] {
     box-shadow: none !important;
     border: 0 !important;
     border-radius: 0 !important;
+    width: 210mm;
+    max-width: 100%;
+    margin: 0 auto;
   }
 
   /* When printing, constrain the page to A4 portrait. */

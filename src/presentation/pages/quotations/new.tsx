@@ -17,8 +17,6 @@ import {
   Check,
   ChevronRight,
   FileText,
-  Printer,
-  Download,
   Save,
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
@@ -26,7 +24,11 @@ import { Card, CardContent } from "@/shared/ui/card";
 import { toast } from "sonner";
 import { ClientPicker, snapshotOf, type ClientLike } from "@/presentation/components/features/quotations/ClientPicker";
 import { LineItemTable } from "@/presentation/components/features/quotations/LineItemTable";
-import { QuotationPreview } from "@/presentation/components/features/quotations/QuotationPreview";
+import {
+  QuotationPreview,
+} from "@/presentation/components/features/quotations/QuotationPreview";
+import { QuotationActions } from "@/presentation/components/features/quotations/QuotationActions";
+import { useQuotationPdf } from "@/presentation/components/features/quotations/useQuotationPdf";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import { useAuth } from "@/presentation/providers/AuthContext";
 import {
@@ -42,7 +44,6 @@ import {
   VAT_RATE,
 } from "@/infrastructure/domain-support/quotation-utils";
 import { loadDraft, saveDraft, deleteDraft } from "@/infrastructure/domain-support/quotation-storage";
-import { buildAndDownloadPdf } from "@/shared/lib/pdf-report";
 import {
   mockClients,
   mockQuotations,
@@ -72,8 +73,6 @@ const LABELS = {
   back2:        { en: "Back",                   ar: "السابق" } as const,
   issue:        { en: "Issue Quotation",        ar: "إصدار عرض السعر" } as const,
   saveDraft:    { en: "Save Draft",             ar: "حفظ كمسودة" } as const,
-  print:        { en: "Print",                  ar: "طباعة" } as const,
-  pdf:          { en: "Download PDF",           ar: "تحميل PDF" } as const,
   notes:        { en: "Notes (optional)",       ar: "ملاحظات (اختياري)" } as const,
   subject:      { en: "Subject of quotation",   ar: "موضوع عرض السعر" } as const,
   paymentTerms: { en: "Payment terms",          ar: "شروط الدفع" } as const,
@@ -286,30 +285,13 @@ export default function NewQuotation() {
 
   // --- PDF / Print ---
   const previewRef = useRef<HTMLDivElement>(null);
+  const { downloadPdf, downloading } = useQuotationPdf(q);
+
   const handlePrint = () => {
     window.print();
   };
-  const handlePdf = async () => {
-    if (!previewRef.current) return;
-    try {
-      await buildAndDownloadPdf({
-        sections: [{ label: "Quotation", ref: previewRef }],
-        meta: {
-          reportId: q.id ?? q.draftId ?? "draft",
-          title: `Quotation — ${q.id ?? q.draftId ?? "draft"}`,
-          author: "Green Lab KSA",
-          subject: "Laboratory Quotation",
-        },
-        // The document is text-heavy with thin rules and small mono numerals —
-        // scale 3 keeps them crisp in the rasterised PDF.
-        scale: 3,
-        filename: `Quotation_${q.id ?? q.draftId ?? "draft"}.pdf`,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(msg);
-    }
-  };
+
+  const handlePdf = () => downloadPdf(previewRef.current);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
@@ -320,17 +302,12 @@ export default function NewQuotation() {
           {pick(LABELS.back)}
         </Button>
         <div className="flex gap-2">
-          {(step === "preview" || step === "save") && (
-            <>
-              <Button variant="outline" onClick={handlePrint}>
-                <Printer className="h-4 w-4 me-2" />
-                {pick(LABELS.print)}
-              </Button>
-              <Button variant="outline" onClick={handlePdf}>
-                <Download className="h-4 w-4 me-2" />
-                {pick(LABELS.pdf)}
-              </Button>
-            </>
+          {step === "save" && (
+            <QuotationActions
+              onPrint={handlePrint}
+              onDownload={handlePdf}
+              downloading={downloading}
+            />
           )}
         </div>
       </div>

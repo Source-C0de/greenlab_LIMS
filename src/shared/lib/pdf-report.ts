@@ -142,9 +142,15 @@ function drawSectionOnCurrentPage(
   const renderWidth = pxWidth * ratio;
   const renderHeight = pxHeight * ratio;
 
-  // Centre the image on the page (otherwise it left-aligns by default).
+  // Centre the image horizontally (otherwise it left-aligns by default), and
+  // anchor it to the TOP of the page.
+  //
+  // The old behaviour centred it vertically too, which floats a short page in
+  // the middle of the sheet with an equal band of white above AND below. On a
+  // quotation the slack belongs at the bottom, above the footer rule — the
+  // document should read as a page with its content starting at the top.
   const offsetX = (pageWidth - renderWidth) / 2;
-  const offsetY = (pageHeight - renderHeight) / 2;
+  const offsetY = 0;
 
   pdf.addImage(
     dataUrl,
