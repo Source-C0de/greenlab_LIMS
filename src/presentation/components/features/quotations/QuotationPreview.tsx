@@ -72,7 +72,7 @@ type Label = { en: string; ar: string };
  * their Arabic + English pair.
  */
 const LABELS = {
-  docTitle:          { en: "Quotation",                 ar: "عرض سعر" } as Label,
+  docTitle:          { en: "Price Quotation",                 ar: "عرض سعر" } as Label,
   quotationNumber:   { en: "Quotation number",          ar: "رقم عرض السعر" } as Label,
 
   // ---- The two-column info block: customer ǀ quotation details ----
@@ -213,20 +213,25 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
         className="w-full overflow-hidden"
       >
         {/* 1 — Business-card lockups: logo on the start side, company text on the end */}
-        <div className="flex items-center justify-between gap-6 border-b border-black/20 px-4 md:px-5 py-4">
-          <img
-            src="/images/GL LOGO_Business Card 1.svg"
-            alt="GreenLab"
-            crossOrigin="anonymous"
-            className="h-16 w-auto shrink-0"
-          />
-          <img
-            src="/images/TEXT_Business Card 1.svg"
-            alt="GreenLab — Food, Drug, Beauty laboratory services"
-            crossOrigin="anonymous"
-            className="h-10 w-auto shrink-0"
-          />
-        </div>
+<div className="flex items-center gap-6 border-b border-black/20 px-4 py-4 md:px-5">
+  {/* Left logo: keep current size */}
+  <img
+    src="/images/GL LOGO_Business Card 1.svg"
+    alt="GreenLab"
+    crossOrigin="anonymous"
+    className="h-16 w-auto shrink-0"
+  />
+
+  {/* Right image: expand to fill remaining space */}
+  <div className="flex min-w-0 flex-1 justify-end">
+    <img
+      src="/images/TEXT_Business Card 1.svg"
+      alt="GreenLab — Food, Drug, Beauty laboratory services"
+      crossOrigin="anonymous"
+      className="h-auto max-h-16 w-full object-contain object-right"
+    />
+  </div>
+</div>
 
         <div className="px-4 md:px-5 py-8 space-y-5">
           {/*
@@ -238,9 +243,14 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
             own `dir="rtl"` so the letters and ligatures render correctly.
           */}
           <div className="border-b-2 border-black/80 pb-3 text-center">
-            <h1 className="text-3xl font-bold tracking-tight uppercase">
-              {LABELS.docTitle.en}
-              <span dir="rtl" className="block text-xl font-bold tracking-normal normal-case">
+            <h1 className="flex items-center justify-center gap-2 text-xl font-bold tracking-tight">
+              <span dir="ltr" className="uppercase">
+                {LABELS.docTitle.en}
+              </span>
+
+              <span>-</span>
+
+              <span dir="rtl" className="normal-case tracking-normal">
                 {LABELS.docTitle.ar}
               </span>
             </h1>
@@ -565,17 +575,10 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
             payment block is first in the DOM, so it renders on the LEFT in
             English and on the RIGHT in Arabic. The Totals follow it.
           */}
-          <div className="grid md:grid-cols-2 gap-8 items-start">
-            {/*
-              Payment instructions & bank details.
-
-              Bordered on all four sides so it reads as its own panel, clearly
-              separate from the Totals block beside it. The border sits on this
-              element — not on `[data-printable]` — so the print stylesheet's
-              `border: 0 !important` doesn't strip it.
-            */}
-            <div className="border border-black/25 p-4">
-              <h3 className="border-b border-black/30 pb-1 mb-2">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[3fr_2fr]">
+            {/* ---- Payment instructions & bank details ---- */}
+            <div className="min-w-0 border border-black/25 p-4">
+              <h3 className="mb-2 border-b border-black/30 pb-1">
                 <BiHeading_inline label={LABELS.paymentInstructions} />
               </h3>
 
@@ -587,58 +590,81 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
                   </p>
                 }
                 ar={
-                  <p dir="rtl" className="text-end">
+                  <p dir="rtl"  className="m-0 w-full text-right leading-relaxed"
+                    style={{
+                      paddingRight: 0,
+                      paddingLeft: 0,
+                      textIndent: 0,
+                      marginRight: 0,
+                      marginLeft: 0,
+                    }}>
                     {PAYMENT_INSTRUCTIONS_AR}
                   </p>
                 }
               />
 
-              <h3 className="border-b border-black/30 pb-1 mb-2 mt-4">
+              <h3 className="mb-2 mt-4 border-b border-black/30 pb-1">
                 <BiHeading_inline label={LABELS.bankDetails} />
               </h3>
 
-              {/*
-                The bank name and IBAN are language-neutral, so they are shown
-                once, centred — a duplicated account number on a payment
-                instruction invites a typo at the bank.
-              */}
               <p dir="ltr" className="text-center text-xs leading-relaxed">
                 <span className="font-semibold">{SELLER_BANK_NAME}</span>
-                <span className="block font-mono text-[11px]">{SELLER_IBAN}</span>
+                <span className="block font-mono text-[20px]">{SELLER_IBAN}</span>
               </p>
             </div>
 
             {/* ---- Totals ---- */}
-            <div className="w-full max-w-xs text-sm space-y-1 md:justify-self-end">
-              <div className="flex justify-between gap-4">
-                <span>
-                  <BiHeading_center label={LABELS.subtotal} />
-                </span>
-                <span className="font-mono">{SAR(totals.subtotal)}</span>
-              </div>
-              {totals.discountAmount > 0 && (
-                <div className="flex justify-between gap-4 text-black/70">
-                  <span>
-                    - <BiInline label={LABELS.discount} />
-                    {quotation.discountType === "percent" && quotation.discountValue > 0
-                      ? ` (${quotation.discountValue}%)`
-                      : ""}
-                  </span>
-                  <span className="font-mono">{SAR(totals.discountAmount)}</span>
-                </div>
-              )}
-              <div className="flex justify-between gap-4">
-                <span>
-                  <BiHeading_center label={LABELS.vat} />
-                </span>
-                <span className="font-mono">{SAR(totals.vatAmount)}</span>
-              </div>
-              <div className="flex justify-between gap-4 border-t-2 border-black/70 pt-2 mt-2 text-base font-bold">
-                <span>
-                  <BiHeading_center label={LABELS.total} />
-                </span>
-                <span className="font-mono">{SAR(totals.total)}</span>
-              </div>
+            <div className="w-full min-w-0 text-sm">
+              <table className="w-full table-fixed border-collapse border border-black/25">
+                <colgroup>
+                  <col style={{ width: "60%" }} />
+                  <col style={{ width: "40%" }} />
+                </colgroup>
+
+                <tbody>
+                  <tr>
+                    <td className="border border-black/25 px-3 py-2">
+                      <BiHeading_center label={LABELS.subtotal} />
+                    </td>
+                    <td className="border border-black/25 px-3 py-2 text-end font-mono">
+                      {SAR(totals.subtotal)}
+                    </td>
+                  </tr>
+
+                  {totals.discountAmount > 0 && (
+                    <tr>
+                      <td className="border border-black/25 px-3 py-2 text-black/70">
+                        <BiInline label={LABELS.discount} />
+                        {quotation.discountType === "percent" &&
+                        quotation.discountValue > 0
+                          ? ` (${quotation.discountValue}%)`
+                          : ""}
+                      </td>
+                      <td className="border border-black/25 px-3 py-2 text-end font-mono text-black/70">
+                        - {SAR(totals.discountAmount)}
+                      </td>
+                    </tr>
+                  )}
+
+                  <tr>
+                    <td className="border border-black/25 px-3 py-2">
+                      <BiHeading_center label={LABELS.vat} />
+                    </td>
+                    <td className="border border-black/25 px-3 py-2 text-end font-mono">
+                      {SAR(totals.vatAmount)}
+                    </td>
+                  </tr>
+
+                  <tr className="bg-black/[0.04] font-bold">
+                    <td className="border border-black/40 px-3 py-2">
+                      <BiHeading_center label={LABELS.total} />
+                    </td>
+                    <td className="border border-black/40 px-3 py-2 text-end font-mono text-base">
+                      {SAR(totals.total)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -709,57 +735,79 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
               contentEditable div renders as ordinary text and wraps
               correctly in the PDF raster.
             */}
-            <EditableText
+            {/* <EditableText
               value={quotation.terms ?? ""}
               onChange={setTerms}
               editable={canEdit}
               ariaLabel={LABELS.terms.en}
               className="text-xs leading-relaxed"
-            />
+            /> */}
 
             {/* 7b — the five standing clauses */}
-            <div className="grid md:grid-cols-2 gap-8 mt-4">
-              {/* ---- English ---- */}
-              <div>
-                {QUOTATION_TERM_CLAUSES.map((clause, idx) => (
-                  <div
-                    key={clause.titleEn}
-                    className={
-                      idx > 0 ? "border-t border-black/15 pt-2 mt-2" : undefined
-                    }
-                  >
-                    <p dir="ltr" className="text-xs font-semibold">
+            <div className="mt-4 w-full border-t border-l border-black/25">
+              {QUOTATION_TERM_CLAUSES.map((clause, idx) => (
+                <div
+                  key={clause.titleEn}
+                  className="grid grid-cols-2 border-b border-r border-black/25"
+                >
+                  {/* English — left column */}
+                  <div dir="ltr" className="border-r border-black/25 px-3 py-2">
+                    <p className="text-xs font-semibold">
                       {idx + 1}. {clause.titleEn}
                     </p>
-                    <p dir="ltr" className="text-xs leading-relaxed">
+                    <p className="mt-1 text-xs leading-relaxed">
                       {clause.bodyEn}
                     </p>
                   </div>
-                ))}
-              </div>
 
-              {/* ---- Arabic ---- */}
-              <div>
-                {QUOTATION_TERM_CLAUSES.map((clause, idx) => (
-                  <div
-                    key={clause.titleAr}
-                    className={
-                      idx > 0 ? "border-t border-black/15 pt-2 mt-2" : undefined
-                    }
-                  >
-                    <p dir="rtl" className="text-xs font-semibold text-start">
+                  {/* Arabic — right column */}
+                  <div dir="rtl" lang="ar" className="px-3 py-2 text-right">
+                    <p className="text-xs font-semibold">
                       {idx + 1}. {clause.titleAr}
                     </p>
-                    <p dir="rtl" className="text-xs leading-relaxed text-start">
+                    <p className="mt-1 text-xs leading-relaxed">
                       {clause.bodyAr}
                     </p>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* 8 - Customer Requirements */}
+
+          {/* ---- Client Requirements ---- */}
+{/* ---- Client Requirements ---- */}
+<div className="mt-4 w-full border border-black/30">
+  {/* Centered bilingual heading */}
+  <div className="border-b border-black/30 bg-black/[0.04] px-3 py-3 text-center">
+    <h3 className="flex flex-wrap items-center justify-center gap-2 text-sm font-bold">
+      <span dir="ltr">Client Requirements</span>
+      <span className="text-black/50">-</span>
+      <span dir="rtl" lang="ar">متطلبات العميل</span>
+    </h3>
+
+    <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-xs text-black/70">
+      <span dir="ltr">
+        The customer must provide the requirements listed below.
+      </span>
+      <span>-</span>
+      <span dir="rtl" lang="ar">
+        يجب على العميل توفير المتطلبات المذكورة أدناه.
+      </span>
+    </div>
+  </div>
+
+  {/* Writing area with horizontal lines */}
+  <div className="px-3 py-2">
+    {Array.from({ length: 5 }, (_, idx) => (
+      <div
+        key={idx}
+        className="h-8 border-b border-dotted border-black/30"
+      />
+    ))}
+  </div>
+</div>
 
           {/* 8 — Signature */}
           {/* <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pt-6">
@@ -778,11 +826,41 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
             </div>
           </div> */}
 
-          {/* 8 — Footer */}
-          <div className="text-center text-[10px] text-black/60 border-t border-black/20 pt-3">
-            <span dir="ltr" className="block">{LABELS.footerCr.en}</span>
-            <span dir="rtl" className="block">{LABELS.footerCr.ar}</span>
-          </div>
+          {/* 9 — Footer */}
+<div className="w-full border-t border-black/70 pt-2 text-black">
+  {/* Row 1: Certification and page number */}
+  <div className="flex items-center justify-between gap-4 px-3 text-[11px] font-bold leading-tight">
+    <span dir="ltr" className="truncate text-left">
+      ISO/IEC 17025:2017: Quality Management System
+    </span>
+
+    <span className="shrink-0 text-center">
+      Page 1 of 2
+    </span>
+  </div>
+
+  {/* Divider */}
+  <div className="mt-1 border-t border-black/70" />
+
+  {/* Row 2: Contact information */}
+  <div className="flex items-center justify-between gap-4 px-1 pt-1 text-[11px] font-bold leading-tight">
+    <span dir="ltr" className="whitespace-nowrap">
+      29, New Industrial Area, Riyadh 14334 Saudi Arabia
+    </span>
+
+    <span dir="ltr" className="whitespace-nowrap">
+      +966 (11) 257 9379
+    </span>
+
+    <span dir="ltr" className="whitespace-nowrap">
+      bdm@greenlab.com.sa
+    </span>
+
+    <span dir="ltr" className="whitespace-nowrap">
+      www.greenlab.com.sa
+    </span>
+  </div>
+</div>
         </div>
       </div>
     );
