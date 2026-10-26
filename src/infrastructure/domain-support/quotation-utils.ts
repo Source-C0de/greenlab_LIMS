@@ -18,6 +18,28 @@ export const DEFAULT_VALIDITY_DAYS = 14;
 /** Green Lab's own ZATCA VAT registration number (seller side). */
 export const SELLER_VAT_NO = "300012345600003";
 
+/** Green Lab's bank — the account clients are to pay into. */
+export const SELLER_BANK_NAME = "ALINMA BANK";
+
+/** Green Lab's IBAN (24 characters, Saudi IBAN format). */
+export const SELLER_IBAN = "SA1105000068202889045000";
+
+/**
+ * Payment-instruction notice — English.
+ *
+ * Printed under "Payment Instructions" in the quotation's bank-details block.
+ * It states that payments must be made in the company's name through the
+ * official channels, and that any other method is void and does not discharge
+ * the debt — the clause a Saudi lab needs to avoid being paid by an
+ * untraceable third party.
+ */
+export const PAYMENT_INSTRUCTIONS_EN =
+  "Payments must be made exclusively in the company's name via these official channels (Transfers, Checks, POS, E-payment). Other methods are void & do not discharge debt.";
+
+/** Payment-instruction notice — Arabic. */
+export const PAYMENT_INSTRUCTIONS_AR =
+  "يتم السداد باسم الشركة حصراً عبر هذه القنوات الرسمية: (حوالات شيكات، نقاط بيع دفع إلكتروني). أي وسيلة أخرى تعتبر لاغية ولا تسقط المديونية. فقط لا غير.";
+
 /** Default payment terms shown in the quotation's right-hand info column. */
 export const DEFAULT_PAYMENT_TERMS_EN = "Net 30 days from invoice date";
 export const DEFAULT_PAYMENT_TERMS_AR = "صافي ٣٠ يومًا من تاريخ الفاتورة";

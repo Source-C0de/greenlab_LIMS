@@ -18,5 +18,6 @@ export * from "./role-menu-permissions";
 export * from "./user-menu-overrides";
 export * from "./testQueue";
 export * from "./users";
+export * from "./bdms";
 export * from "./workOrders";
 export * from "./workOrderStore";

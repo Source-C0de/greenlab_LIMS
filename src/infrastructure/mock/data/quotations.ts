@@ -119,6 +119,14 @@ export interface Quotation {
   updatedAt: string;
   /** Username of the BDM who created/issued the quotation. */
   createdBy: string;
+  /**
+   * Id of the BDM responsible for approving this quotation.
+   *
+   * A reference into `mockBdms` rather than a free-text name: the printed
+   * document resolves it to the person's name in both languages, so a name
+   * corrected later still prints correctly on quotations issued before.
+   */
+  approvedBy?: string;
 }
 
 /** Mutable module-level array. New issued quotations are pushed at runtime. */

@@ -90,4 +90,6 @@ export interface Quotation {
   readonly updatedAt: string;
   /** Username of the BDM who created/issued it. */
   readonly createdBy: string;
+  /** Id of the BDM responsible for approving it. */
+  readonly approvedBy?: string;
 }

@@ -1,6 +1,6 @@
 /**
- * Read-only render of a Quotation — used inside the wizard's preview step,
- * the detail page, and as the printable / PDF region.
+ * Render of a Quotation — used inside the wizard's preview step, the detail
+ * page, and as the printable / PDF region.
  *
  * The layout follows the Green Lab quotation template:
  *
@@ -13,25 +13,50 @@
  *
  * The wrapping div carries a `data-printable` attribute so the page-level
  * `no-print` CSS can target everything except this node at print time.
+ *
+ * The component is READ-ONLY by default. The wizard's preview step passes
+ * `editable` + `onChange` so the BDM can set the last few fields directly on
+ * the document — the value sits exactly where it prints, so what they see is
+ * what the client receives. The detail page passes neither and stays a plain
+ * rendering of an issued quotation.
  */
 
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import {
   SAR,
+  addDays,
   computeLineTotals,
   computeTotals,
   formatNumber,
   VAT_RATE,
   SELLER_VAT_NO,
+  SELLER_BANK_NAME,
+  SELLER_IBAN,
+  PAYMENT_INSTRUCTIONS_EN,
+  PAYMENT_INSTRUCTIONS_AR,
   DEFAULT_PAYMENT_TERMS_AR,
   DEFAULT_PAYMENT_TERMS_EN,
+  DEFAULT_VALIDITY_DAYS,
   QUOTATION_TERM_CLAUSES,
 } from "@/infrastructure/domain-support/quotation-utils";
 import type { Quotation } from "@/infrastructure/mock/data/quotations";
+import { mockBdms } from "@/infrastructure/mock/data";
 
 interface QuotationPreviewProps {
   quotation: Quotation;
+  /**
+   * Receives the next quotation whenever an editable field changes. Omitted on
+   * the issued-quotation detail page, which leaves the component read-only.
+   */
+  onChange?: (next: Quotation) => void;
+  /**
+   * Turns the document's editable fields into live controls. Separate from
+   * `onChange` so the wizard's save step can render the finished document
+   * read-only while the preview step renders it editable — both use identical
+   * markup, so the preview is a faithful preview of the printout.
+   */
+  editable?: boolean;
 }
 
 type Label = { en: string; ar: string };
@@ -68,11 +93,6 @@ const LABELS = {
   validity:          { en: "Validity",                  ar: "مدة الصلاحية" } as Label,
   vatNo:             { en: "VAT No.",                   ar: "الرقم الضريبي" } as Label,
   preparedBy:        { en: "Prepared by",               ar: "أعد بواسطة" } as Label,
-  status:            { en: "Status",                    ar: "الحالة" } as Label,
-  draft:             { en: "Draft",                     ar: "مسودة" } as Label,
-  issued:            { en: "Issued",                    ar: "صادر" } as Label,
-  expired:           { en: "Expired",                   ar: "منتهي الصلاحية" } as Label,
-  superseded:        { en: "Superseded",                ar: "مستبدل" } as Label,
 
   itemsHdr:          { en: "Items",                     ar: "العناصر" } as Label,
   itemNo:            { en: "#",                         ar: "#" } as Label,
@@ -92,15 +112,35 @@ const LABELS = {
   vat:               { en: `VAT (${Math.round(VAT_RATE * 100)}%)`, ar: `ضريبة القيمة المضافة (${Math.round(VAT_RATE * 100)}٪)` } as Label,
   total:             { en: "Total",                     ar: "الإجمالي" } as Label,
   terms:             { en: "Terms and conditions",      ar: "الشروط والأحكام" } as Label,
+  approvedBy:        { en: "Approved by",              ar: "اعتمده" } as Label,
+  bdmPosition:       { en: "Business Development Manager", ar: "مدير تجاري" } as Label,
+  labStamp:          { en: "Green Lab stamp",          ar: "ختم جرين لاب" } as Label,
+  paymentInstructions: { en: "Payment Instructions",     ar: "تعليمات السداد" } as Label,
+  bankDetails:         { en: "Bank Details",             ar: "بيانات البنك" } as Label,
   authorizedSig:     { en: "Authorized signature",      ar: "التوقيع المعتمد" } as Label,
   authorizedSigName: { en: "Authorized signature name", ar: "اسم الموقّع" } as Label,
   footerCr:          { en: "Tax No. 300012345600003 — GreenLab • www.greenlab.com.sa", ar: "الرقم الضريبي ٣٠٠٠١٢٣٤٥٦٠٠٠٠٣ — جرين لاب • www.greenlab.com.sa" } as Label,
 } as const;
 
 export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps>(
-  function QuotationPreview({ quotation }, ref) {
+  function QuotationPreview({ quotation, onChange, editable = false }, ref) {
     const { language } = useAppContext();
     const isRtl = language === "ar";
+
+    // Editing is on only when the parent supplied a handler — the detail page
+    // renders the same component without one and must stay a plain document.
+    const canEdit = editable && !!onChange;
+
+    /**
+     * Applies a patch to the quotation and hands the result up. No-ops when
+     * the document is read-only, so the editable controls can be rendered
+     * unconditionally and simply do nothing in print-only contexts.
+     */
+    const patch = (changes: Partial<Quotation>) => {
+      if (!canEdit || !onChange) return;
+      onChange({ ...quotation, ...changes });
+    };
+
     const totals = computeTotals(
       quotation.lineItems,
       quotation.discountType,
@@ -136,21 +176,33 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
       ? DEFAULT_PAYMENT_TERMS_AR
       : DEFAULT_PAYMENT_TERMS_EN;
 
-    // Every QuotationStatus gets its own word — mapping every non-draft status
-    // to "Issued" would mislabel expired and superseded quotations. Both
-    // languages are shown, like every other label on the printed document.
-    const statusLabel = (() => {
-      switch (quotation.status) {
-        case "draft":
-          return LABELS.draft;
-        case "issued":
-          return LABELS.issued;
-        case "expired":
-          return LABELS.expired;
-        case "superseded":
-          return LABELS.superseded;
-      }
-    })();
+    // ---- Editable fields -------------------------------------------------
+    // Validity is stored as a DATE on the quotation; the BDM edits it as a
+    // number of DAYS, so the day count is derived from the date pair and the
+    // write-back converts days back into a date. No extra field is stored.
+    const validityDays = Math.max(
+      1,
+      Math.round(
+        (new Date(quotation.validUntil).getTime() -
+          new Date(quotation.issueDate).getTime()) /
+          (24 * 60 * 60 * 1000),
+      ),
+    ) || DEFAULT_VALIDITY_DAYS;
+
+    const setValidityDays = (days: number) => {
+      const safe = Math.max(1, Math.min(3650, Math.round(days) || 1));
+      patch({ validUntil: addDays(quotation.issueDate, safe) });
+    };
+
+    const setPaymentTerms = (value: string) => patch({ paymentTerms: value });
+    const setTerms = (value: string) => patch({ terms: value });
+
+    // The approver is stored as an id and printed as a name in both
+    // languages — see the `approvedBy` field on the Quotation model.
+    const approver = useMemo(
+      () => mockBdms.find((b) => b.id === quotation.approvedBy) ?? null,
+      [quotation.approvedBy],
+    );
 
     return (
       <div
@@ -218,11 +270,12 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
 
               <div className="px-4 py-3">
                 {/*
-                  The customer name is the block's anchor, not a label/value
-                  row. Both languages sit on one line, matching the inline
-                  labels below — a Saudi quotation goes to Arabic- and
-                  English-speaking recipients alike, so the printed document
-                  must not depend on the BDM's language toggle.
+                  The customer name is the block's anchor — it sits above the
+                  table as a prominent line, not as one label/value row among
+                  the rest. Both languages appear, because a Saudi quotation
+                  goes to Arabic- and English-speaking recipients alike and
+                  the printed document must not depend on the BDM's language
+                  toggle.
                 */}
                 {/* <p className="text-base font-bold leading-snug">
                   <span dir="rtl">{client.nameAr || client.nameEn || "—"}</span>
@@ -245,24 +298,33 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
                     <col style={{ width: "52%" }} />
                     <col style={{ width: "24%" }} />
                   </colgroup>
+                  {/*
+                    Every client field always renders, with an em-dash where
+                    the value is blank. A client record with, say, no building
+                    recorded must still show the "Building" line — otherwise the
+                    client sees fields missing from the quotation and assumes
+                    the lab left them out.
+                  */}
                   <tbody>
                     <InfoRow
                       label={LABELS.customerName}
                       value={client.nameEn}
                       valueAr={client.nameAr}
+                      alwaysShow
                     />
-                    <InfoRow label={LABELS.mobile} value={client.mobile} mono />
-                    <InfoRow label={LABELS.building} value={client.building} />
-                    <InfoRow label={LABELS.address} value={client.address} />
-                    <InfoRow label={LABELS.city} value={client.city} />
-                    <InfoRow label={LABELS.area} value={client.area} />
+                    <InfoRow label={LABELS.mobile} value={client.mobile} mono alwaysShow />
+                    <InfoRow label={LABELS.building} value={client.building} alwaysShow />
+                    <InfoRow label={LABELS.address} value={client.address} alwaysShow />
+                    <InfoRow label={LABELS.city} value={client.city} alwaysShow />
+                    <InfoRow label={LABELS.area} value={client.area} alwaysShow />
                     <InfoRow
                       label={LABELS.postalCode}
                       value={client.postalCode}
                       mono
+                      alwaysShow
                     />
-                    <InfoRow label={LABELS.country} value={client.country} />
-                    <InfoRow label={LABELS.vatRef} value={client.vatNo} mono />
+                    <InfoRow label={LABELS.country} value={client.country} alwaysShow />
+                    <InfoRow label={LABELS.vatRef} value={client.vatNo} mono alwaysShow />
                   </tbody>
                 </table>
               </div>
@@ -301,30 +363,60 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
                       value={quotation.issueDate}
                       mono
                     />
+
+                    {/*
+                      Payment terms — editable on the document. The fallback to
+                      the module default only applies while the field is empty
+                      and the document is read-only; once the BDM types, their
+                      text is what prints.
+                    */}
                     <InfoRow
                       label={LABELS.paymentTerms}
                       value={quotation.paymentTerms?.trim() || defaultPaymentTerms}
                       valueAr={quotation.paymentTerms?.trim() ? undefined : DEFAULT_PAYMENT_TERMS_AR}
+                      render={
+                        <EditableValue
+                          value={quotation.paymentTerms ?? ""}
+                          onChange={setPaymentTerms}
+                          editable={canEdit}
+                          ariaLabel={LABELS.paymentTerms.en}
+                        />
+                      }
                     />
+
+                    {/*
+                      Validity — the document prints the date it is valid
+                      UNTIL. The field the BDM edits is the day count, so the
+                      editable control IS the day count and the date is what
+                      the read-only document shows. One row, one value — the
+                      row carries no extra element.
+                    */}
                     <InfoRow
                       label={LABELS.validity}
                       value={quotation.validUntil}
                       mono
+                      render={
+                        <EditableValue
+                          type="number"
+                          value={String(validityDays)}
+                          readOnlyValue={quotation.validUntil}
+                          onChange={(v) => setValidityDays(Number(v))}
+                          editable={canEdit}
+                          ariaLabel={LABELS.validity.en}
+                          mono
+                          min={1}
+                          max={3650}
+                          className="w-12 text-center"
+                        />
+                      }
                     />
+
                     <InfoRow label={LABELS.vatNo} value={SELLER_VAT_NO} mono />
-                    <InfoRow
-                      label={LABELS.description}
-                      value={quotation.subject?.trim() || quotation.notes?.trim()}
-                    />
+
                     <InfoRow
                       label={LABELS.preparedBy}
                       value={quotation.createdBy}
                       mono
-                    />
-                    <InfoRow
-                      label={LABELS.status}
-                      value={statusLabel.en}
-                      valueAr={statusLabel.ar}
                     />
                   </tbody>
                 </table>
@@ -463,9 +555,61 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
             </table>
           </div>
 
-          {/* 5 — Totals */}
-          <div className="flex justify-end">
-            <div className="w-full max-w-xs text-sm space-y-1">
+          {/*
+            5 — Payment instructions & bank details ǀ Totals.
+
+            Two columns on one row: the payment instructions and bank details
+            fill the left side, the Totals stay on the right.
+
+            Grid column order follows DOM order, not writing direction — the
+            payment block is first in the DOM, so it renders on the LEFT in
+            English and on the RIGHT in Arabic. The Totals follow it.
+          */}
+          <div className="grid md:grid-cols-2 gap-8 items-start">
+            {/*
+              Payment instructions & bank details.
+
+              Bordered on all four sides so it reads as its own panel, clearly
+              separate from the Totals block beside it. The border sits on this
+              element — not on `[data-printable]` — so the print stylesheet's
+              `border: 0 !important` doesn't strip it.
+            */}
+            <div className="border border-black/25 p-4">
+              <h3 className="border-b border-black/30 pb-1 mb-2">
+                <BiHeading_inline label={LABELS.paymentInstructions} />
+              </h3>
+
+              <BiRow
+                className="text-xs leading-relaxed"
+                en={
+                  <p dir="ltr" className="text-start">
+                    {PAYMENT_INSTRUCTIONS_EN}
+                  </p>
+                }
+                ar={
+                  <p dir="rtl" className="text-end">
+                    {PAYMENT_INSTRUCTIONS_AR}
+                  </p>
+                }
+              />
+
+              <h3 className="border-b border-black/30 pb-1 mb-2 mt-4">
+                <BiHeading_inline label={LABELS.bankDetails} />
+              </h3>
+
+              {/*
+                The bank name and IBAN are language-neutral, so they are shown
+                once, centred — a duplicated account number on a payment
+                instruction invites a typo at the bank.
+              */}
+              <p dir="ltr" className="text-center text-xs leading-relaxed">
+                <span className="font-semibold">{SELLER_BANK_NAME}</span>
+                <span className="block font-mono text-[11px]">{SELLER_IBAN}</span>
+              </p>
+            </div>
+
+            {/* ---- Totals ---- */}
+            <div className="w-full max-w-xs text-sm space-y-1 md:justify-self-end">
               <div className="flex justify-between gap-4">
                 <span>
                   <BiHeading_center label={LABELS.subtotal} />
@@ -499,12 +643,54 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
           </div>
 
           {/*
-            6 — Terms & Conditions.
+            6 — Approval & lab stamp.
 
-            Two columns: English on the left, Arabic on the right. The five
-            standing clauses (Transportation, Sampling, Disposing, OOS,
-            Outsource) are the whole block — there is no boilerplate paragraph
-            above them.
+            The stamp sits on the LEFT and the approval on the RIGHT, and
+            that ordering is fixed regardless of the app's language. The
+            container is direction-pinned with `dir="ltr"` because the
+            document root flips to `dir="rtl"` in Arabic — without the pin,
+            flexbox would put the first DOM child (the stamp) on the RIGHT
+            in Arabic and the layout would mirror itself.
+          */}
+          <div
+            dir="rtl"
+            className="flex items-start justify-between gap-8 pt-4 border-t border-black/20"
+          >
+            {/* ---- Left: the Green Lab stamp ---- */}
+            {/*
+              The stamp sits on a plain white block so it reads as part of the
+              page rather than as a transparent PNG floating over the
+              document's own background. No shadow and no rounding — the block
+              is the paper, not a card.
+            */}
+            <div className="shrink-0 bg-white p-2">
+              <img
+                src="/branding/stamp-greenlab.svg"
+                alt={LABELS.labStamp.en}
+                className="h-40 w-40 object-contain"
+              />
+            </div>
+
+            {/* ---- Right: who approved it ---- */}
+            <div className="text-end">
+              <h1 className="border-b border-black/30 pb-1 mb-3 text-base font-bold">
+                <BiHeading_center label={LABELS.approvedBy} />
+              </h1>
+              <ApproverSelect
+                value={quotation.approvedBy ?? ""}
+                onChange={(v) => patch({ approvedBy: v || undefined })}
+                editable={canEdit}
+              />
+            </div>
+          </div>
+
+          {/*
+            7 — Terms & Conditions.
+
+            The block has two parts: an editable boilerplate paragraph that is
+            specific to this quotation, and the five standing clauses
+            (Transportation, Sampling, Disposing, OOS, Outsource) that every
+            Green Lab quotation carries unchanged.
 
             The clauses are separated by rules so each one reads as its own
             item rather than running together as a wall of text.
@@ -514,7 +700,25 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
               <BiHeading_inline label={LABELS.terms} />
             </h2>
 
-            <div className="grid md:grid-cols-2 gap-8">
+            {/*
+              7a — The per-quotation boilerplate paragraph, editable.
+
+              Full width, sitting above the clause grid. It is a
+              `contentEditable` div rather than a `<textarea>` — html2canvas
+              draws a textarea's value as a single clipped line, while a
+              contentEditable div renders as ordinary text and wraps
+              correctly in the PDF raster.
+            */}
+            <EditableText
+              value={quotation.terms ?? ""}
+              onChange={setTerms}
+              editable={canEdit}
+              ariaLabel={LABELS.terms.en}
+              className="text-xs leading-relaxed"
+            />
+
+            {/* 7b — the five standing clauses */}
+            <div className="grid md:grid-cols-2 gap-8 mt-4">
               {/* ---- English ---- */}
               <div>
                 {QUOTATION_TERM_CLAUSES.map((clause, idx) => (
@@ -555,8 +759,10 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
             </div>
           </div>
 
-          {/* 7 — Signature */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pt-6">
+          {/* 8 - Customer Requirements */}
+
+          {/* 8 — Signature */}
+          {/* <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pt-6">
             <div className="h-24 w-24 border border-dashed border-black/40 flex items-center justify-center text-[10px] text-black/40 text-center px-2">
               <BiInline label={LABELS.authorizedSig} />
             </div>
@@ -570,7 +776,7 @@ export const QuotationPreview = forwardRef<HTMLDivElement, QuotationPreviewProps
                 </p>
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* 8 — Footer */}
           <div className="text-center text-[10px] text-black/60 border-t border-black/20 pt-3">
@@ -607,6 +813,269 @@ function BiHeader({ label }: { label: Label }) {
 }
 
 /**
+ * The styling shared by every editable control on the document.
+ *
+ * The PDF is a rasterisation of the DOM, and html2canvas paints an `<input>`
+ * from its own computed styles — border, background, shadow and all. The
+ * shadcn `Input` would therefore show up in the PDF as a white box with a
+ * grey border and a 16px value, while the surrounding document is 11-13px
+ * type with no chrome. These classes strip the chrome and match the
+ * document's own type so the raster looks like the page rather than a form.
+ *
+ * `placeholder` is deliberately absent: html2canvas falls back to the
+ * placeholder when an input is empty, which would print the hint text onto
+ * the client's quotation. Every editable control uses `aria-label` instead.
+ *
+ * `appearance-none` strips the browser's native widget chrome. It matters for
+ * the `<select>` used by the approver picker: without it the platform's
+ * dropdown arrow paints into the PDF as a form artefact. A custom caret is
+ * deliberately NOT added — a CSS-drawn arrow would rasterise as a foreign
+ * object, which html2canvas does not reproduce.
+ */
+const EDITABLE_CLASS =
+  "w-full bg-transparent border-0 shadow-none rounded-none appearance-none " +
+  "px-1 py-0.5 text-[13px] font-medium text-black outline-none " +
+  "focus-visible:ring-1 focus-visible:ring-black/40 " +
+  "disabled:cursor-default disabled:opacity-100";
+
+/**
+ * A single-line editable document value.
+ *
+ * Renders a plain `<input>` styled to match the document. When `editable` is
+ * false it falls back to the same text the read-only document shows, so the
+ * markup and the printed result are identical either way.
+ */
+function EditableValue({
+  value,
+  readOnlyValue,
+  onChange,
+  editable,
+  ariaLabel,
+  mono = false,
+  type = "text",
+  className = "",
+  ...rest
+}: {
+  value: string;
+  /**
+   * What the read-only document shows, when it differs from `value`. The
+   * Validity row is the case: the BDM edits a day count, but the printed
+   * document states the date the quotation is valid until.
+   */
+  readOnlyValue?: string;
+  onChange: (next: string) => void;
+  editable: boolean;
+  ariaLabel: string;
+  /** Render in the monospace face — dates, day counts, references. */
+  mono?: boolean;
+  type?: "text" | "number";
+  className?: string;
+  min?: number;
+  max?: number;
+}) {
+  if (!editable) {
+    return (
+      <span
+        className={`inline-block ${mono ? "font-mono" : ""} ${className}`}
+        aria-label={ariaLabel}
+      >
+        {readOnlyValue ?? value}
+      </span>
+    );
+  }
+
+  return (
+    <input
+      type={type}
+      value={value}
+      aria-label={ariaLabel}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${EDITABLE_CLASS} ${mono ? "font-mono" : ""} ${className}`}
+      {...rest}
+    />
+  );
+}
+
+/**
+ * A multi-line editable document value — the terms boilerplate paragraph.
+ *
+ * This is a `contentEditable` div, NOT a `<textarea>`, and the distinction is
+ * not cosmetic:
+ *
+ *   - html2canvas draws a `<textarea>`'s value as a SINGLE clipped line —
+ *     `renderTextWithLetterSpacing(new TextBounds(container.value, …))` is
+ *     one `fillText` call with no wrapping — so a long paragraph would be
+ *     truncated to its first line in the PDF.
+ *   - html2canvas has no special handling for `contentEditable` at all, so
+ *     the div's text renders through the ordinary text path, which uses the
+ *     browser's real layout (`getClientRects`) to produce one line box per
+ *     visual line. The paragraph wraps correctly.
+ *
+ * React cannot control a `contentEditable` child's text without clobbering
+ * the caret on every keystroke, so the div is left uncontrolled after mount:
+ * the text is injected once, edits are read back with `innerText`, and the
+ * DOM is re-synced only when the incoming value no longer matches what the
+ * DOM shows — which covers the language-switch default and a reloaded draft.
+ */
+function EditableText({
+  value,
+  onChange,
+  editable,
+  ariaLabel,
+  className = "",
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  editable: boolean;
+  ariaLabel: string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Nothing to do when the DOM already shows the incoming value. This is
+    // the common case while typing: the user edited the DOM, we pushed that
+    // text up, and the prop came back unchanged.
+    if (el.innerText === value) return;
+    // The DOM holds something the prop doesn't — the parent changed the
+    // value from the outside (the language-switch default, or a reloaded
+    // draft). Re-inject so the DOM catches up with the prop.
+    //
+    // Note this must NOT be guarded on "the DOM matches what we last
+    // emitted": the language switch replaces the prop's value while the DOM
+    // still holds the previous default, and skipping there would leave the
+    // document showing the wrong language's boilerplate.
+    el.innerText = value;
+  }, [value]);
+
+  const handleInput = () => {
+    const el = ref.current;
+    if (!el) return;
+    onChange(el.innerText);
+  };
+
+  if (!editable) {
+    return (
+      <p dir="ltr" className={`whitespace-pre-wrap ${className}`}>
+        {value}
+      </p>
+    );
+  }
+
+  return (
+    <div
+      ref={ref}
+      role="textbox"
+      aria-label={ariaLabel}
+      aria-multiline="true"
+      contentEditable
+      suppressContentEditableWarning
+      onInput={handleInput}
+      onBlur={handleInput}
+      className={`min-h-[3rem] whitespace-pre-wrap outline-none focus-visible:ring-1 focus-visible:ring-black/40 ${className}`}
+    />
+  );
+}
+
+/**
+ * The approver picker on the quotation document.
+ *
+ * A NATIVE `<select>`, deliberately. The shadcn `Select` renders its listbox
+ * into a portal on `document.body` — outside the `[data-printable]` node — so
+ * html2canvas would capture only the closed trigger and never the option
+ * list. A native select paints its selected option as ordinary text, which
+ * rasterises correctly.
+ *
+ * The picked person's name is ALSO printed as plain text beneath the control.
+ * A closed native select renders its value inconsistently across engines in
+ * the raster, so the explicit text is what guarantees the approver's name
+ * reaches the client's PDF.
+ *
+ * The printed block reads in three steps — the signature, then the name, then
+ * the position — mirroring how a signed approval is actually presented.
+ *
+ * When the document is read-only (the detail page, the save step) the whole
+ * control degrades to a plain text block — exactly like `EditableValue` does,
+ * so the markup and the printed result are identical either way.
+ */
+function ApproverSelect({
+  value,
+  onChange,
+  editable,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  editable: boolean;
+}) {
+  const approver = mockBdms.find((b) => b.id === value);
+
+  const nameBlock = approver ? (
+    <>
+      {/*
+        1 — The signature. A hand-written PNG when the BDM has one on file;
+        otherwise the name in a script face stands in for it.
+      */}
+      {approver.signatureUrl ? (
+        <img
+          src={approver.signatureUrl}
+          alt={approver.name}
+          className="h-16 max-w-[220px] object-contain ms-auto"
+        />
+      ) : (
+        <span dir="ltr" className="block font-serif italic text-2xl text-black/80">
+          {approver.name}
+        </span>
+      )}
+
+      {/* 2 — The name, in both languages. */}
+      <span dir="ltr" className="mt-2 block text-center text-sm font-semibold text-black">
+        {approver.name}
+      </span>
+      {/* <span dir="rtl" className="block text-xs font-normal text-black/70">
+        {approver.nameAr}
+      </span> */}
+
+      {/* 3 — The position. The same title for every approver. */}
+     <span dir="ltr" className="mt-1 block text-center text-xs font-medium text-black/60">
+        {LABELS.bdmPosition.en}
+      </span>
+      {/* <span dir="rtl" className="block text-[11px] font-normal text-black/55">
+        {LABELS.bdmPosition.ar}
+      </span> */}
+    </>
+  ) : null;
+
+  if (!editable) {
+    return (
+      <div className="inline-block" aria-label={LABELS.approvedBy.en}>
+        {nameBlock ?? <span className="text-black/40">—</span>}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <select
+        value={value}
+        aria-label={LABELS.approvedBy.en}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${EDITABLE_CLASS} text-end cursor-pointer`}
+      >
+        <option value="">—</option>
+        {mockBdms.map((b) => (
+          <option key={b.id} value={b.id}>
+            {b.name}
+          </option>
+        ))}
+      </select>
+      {approver && <span className="mt-1 block">{nameBlock}</span>}
+    </>
+  );
+}
+
+/**
  * One field row inside a customer- or quotation-info table.
  *
  * Three cells, reading across the row:
@@ -627,14 +1096,18 @@ function BiHeader({ label }: { label: Label }) {
  * document root's `dir="rtl"`. Each cell still declares its own `dir` so the
  * Arabic word keeps its natural letter order and ligatures.
  *
- * Renders nothing when the value is empty — the two blocks have different field
- * sets, so an empty row would leave a dangling label and a gap in the grid.
+ * Renders nothing when the value is empty, unless `alwaysShow` is set — the two
+ * blocks have different field sets, so an empty row would leave a dangling
+ * label and a gap in the grid. The CUSTOMER block opts into `alwaysShow` so no
+ * client field can silently drop off the document.
  */
 function InfoRow({
   label,
   value,
   valueAr,
   mono = false,
+  render,
+  alwaysShow = false,
 }: {
   label: Label;
   value?: string | null;
@@ -646,8 +1119,22 @@ function InfoRow({
   valueAr?: string;
   /** Render the value in the monospace face (VAT no., dates, refs). */
   mono?: boolean;
+  /**
+   * Replaces the plain text value with a control — used for the fields the
+   * BDM can set directly on the document. When supplied, the row renders even
+   * when `value` is empty, so an empty field still has something to click.
+   */
+  render?: ReactNode;
+  /**
+   * Always render the row, even when the value is empty — showing an em-dash
+   * instead. The CUSTOMER block uses this so that no client field can ever
+   * silently drop off the document: a quotation issued to a client with, say,
+   * no building recorded must still show the "Building" line, or the client
+   * sees a section with fields missing and assumes the lab omitted them.
+   */
+  alwaysShow?: boolean;
 }) {
-  if (!value || !value.trim()) return null;
+  if (!render && !alwaysShow && (!value || !value.trim())) return null;
   return (
     <tr>
       {/*
@@ -672,11 +1159,15 @@ function InfoRow({
           mono ? "font-mono" : "font-medium"
         }`}
       >
-        {value}
-        {valueAr && (
-          <span dir="rtl" className="block text-[11px] font-normal text-black/70">
-            {valueAr}
-          </span>
+        {render ?? (
+          <>
+            {value?.trim() || (alwaysShow ? "—" : value)}
+            {valueAr && (
+              <span dir="rtl" className="block text-[11px] font-normal text-black/70">
+                {valueAr}
+              </span>
+            )}
+          </>
         )}
       </td>
 
@@ -724,6 +1215,39 @@ function BiInline({ label }: { label: Label }) {
         {label.en}
       </span>
     </span>
+  );
+}
+
+/**
+ * A bilingual pair laid out as one row — English on the left, Arabic on the
+ * right — with both halves carrying the same visual weight.
+ *
+ * `BiInline` is the opposite order (Arabic first) and suits short labels;
+ * this is for the payment-instruction paragraphs, where the English leads
+ * and the Arabic follows across the row.
+ *
+ * Each half is its own `dir` run so the Arabic keeps its natural letter order
+ * and ligatures. Both halves are `flex-1`, so the row splits evenly and the
+ * Arabic hugs the end edge of its own half.
+ */
+function BiRow({
+  en,
+  ar,
+  className = "",
+}: {
+  en: ReactNode;
+  ar: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`flex items-start gap-6 ${className}`}>
+      <div dir="ltr" className="flex-1 text-start">
+        {en}
+      </div>
+      <div dir="rtl" className="flex-1 text-end">
+        {ar}
+      </div>
+    </div>
   );
 }
 

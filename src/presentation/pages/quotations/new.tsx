@@ -23,8 +23,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
-import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { toast } from "sonner";
 import { ClientPicker, snapshotOf, type ClientLike } from "@/presentation/components/features/quotations/ClientPicker";
 import { LineItemTable } from "@/presentation/components/features/quotations/LineItemTable";
@@ -35,7 +33,6 @@ import {
   addDays,
   DEFAULT_TERMS_AR,
   DEFAULT_TERMS_EN,
-  DEFAULT_PAYMENT_TERMS_AR,
   DEFAULT_PAYMENT_TERMS_EN,
   DEFAULT_VALIDITY_DAYS,
   localUid,
@@ -256,10 +253,6 @@ export default function NewQuotation() {
     }
   };
 
-  const updateField = <K extends keyof Quotation>(key: K, value: Quotation[K]) => {
-    setQ((prev) => recalc({ ...prev, [key]: value }));
-  };
-
   const handleIssue = () => {
     if (!q.clientId) {
       toast.error(pick(LABELS.errNoClient));
@@ -408,82 +401,19 @@ export default function NewQuotation() {
           </Card>
         )}
 
+        {/*
+          The preview step lets the BDM set the last fields directly on the
+          document, so each value sits exactly where it prints. The save step
+          renders the same component read-only — it is the finished document
+          that is about to be issued.
+        */}
         {(step === "preview" || step === "save") && (
-          <QuotationPreview ref={previewRef} quotation={q} />
-        )}
-
-        {step === "save" && (
-          <Card className="no-print mt-4">
-            <CardContent className="p-6 space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="validity">{pick(LABELS.validity)}</Label>
-                  <Input
-                    id="validity"
-                    type="number"
-                    min={1}
-                    value={
-                      Math.max(
-                        1,
-                        Math.round(
-                          (new Date(q.validUntil).getTime() -
-                            new Date(q.issueDate).getTime()) /
-                            (24 * 60 * 60 * 1000),
-                        ),
-                      ) || DEFAULT_VALIDITY_DAYS
-                    }
-                    onChange={(e) => {
-                      const days = Math.max(1, Number(e.target.value) || 1);
-                      updateField("validUntil", addDays(q.issueDate, days));
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="subject">{pick(LABELS.subject)}</Label>
-                <Input
-                  id="subject"
-                  value={q.subject ?? ""}
-                  onChange={(e) => updateField("subject", e.target.value)}
-                  placeholder={
-                    isRtl
-                      ? "مثال: فحص الدقائق الدقيقة — تحليل كيميائي"
-                      : "e.g. Microplastics screening — chemical analysis"
-                  }
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="payment-terms">{pick(LABELS.paymentTerms)}</Label>
-                <Input
-                  id="payment-terms"
-                  value={q.paymentTerms ?? ""}
-                  onChange={(e) => updateField("paymentTerms", e.target.value)}
-                  placeholder={
-                    isRtl ? DEFAULT_PAYMENT_TERMS_AR : DEFAULT_PAYMENT_TERMS_EN
-                  }
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="notes">{pick(LABELS.notes)}</Label>
-                <Input
-                  id="notes"
-                  value={q.notes ?? ""}
-                  onChange={(e) => updateField("notes", e.target.value)}
-                  placeholder={isRtl ? "أي ملاحظات إضافية تظهر على العرض" : "Any extra notes shown on the printout"}
-                />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="terms">{pick(LABELS.terms)}</Label>
-                <textarea
-                  id="terms"
-                  rows={4}
-                  value={q.terms ?? ""}
-                  onChange={(e) => updateField("terms", e.target.value)}
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-              </div>
-            </CardContent>
-          </Card>
+          <QuotationPreview
+            ref={previewRef}
+            quotation={q}
+            editable={step === "preview"}
+            onChange={step === "preview" ? (next) => setQ(recalc(next)) : undefined}
+          />
         )}
       </div>
 
