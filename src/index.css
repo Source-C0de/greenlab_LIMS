@@ -257,6 +257,32 @@
  *   (210mm wide ≈ 794px at 96dpi) so both the browser print and the
  *   html2canvas capture agree on the page geometry.
  * =========================================================================== */
+
+/*
+  One page = one A4 sheet at its TRUE width (210mm ≈ 794px at 96dpi).
+
+  The width applies ON SCREEN too, not only at print time. That is what makes
+  the three outputs identical:
+
+    - the screen preview shows the sheet at exactly A4 width, so it is a
+      to-scale preview of the printed page rather than a stretched full-width
+      strip;
+    - the browser print renders the same 794px, so print ≡ preview;
+    - html2canvas captures 794px and the PDF builder scales it back to
+      210mm — 1:1, no shrink. (Previously the wrapper filled its container on
+      screen, so the PDF was a 27%-shrunken copy of the design.)
+
+  The sheet edge (shadow + bottom margin) makes the page boundaries visible
+  in the preview; both are dropped at print time.
+*/
+.print-a4-page {
+  width: 210mm;
+  max-width: 100%;
+  margin: 0 auto 1.5rem;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
 @media print {
   .no-print {
     display: none !important;
@@ -304,15 +330,25 @@
     page-break-after: always;
   }
 
-  /* One printed page = one A4 sheet at its true width (210mm ≈ 794px at
-     96dpi). The break-inside guard stops the browser from straddling a page
-     wrapper across a sheet boundary, which would split a table mid-row. */
+  /* One printed page = one A4 sheet. The break-inside guard stops the
+     browser from straddling a page wrapper across a sheet boundary, which
+     would split a table mid-row. */
   .print-a4-page {
-    width: 210mm;
-    max-width: 100%;
     margin: 0 auto;
+    box-shadow: none;
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  /*
+    A page flagged `data-page-oversized` holds a single section that is
+    genuinely taller than one sheet (e.g. a 40-line items table). The browser
+    is allowed to flow it across sheets rather than pushing it onto a blank
+    one — the PDF builder scales such a page down to fit instead.
+  */
+  [data-page-oversized] {
+    break-inside: auto;
+    page-break-inside: auto;
   }
 
   /* Preserve background colors (QR codes, logos, status pills) when printed

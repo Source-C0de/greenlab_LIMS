@@ -167,10 +167,18 @@ export const mockAuthSession: AuthSession = {
  * Set the ambient role and, if a session is live, re-issue it so subscribers
  * observe the change. Called by the sandbox role switcher, which previously
  * mutated the AppContext state directly.
+ *
+ * GUARD AGAINST RECURSION: `publish()` notifies the AuthContext subscriber,
+ * which calls `setCurrentRole` → `setMockRole` → `publish()` … forever. The
+ * subscriber's role is always already the role we are about to set (it is
+ * driven by the same session), so publishing when the role is unchanged
+ * would only feed the loop. Publishing only on an ACTUAL change breaks the
+ * cycle without losing the one notification the subscriber needs.
  */
 export function setMockRole(role: Role): void {
   writeRoleOverride(role);
   if (!currentSession) return;
+  if (currentSession.user.role === role) return;
   currentSession = {
     ...currentSession,
     user: mockUserFor(role),
