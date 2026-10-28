@@ -73,8 +73,19 @@ function nextGeneration(): number {
  * The backend returns snake_case; the domain speaks camelCase. Tolerate BOTH
  * shapes — several endpoints already return camelCase in practice, and a hard
  * failure on the "wrong" one would log everyone out.
+ *
+ * The backend's auth `UserOut` carries only `id`, `email`, `full_name`,
+ * `role`, `is_active`, `created_at` (`app/domains/auth/schemas.py:53-61`).
+ * The remaining fields below exist because the admin directory's `UserOut`
+ * is a richer schema, and because the mock adapter produces them — they are
+ * absent (and defaulted) in API mode.
  */
-interface RawAuthUser extends Partial<AuthUser> {
+interface RawAuthUser extends Partial<Omit<AuthUser, "role">> {
+  id?: string;
+  email?: string | null;
+  /** The wire may carry a role the SPA has not enumerated yet. */
+  role?: string;
+  username?: string;
   full_name?: string;
   full_name_ar?: string;
   is_active?: boolean;

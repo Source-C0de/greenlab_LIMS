@@ -1,23 +1,64 @@
 # GreenLabLIMS KSA — Backend API Contract
 
-> **Status:** Documentation-only deliverable. The frontend SPA is still
-> 100% mock-data; this directory is the **contract** the backend must
-> implement so the SPA can be wired to it incrementally.
+> ## ⚠️ HISTORICAL — DO NOT USE AS A CONTRACT
 >
-> **Base path (production):** `https://<your-domain>/api/v1`
-> **Base path (dev):**       `http://localhost:8000/api/v1`
-> **Auth:**                   JWT in an **httpOnly cookie** (see [Auth](#auth))
-> **Content-Type:**           `application/json; charset=utf-8` (request & response)
+> **This directory is a pre-implementation specification.** It was written
+> *before* the FastAPI backend existed, and the backend was built to a
+> **different** contract. Where the two disagree, **the backend source is
+> authoritative** and this directory is wrong.
+>
+> **Verified against the shipped backend on 2026-10-27** — 20 concrete
+> mismatches were found, including:
+>
+> | This directory claims | The backend actually does |
+> |---|---|
+> | httpOnly cookie `glims_session` | **JWT Bearer only** — no cookies at all |
+> | `X-CSRF-Token` required on writes | **No CSRF mechanism** |
+> | Single 24 h JWT, no refresh endpoint | `POST /auth/refresh` exists; access **15 min**, refresh **7 days**, **rotated** |
+> | Login body `{username,password}` | **email only** — no `username` field |
+> | `POST /auth/superadmin/login` | **`POST /api/superadmin/auth/login`** (separate mounted prefix) |
+> | `POST /auth/register`, `POST /auth/otp/resend` | **These routes do not exist** |
+> | `POST /auth/password/forgot` | **`POST /auth/forgot-password`** |
+> | `POST /auth/otp/verify` | **`POST /auth/otp-verify`** (hyphen) |
+> | Success envelope `{data}` with no `meta` | `enveloped` always adds `meta` |
+> | Pagination `{page,pageSize,total,totalPages}` at top level | `meta.pagination` = `{limit,offset,total}`; no `totalPages` |
+> | `?page=1&pageSize=25` everywhere | **Mixed** — `limit`/`offset` on most routes; `page`/`page_size` on admin + superadmin |
+> | camelCase field casing throughout | **snake_case**, with camelCase accepted only where explicitly aliased |
+> | `GET /ready`, `GET /version` | **`/api/v1/health`**, **`/api/v1/health/db`** |
+> | `X-RateLimit-*` headers | **Not implemented** |
+>
+> The `X-LIMS-API-Version` negotiation header — which the frontend actually
+> depends on — appears **zero times** in this directory.
+>
+> ### Use these instead
+>
+> - **Authoritative backend docs:**
+>   `F:/Project/lims_backend/docs/api_rollout.md` and
+>   `F:/Project/lims_backend/adr/0008-standard-response-envelope.md`
+> - **Live machine-readable spec:** `GET /api/v1/openapi.json`
+>   (and `/api/v1/docs`) on a running backend
+> - **Frontend-side audit + verified contract:**
+>   [`../API_CLIENT_AUDIT_REPORT.md`](../API_CLIENT_AUDIT_REPORT.md)
+> - **Frontend regression guard:**
+>   `src/infrastructure/api/__tests__/contract.test.ts` — asserts every
+>   frontend endpoint path against the backend's real route table
+>
+> The files below are kept for historical reference only.
+
+**Base path (production):** `https://<your-domain>/api/v1`
+**Base path (dev):**       `http://localhost:8000/api/v1`
+**Auth:**                   JWT in an **httpOnly cookie** (see [Auth](#auth))
+**Content-Type:**           `application/json; charset=utf-8` (request & response)
 
 ## What's in this directory
 
 | File | Purpose | Read first? |
 |---|---|---|
-| [`README.md`](./README.md) | Conventions, auth, error envelope, pagination, integration overview | **Yes** |
-| [`openapi.yaml`](./openapi.yaml) | OpenAPI 3.1 spec — machine-readable contract for tooling | yes |
-| [`endpoints.md`](./endpoints.md) | Flat numbered list of all 95 endpoints with SPA file:line references | yes |
-| [`data-model.md`](./data-model.md) | Canonical entity field-by-field mapping to `src/mock-data/*.ts` | yes |
-| [`integration-guide.md`](./integration-guide.md) | 7-phase step-by-step for wiring the frontend to this API | yes |
+| [`README.md`](./README.md) | Conventions, auth, error envelope, pagination, integration overview | **No — historical** |
+| [`openapi.yaml`](./openapi.yaml) | OpenAPI 3.1 spec — machine-readable contract for tooling | **No — hand-authored, does not match the backend** |
+| [`endpoints.md`](./endpoints.md) | Flat numbered list of all 95 endpoints with SPA file:line references | **No — routes and file:line refs are stale** |
+| [`data-model.md`](./data-model.md) | Canonical entity field-by-field mapping to `src/mock-data/*.ts` | **No — `src/mock-data/` no longer exists** |
+| [`integration-guide.md`](./integration-guide.md) | 7-phase step-by-step for wiring the frontend to this API | **No — wiring is done; plan is obsolete** |
 | [`gaps.md`](./gaps.md) | Open questions for the backend team before implementation starts | no |
 
 ## Lineage & precedence

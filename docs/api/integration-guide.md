@@ -1,5 +1,12 @@
 # Frontend Integration Guide
 
+> ## ⚠️ HISTORICAL — pre-implementation spec, NOT the shipped contract
+>
+> The backend was built to a **different** contract, and the wiring this guide
+> describes has since been done. The backend source is authoritative. See
+> [`../API_CLIENT_AUDIT_REPORT.md`](../API_CLIENT_AUDIT_REPORT.md) for the
+> verified mismatches. Kept for historical reference only.
+
 > Step-by-step process for wiring the existing GreenLabLIMS KSA SPA to
 > a backend that implements [`openapi.yaml`](./openapi.yaml).
 >

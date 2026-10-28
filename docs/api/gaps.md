@@ -1,5 +1,12 @@
 # Open Questions / Gaps
 
+> ## ⚠️ HISTORICAL — pre-implementation spec, NOT the shipped contract
+>
+> The backend was built to a **different** contract, and many of these gaps
+> were resolved one way or another during implementation. The backend source is
+> authoritative. See [`../API_CLIENT_AUDIT_REPORT.md`](../API_CLIENT_AUDIT_REPORT.md)
+> for the verified mismatches. Kept for historical reference only.
+
 > These are decisions the backend team should **resolve before
 > implementation starts** (or at least before each respective phase).
 > Each gap has a recommended default in **bold** so you can accept it

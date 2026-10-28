@@ -48,7 +48,7 @@ export default function OtpVerify() {
     setError(null);
 
     try {
-      const response = await verifyOtp({ email: email.trim(), otp: value });
+      const response = await verifyOtp({ email: email.trim(), code: value });
       const user = applyLoginResponse(response);
       setLocation(ROLE_REDIRECT[user.role] ?? "/dashboard");
     } catch (err) {

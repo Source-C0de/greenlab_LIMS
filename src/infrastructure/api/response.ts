@@ -50,6 +50,11 @@ export interface ApiErrorBody {
   code: string;
   message: string;
   details?: Record<string, unknown>;
+  /**
+   * Present under the `modern` contract (`app/main.py:309-316`); under
+   * `enveloped` the id is at `meta.request_id` instead.
+   */
+  request_id?: string;
 }
 
 /** The canonical error envelope. */
@@ -77,6 +82,28 @@ export function isSuccessEnvelope(b: unknown): b is SuccessEnvelope<unknown> {
   );
 }
 
+/**
+ * Read the request id out of an error body.
+ *
+ * `meta.request_id` is the `enveloped` location; `error.request_id` is the
+ * `modern` one (`app/main.py:309-316`). Both are read, in that order.
+ */
+export function readBodyRequestId(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as {
+    meta?: { request_id?: unknown };
+    error?: { request_id?: unknown };
+  };
+
+  const fromMeta = b.meta?.request_id;
+  if (typeof fromMeta === "string" && fromMeta.length > 0) return fromMeta;
+
+  const fromError = b.error?.request_id;
+  if (typeof fromError === "string" && fromError.length > 0) return fromError;
+
+  return null;
+}
+
 /** Type guard for the canonical error envelope. */
 export function isErrorEnvelope(b: unknown): b is ErrorEnvelope {
   return (
@@ -95,18 +122,40 @@ export function isErrorEnvelope(b: unknown): b is ErrorEnvelope {
  * and silently returning `undefined` would hide it. `T` may itself be `null`
  * (e.g. a delete that returns `{"data": null}`) — that is a *typed* null, not
  * a missing payload.
+ *
+ * The backend passes through **raw** any route with no declared
+ * `response_model` (`app/main.py:236-243`), and skips the envelope for 204
+ * and for file downloads. A caller that hits one of those would otherwise get
+ * `undefined` with no indication of why, so this throws instead.
  */
 export function unwrapData<T>(b: SuccessEnvelope<T>): T {
+  if (!isSuccessEnvelope(b)) {
+    throw new Error(
+      "Expected a success envelope ({ data, meta }). " +
+        "The response was not enveloped — is the endpoint a file download, " +
+        "a 204, or a route without a declared response_model? " +
+        "Is the X-LIMS-API-Version header set to 'enveloped'?",
+    );
+  }
   return b.data;
 }
 
 /**
  * Unwrap a paginated envelope into its items and its window.
+ *
+ * Strict for the same reason as `unwrapData`: a raw body throws rather than
+ * yielding `undefined` items.
  */
 export function unwrapPage<T>(
   b: SuccessEnvelope<T[]>,
 ): { items: T[]; pagination: Pagination } {
-  const pagination = b.meta?.pagination;
+  if (!isSuccessEnvelope(b)) {
+    throw new Error(
+      "Expected a paginated envelope ({ data, meta }). " +
+        "The response was not enveloped — is the X-LIMS-API-Version header set to 'enveloped'?",
+    );
+  }
+  const pagination = b.meta.pagination;
   if (!pagination) {
     throw new Error(
       "Expected a paginated envelope (meta.pagination missing). " +
@@ -163,8 +212,7 @@ export function getApiErrorCode(err: unknown): string | null {
  * Read the request id from a failed request's body.
  *
  * The `X-Request-ID` header is canonical (it also covers 204s and file
- * downloads, which have no body); `meta.request_id` is the in-body copy for
- * the `enveloped` contract.
+ * downloads, which have no body); the in-body copies are read as fallbacks.
  */
 export function getApiErrorRequestId(err: unknown): string | null {
   if (!err || typeof err !== "object") return null;
@@ -172,7 +220,5 @@ export function getApiErrorRequestId(err: unknown): string | null {
   const body = (err as { body?: unknown }).body;
   if (!body || typeof body !== "object") return null;
 
-  if (isErrorEnvelope(body)) return body.meta?.request_id ?? null;
-
-  return null;
+  return readBodyRequestId(body);
 }

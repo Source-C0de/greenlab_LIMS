@@ -7,6 +7,7 @@
  */
 
 import { getToken } from "@/infrastructure/api/auth";
+import { readBodyRequestId } from "@/infrastructure/api/response";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -34,30 +35,47 @@ export function isApiEnabled(): boolean {
 }
 
 /**
- * Returns the base URL the browser should hit.
- * - Dev:   "/api/v1" — the Vite dev-server proxy forwards this to localhost:8000.
- * - Prod:  whatever VITE_API_BASE_URL says (absolute origin + path).
+ * The two API surfaces. They are **sibling** routers with separate token
+ * families — the superadmin surface is NOT under the tenant one
+ * (`app/api/v1/__init__.py:26`, `app/api/v1/superadmin.py:17`).
  */
-export function getBaseUrl(): string {
-  const explicit = import.meta.env.VITE_API_BASE_URL?.trim();
-  if (explicit && explicit.length > 0) return explicit.replace(/\/$/, "");
-  return "/api/v1";
+const TENANT_API_PREFIX = "/api/v1";
+const SUPERADMIN_API_PREFIX = "/api/superadmin";
+
+/**
+ * The configured origin, or `""` when the env var is unset (dev proxy mode).
+ * Trailing slashes are stripped.
+ */
+function configuredOrigin(): string {
+  return import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, "") ?? "";
 }
 
-// One-time dev warning when the runtime token store is empty but the env
-// var has a value — i.e. the backend is using Bearer auth but the login
-// flow hasn't populated the store yet (likely because the spec doesn't
-// currently include a `token` field in /auth/login responses).
-let envTokenWarned = false;
-function warnEnvTokenOnce(): void {
-  if (envTokenWarned) return;
-  envTokenWarned = true;
-  // eslint-disable-next-line no-console
-  console.warn(
-    "[greenlablims] No runtime auth token — falling back to VITE_API_TOKEN env var. " +
-      "If /auth/login is supposed to return a token field, the backend is missing it. " +
-      "Cookie auth (per the spec) also works; tokens are auto-included via credentials: 'include'.",
-  );
+/**
+ * Base URL for the **tenant** API.
+ *
+ * The env var is commonly a bare origin (`http://localhost:8000`), which would
+ * 404 on every call. The `/api/v1` prefix is appended if absent, so both
+ * spellings work.
+ */
+export function getBaseUrl(): string {
+  const origin = configuredOrigin();
+  if (!origin) return TENANT_API_PREFIX;
+  return origin.endsWith(TENANT_API_PREFIX)
+    ? origin
+    : `${origin}${TENANT_API_PREFIX}`;
+}
+
+/**
+ * Base URL for the **superadmin** API — the tenant prefix swapped out, so a
+ * single env var covers both surfaces.
+ */
+export function getSuperadminBaseUrl(): string {
+  const origin = configuredOrigin();
+  if (!origin) return SUPERADMIN_API_PREFIX;
+  const bare = origin.endsWith(TENANT_API_PREFIX)
+    ? origin.slice(0, -TENANT_API_PREFIX.length)
+    : origin;
+  return `${bare}${SUPERADMIN_API_PREFIX}`;
 }
 
 // `object` (not `Record<string, unknown>`) so that named interfaces such as
@@ -70,6 +88,14 @@ interface ApiFetchInit extends Omit<RequestInit, "body"> {
   body?: Json;
   /** Set to false to skip the default Bearer-token injection for this call. */
   skipAuth?: boolean;
+  /**
+   * Override the base URL for this call.
+   *
+   * Needed because the backend mounts two sibling API surfaces: the tenant API
+   * at `/api/v1` and the superadmin API at `/api/superadmin`. Pass
+   * `getSuperadminBaseUrl()` for superadmin routes.
+   */
+  baseUrl?: string;
 }
 
 /**
@@ -96,18 +122,19 @@ function readErrorMessage(body: unknown, status: number): string {
   return `HTTP ${status}`;
 }
 
-/**
- * Read the request id out of an error body.
- *
- * The `X-Request-ID` header is canonical — it is the only channel that also
- * covers 204 responses and file downloads, which have no body. `meta.request_id`
- * is the in-body copy under the `enveloped` contract, used as a fallback.
- */
-function readErrorRequestId(body: unknown): string | null {
-  if (!body || typeof body !== "object") return null;
-  const meta = (body as { meta?: { request_id?: unknown } }).meta;
-  if (meta && typeof meta.request_id === "string") return meta.request_id;
-  return null;
+// One-time dev warning when the runtime token store is empty but the env
+// var has a value. The backend is Bearer-only (no cookies), so an empty
+// runtime store means the login flow has not run in this browser session.
+let envTokenWarned = false;
+function warnEnvTokenOnce(): void {
+  if (envTokenWarned) return;
+  envTokenWarned = true;
+  // eslint-disable-next-line no-console
+  console.warn(
+    "[greenlablims] No runtime auth token — falling back to VITE_API_TOKEN env var. " +
+      "The backend is Bearer-only (no cookies); log in through the app to populate " +
+      "the token store.",
+  );
 }
 
 /**
@@ -118,8 +145,9 @@ function readErrorRequestId(body: unknown): string | null {
  *  - structured ApiError on non-2xx
  */
 export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promise<T> {
-  const { body, skipAuth, headers: rawHeaders, ...rest } = init;
-  const url = `${getBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+  const { body, skipAuth, baseUrl, headers: rawHeaders, ...rest } = init;
+  const base = baseUrl ?? getBaseUrl();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
 
   const headers = new Headers(rawHeaders);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
@@ -156,7 +184,11 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promis
     ...rest,
     headers,
     body: serializedBody,
-    credentials: rest.credentials ?? "include",
+    // The backend is Bearer-only and sets no cookies (no `set_cookie` anywhere
+    // in app/), so this is not load-bearing — it is kept as `same-origin`
+    // so the browser stops attaching ambient cookies to a cross-origin
+    // API call. Callers may still override it.
+    credentials: rest.credentials ?? "same-origin",
   });
 
   // 204 No Content — nothing to parse.
@@ -168,7 +200,7 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promis
 
   if (!response.ok) {
     const requestId =
-      response.headers.get("X-Request-ID") ?? readErrorRequestId(parsed);
+      response.headers.get("X-Request-ID") ?? readBodyRequestId(parsed);
     throw new ApiError(response.status, readErrorMessage(parsed, response.status), parsed, requestId);
   }
 

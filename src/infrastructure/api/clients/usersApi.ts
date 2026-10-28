@@ -104,37 +104,18 @@ export interface Page<T> {
 }
 
 /**
- * Response shape for `POST /admin/users/:id/reset-password`.
+ * Response for `POST /admin/users/:id/reset-password`.
  *
- * The endpoint serves two flows:
- *  - **Admin sets a password** (body `{ new_password: "..." }`): server
- *    returns `{ ok: true, mode: "set", message: "..." }`. The SPA
- *    surfaces the typed password in the copy-to-clipboard dialog.
- *  - **Server mints a link** (no body, legacy): server returns
- *    `{ ok: true, mode: "link", resetLink, expiresAt }`. The SPA shows
- *    the link instead.
- *
- * Failures use standard FastAPI 4xx codes (422 weak password, 404 user
- * not found, 403 self-reset, etc.) with the standard error envelope —
- * the SPA's existing `apiFetch` + `ApiError` path handles those.
+ * The backend returns exactly `{ ok: true, message: "Password updated" }`
+ * (`ResetPasswordResult`, `app/domains/users/schemas.py:148-166`). The admin
+ * supplies the new password in the request body — the server never mints a
+ * reset link, so there is no `mode`, `resetLink`, or `expiresAt` field.
  */
-export interface ResetPasswordSetResponse {
-  ok: true;
-  mode: "set";
+export interface ResetPasswordResponse {
+  ok: boolean;
   /** Localizable success message — server may translate via Accept-Language. */
   message: string;
 }
-
-export interface ResetPasswordLinkResponse {
-  ok: true;
-  mode: "link";
-  resetLink: string;
-  expiresAt: string;
-}
-
-export type ResetPasswordResponse =
-  | ResetPasswordSetResponse
-  | ResetPasswordLinkResponse;
 
 export type MenuEffect = "grant" | "deny";
 
@@ -194,7 +175,11 @@ function buildListQuery(filters: ListUsersFilters): string {
   if (filters.status) params.set("status", filters.status);
   if (typeof filters.page === "number") params.set("page", String(filters.page));
   if (typeof filters.pageSize === "number") {
-    params.set("pageSize", String(filters.pageSize));
+    // `/admin/users` declares `page_size` with **no** camelCase alias
+    // (`app/domains/users/router_admin.py:87-88`). FastAPI silently discards
+    // unknown query params, so a wrong name would quietly fall back to the
+    // server's default page size of 25.
+    params.set("page_size", String(filters.pageSize));
   }
   const qs = params.toString();
   return qs ? `?${qs}` : "";
@@ -293,22 +278,18 @@ export function deleteUser(id: string, confirm: string): Promise<void> {
 
 /** POST /admin/users/:id/reset-password.
  *
- *  - With body `{ new_password: "..." }`, the server sets the user's
- *    password directly and returns `{ ok: true, mode: "set", message }`.
- *  - With no body (or `{}`), the server mints a 24h reset link and
- *    returns `{ ok: true, mode: "link", resetLink, expiresAt }`.
- *
- *  An empty-object body is always sent (not `undefined`) so FastAPI's
- *  Pydantic body parser is happy regardless of which path the backend
- *  actually validates.
+ * The body is `{ new_password: "..." }` — the admin supplies the new password
+ * directly and the server sets it, returning `{ ok: true, message }`. The
+ * backend requires the field (`ResetPasswordRequest`,
+ * `app/domains/users/schemas.py:127-134`), so an empty body will 422.
  */
 export function resetUserPassword(
   id: string,
-  body?: { new_password: string },
+  body: { new_password: string },
 ): Promise<ResetPasswordResponse> {
   return unwrap<ResetPasswordResponse>(
     `/admin/users/${encodeURIComponent(id)}/reset-password`,
-    { method: "POST", body: body ?? {} },
+    { method: "POST", body },
   );
 }
 

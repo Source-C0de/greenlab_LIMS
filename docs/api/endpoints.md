@@ -1,5 +1,13 @@
 # Endpoints — flat reference list
 
+> ## ⚠️ HISTORICAL — pre-implementation spec, NOT the shipped contract
+>
+> The backend was built to a **different** contract. The backend source is
+> authoritative. See [`../API_CLIENT_AUDIT_REPORT.md`](../API_CLIENT_AUDIT_REPORT.md)
+> for the verified mismatches, and
+> `F:/Project/lims_backend/docs/api_rollout.md` for the real contract.
+> Kept for historical reference only.
+
 > **Total:** 95 operations across 14 tags.
 > **Path prefix:** `/api/v1`
 > **Auth:** httpOnly cookie `glims_session` (see [`README.md`](./README.md#auth)).

@@ -8,7 +8,7 @@ import { FlaskConical, ShieldCheck, AlertCircle, Eye, EyeOff } from "lucide-reac
 import { useAppContext, type Role } from "@/presentation/providers/AppContext";
 import { useAuth } from "@/presentation/providers/AuthContext";
 import { buildLoginPayload } from "@/infrastructure/api/auth";
-import { ApiError } from "@/infrastructure/api/api";
+import { ApiError, apiFetch, getBaseUrl } from "@/infrastructure/api/api";
 
 /** Where each role lands after a successful login. */
 const ROLE_REDIRECT: Record<Role, string> = {
@@ -305,8 +305,9 @@ export default function Login() {
 }
 
 /**
- * Quick connectivity test. Hits the same proxy the login form uses so the
- * user can see whether the backend is reachable before trying to sign in.
+ * Quick connectivity test. Reuses `apiFetch` so the base-URL resolution stays
+ * in one place — a bare `fetch` here could point at a different URL than the
+ * login form actually uses.
  */
 function TestBackendButton() {
   const { language } = useAppContext();
@@ -317,26 +318,32 @@ function TestBackendButton() {
   const run = async () => {
     setStatus("testing");
     setDetail("");
-    const base =
-      (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ||
-      "/api/v1";
-    const url = /^https?:\/\//.test(base)
-      ? `${base.replace(/\/$/, "")}/auth/login`
-      : `${window.location.origin}${base}/auth/login`;
+    const url = `${getBaseUrl()}/auth/login`;
     try {
-      const res = await fetch(url, {
+      // An empty body is intentional: the point is to prove the endpoint
+      // answers, not to authenticate. The server replies 422, which still
+      // proves reachability.
+      await apiFetch("/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-        credentials: "include",
+        body: {},
+        skipAuth: true,
       });
       setStatus("ok");
       setDetail(
-        isRtl
-          ? `تم الاتصال — استجاب الخادم بـ ${res.status}`
-          : `Reachable — server returned ${res.status}`,
+        isRtl ? "تم الاتصال — الخادم يستجيب" : "Reachable — server responded",
       );
     } catch (err) {
+      // A 4xx means the server answered, so it IS reachable; only a network
+      // failure (TypeError) means it is not.
+      if (err instanceof ApiError) {
+        setStatus("ok");
+        setDetail(
+          isRtl
+            ? `تم الاتصال — استجاب الخادم بـ ${err.status}`
+            : `Reachable — server returned ${err.status}`,
+        );
+        return;
+      }
       setStatus("fail");
       const msg = err instanceof Error ? err.message : String(err);
       setDetail(

@@ -1,5 +1,13 @@
 # Data Model — GreenLabLIMS KSA
 
+> ## ⚠️ HISTORICAL — pre-implementation spec, NOT the shipped contract
+>
+> The backend was built to a **different** contract. The backend source is
+> authoritative. See [`../API_CLIENT_AUDIT_REPORT.md`](../API_CLIENT_AUDIT_REPORT.md)
+> for the verified mismatches, and
+> `F:/Project/lims_backend/docs/api_rollout.md` for the real contract.
+> Kept for historical reference only.
+
 > Single-tenant PostgreSQL model. Every field listed here is either
 > required by today's frontend SPA, or implied by the screens the SPA
 > renders. When in doubt, mirror the **TypeScript type exactly** — the

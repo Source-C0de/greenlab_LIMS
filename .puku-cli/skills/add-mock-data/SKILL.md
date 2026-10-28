@@ -1,23 +1,26 @@
 ---
 name: add-mock-data
-description: "Add a new typed mock-data collection to GreenLabLIMS KSA. Creates a new file under src/mock-data with a TypeScript interface and a typed const, then re-exports it from the src/mock-data/index.ts barrel. Use when the user says 'add a new entity', 'I need a list of X', 'mock data for Y', 'add fixtures for Z', or 'add sample data'."
+description: "Add a new typed mock-data collection to GreenLabLIMS KSA. Creates a new file under src/infrastructure/mock/data with a TypeScript interface and a typed const, then re-exports it from the src/infrastructure/mock/data/index.ts barrel. Use when the user says 'add a new entity', 'I need a list of X', 'mock data for Y', 'add fixtures for Z', or 'add sample data'."
 when-to-use: "User asks to add a new mock dataset, fixture, or entity. Triggers: 'add a new entity', 'I need a list of X', 'mock data for Y', 'add fixtures', 'add sample data', 'mock 10 widgets', 'seed some X'."
 allowed-tools: Read, Write, Edit, Grep, Glob
 ---
 
 # add-mock-data
 
-All data in this project lives in `src/mock-data/` as TypeScript constants.
-The barrel at `src/mock-data/index.ts` re-exports everything for `import { … } from "@/mock-data"`.
+All mock data in this project lives in `src/infrastructure/mock/data/` as
+TypeScript constants (the **infrastructure** layer — presentation pages must
+not import data files directly, they go through the layer boundary).
+The barrel at `src/infrastructure/mock/data/index.ts` re-exports everything
+for `import { … } from "@/mock-data"`.
 
 ## 1. Create the file
 
-Path: `src/mock-data/<entity>.ts` (singular, lowercase, kebab-case is fine).
+Path: `src/infrastructure/mock/data/<entity>.ts` (singular, lowercase, kebab-case is fine).
 
 Convention from existing files: use the `mock` prefix for the array name.
 
 ```ts
-// src/mock-data/widgets.ts
+// src/infrastructure/mock/data/widgets.ts
 export interface Widget {
   id: string;
   nameEn: string;
@@ -42,7 +45,7 @@ Rules:
 
 ## 2. Re-export from the barrel
 
-Open `src/mock-data/index.ts` and append one line in alphabetical order:
+Open `src/infrastructure/mock/data/index.ts` and append one line in alphabetical order:
 
 ```ts
 export * from "./widgets";
@@ -66,9 +69,10 @@ const rows: Widget[] = mockWidgets;
 - The import should resolve from `@/mock-data` (no relative `../../`).
 - Hovering `mockWidgets[0]` in your editor should show all fields typed (no `any` leaking through).
 - If the new entity needs list rendering, drop it into a page and use `<DataTable<Widget>>` with typed column `render` props.
+- Run `npm run typecheck` and `npm run lint:layers` — the layering guard will fail if a presentation file imports the data file directly.
 
 ## Out of scope
 
-- Persisting the data to a real backend — out of project scope (mock-only).
+- Persisting the data to a real backend — the app is mock-first; API-backed modules go through `src/infrastructure/di/container.ts`.
 - Adding a Zustand/Redux store — the project uses local `useState` for list mutations.
 - Adding a CRUD page that writes back to the dataset — the data is read-only consts; mutations are local React state, not data writes.

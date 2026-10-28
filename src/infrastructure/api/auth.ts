@@ -2,14 +2,23 @@
  * Auth surface — token storage + endpoint helpers.
  *
  * Token is held in localStorage so a refresh keeps the user logged in.
- * `apiFetch` reads it via `getToken()` on every request (see `src/lib/api.ts`).
+ * `apiFetch` reads it via `getToken()` on every request (see
+ * `src/infrastructure/api/api.ts`).
  *
- * All endpoints unwrap the standard `{ data: T }` envelope from the spec
- * (docs/api/openapi.yaml §Components §DataEnvelope).
+ * The backend is **Bearer-only** — it sets no cookies and has no CSRF
+ * mechanism (`app/core/deps.py:33`; zero `set_cookie`/`csrf` hits in `app/`).
+ *
+ * All endpoints unwrap the standard `{ data: T, meta: T }` envelope. The
+ * client requests the `enveloped` contract via `X-LIMS-API-Version`.
+ *
+ * Two API surfaces exist and they are **siblings**, not parent/child:
+ *   - tenant API     → `/api/v1`
+ *   - superadmin API → `/api/superadmin`
+ * Superadmin calls therefore pass `getSuperadminBaseUrl()` explicitly.
  */
 
 import type { Role } from "@/shared/lib/types";
-import { apiFetch } from "@/infrastructure/api/api";
+import { apiFetch, getSuperadminBaseUrl } from "@/infrastructure/api/api";
 import { unwrapData, type SuccessEnvelope } from "@/infrastructure/api/response";
 
 const TOKEN_KEY = "glims_auth_token";
@@ -70,55 +79,54 @@ export function clearToken(): void {
 // Types — mirror docs/api/openapi.yaml User schema
 // ---------------------------------------------------------------------------
 
+/**
+ * The wire shape of the user returned by the **auth** endpoints — six fields
+ * (`app/domains/auth/schemas.py:53-61`). The adapter maps this onto the
+ * richer domain `AuthUser` (`src/domain/identity/model.ts`).
+ */
 export interface AuthUser {
   id: string;
-  username: string;
   email?: string | null;
-  fullName: string;
-  fullNameAr?: string | null;
+  full_name?: string;
   role: Role;
-  isActive: boolean;
-  clientId?: string | null;
-  lastLoginAt?: string | null;
-  createdAt: string;
-  updatedAt: string;
+  is_active?: boolean;
+  created_at?: string;
 }
 
 export interface LoginRequest {
-  /** Username (canonical short handle). Use this OR `email`, never both. */
-  username?: string;
-  /** Email address. Use this OR `username`, never both. */
-  email?: string;
+  /** The backend authenticates by **email only** (`app/domains/auth/schemas.py:11-13`). */
+  email: string;
   password: string;
 }
 
 /**
- * Routes the login form's single identifier field to the correct payload
- * shape. Backend authenticates against either `username` or `email` on the
- * users table. Detection rule: a string containing `@` is treated as an email;
- * everything else is a username. The form's `required` attribute guarantees
- * `identifier` is non-empty before this is called.
+ * Builds the login payload from the form's single identifier field.
+ *
+ * The identifier is always sent as `email` — the backend has no `username`
+ * field, so a `{ username, password }` body would 422 on the missing
+ * required `email`. The form still labels the field "Username or Email" for
+ * the mock flow; in API mode the value must be an email address.
  */
 export function buildLoginPayload(
   identifier: string,
   password: string,
 ): LoginRequest {
   const trimmed = identifier.trim();
-  return trimmed.includes("@")
-    ? { email: trimmed, password }
-    : { username: trimmed, password };
+  // The backend has no `username` field, so the identifier is sent as
+  // `email` regardless. An identifier without "@" is still sent as-is: the
+  // server owns validation and will return a clear 422 if it is not an
+  // email address.
+  return { email: trimmed, password };
 }
 
 export interface LoginResponse {
-  /**
-   * OAuth-style `access_token` (snake_case, JWT). Persisted to localStorage
-   * on successful auth so subsequent `apiFetch` calls can attach it.
-   */
+  /** Persisted to localStorage so subsequent `apiFetch` calls can attach it. */
   access_token: string;
-  /** OAuth refresh token (snake_case). Not consumed by the SPA today —
-   *  the backend re-issues a fresh pair on each successful `/auth/login`. */
+  /** Rotated on every refresh — the presented token is revoked (`app/domains/auth/service.py:160-163`). */
   refresh_token?: string;
   token_type?: string;
+  /** Superadmin response only (`app/domains/superadmin/schemas_auth.py:36`); the tenant `Token` schema has none. */
+  expires_in?: number;
   user: AuthUser;
 }
 
@@ -153,11 +161,17 @@ async function unwrap<T>(path: string, init?: Parameters<typeof apiFetch>[1]): P
 export const login = (body: LoginRequest): Promise<LoginResponse> =>
   unwrap<LoginResponse>("/auth/login", { method: "POST", body, skipAuth: true });
 
+/**
+ * Superadmin login. The superadmin surface is a sibling of the tenant API, so
+ * it needs its own base URL and has its own token family
+ * (`app/core/security.py:54-58`).
+ */
 export const superadminLogin = (body: LoginRequest): Promise<LoginResponse> =>
-  unwrap<LoginResponse>("/auth/superadmin/login", {
+  unwrap<LoginResponse>("/auth/login", {
     method: "POST",
     body,
     skipAuth: true,
+    baseUrl: getSuperadminBaseUrl(),
   });
 
 /**
@@ -176,7 +190,11 @@ export const logout = (): Promise<void> => {
 
 export const superadminLogout = (): Promise<void> => {
   const body = getRefreshToken() ? { refresh_token: getRefreshToken() } : {};
-  return unwrap<void>("/auth/superadmin/logout", { method: "POST", body });
+  return unwrap<void>("/auth/logout", {
+    method: "POST",
+    body,
+    baseUrl: getSuperadminBaseUrl(),
+  });
 };
 
 export const me = (): Promise<AuthUser> =>
@@ -246,23 +264,44 @@ export function getTokenExpiry(token: string | null): number | null {
   }
 }
 
+/**
+ * Tenant self-registration request.
+ *
+ * ⚠️ **The backend has no `/auth/register` route** — this 404s. Tenant
+ * creation lives under `/api/superadmin/tenants`
+ * (`app/domains/superadmin/router_tenant.py:91`).
+ *
+ * Kept because hiding the register page vs. adding a backend route is a
+ * product call, not a code call. See the audit report, Phase 2.
+ */
 export const requestRegister = (body: RegisterRequest): Promise<void> =>
   unwrap<void>("/auth/register", { method: "POST", body, skipAuth: true });
 
 export const forgotPassword = (email: string): Promise<void> =>
-  unwrap<void>("/auth/password/forgot", {
+  unwrap<void>("/auth/forgot-password", {
     method: "POST",
     body: { email },
     skipAuth: true,
   });
 
-export const verifyOtp = (body: { email: string; otp: string }): Promise<LoginResponse> =>
-  unwrap<LoginResponse>("/auth/otp/verify", {
+/**
+ * Verify an OTP code. The backend field is `code`, not `otp`
+ * (`OtpVerifyRequest`, `app/domains/auth/schemas.py:28-30`).
+ */
+export const verifyOtp = (body: {
+  email: string;
+  code: string;
+}): Promise<LoginResponse> =>
+  unwrap<LoginResponse>("/auth/otp-verify", {
     method: "POST",
     body,
     skipAuth: true,
   });
 
+/**
+ * ⚠️ **The backend has no `/auth/otp/resend` route** — this 404s. Kept for
+ * the same reason as `requestRegister`.
+ */
 export const resendOtp = (email: string): Promise<void> =>
   unwrap<void>("/auth/otp/resend", {
     method: "POST",

@@ -1,10 +1,10 @@
 import { useAppContext } from "@/presentation/providers/AppContext";
 import { cn } from "@/shared/lib/utils";
-import type { AuthUser } from "@/infrastructure/api/auth";
+import type { AuthUser } from "@/domain/identity/model";
 import type { Role } from "@/presentation/providers/AppContext";
 
 interface RoleAvatarProps {
-  user: Pick<AuthUser, "fullName" | "fullNameAr" | "username" | "role">;
+  user: Pick<AuthUser, "fullName" | "username" | "role" | "fullNameAr">;
   size?: "sm" | "md";
   showRole?: boolean;
   className?: string;

@@ -202,11 +202,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (req: LoginRequest): Promise<AuthUser> => {
-      // The backend accepts either a username or an email; `buildLoginPayload`
-      // routes a single identifier field to the right shape.
-      const payload = req.username
-        ? { username: req.username, password: req.password }
-        : buildLoginPayload(req.email ?? "", req.password);
+      // The backend authenticates by **email only**
+      // (`app/domains/auth/schemas.py:11-13`), so the identifier is always
+      // sent as `email`.
+      const payload = buildLoginPayload(req.email ?? "", req.password);
 
       // `signIn` THROWS on failure (rather than returning a Result): the
       // existing login page distinguishes `instanceof ApiError` (401 / 4xx)
@@ -214,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // distinction carries UX meaning — wrong password vs backend down. The
       // HTTP adapter re-throws both unmodified.
       const session = await container.auth.signIn({
-        email: payload.email ?? payload.username ?? "",
+        email: payload.email,
         password: payload.password,
       });
       return toUser(session);

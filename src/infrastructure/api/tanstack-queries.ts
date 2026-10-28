@@ -431,14 +431,11 @@ export function useDeleteUser(): UseMutationResult<
 export function useResetUserPassword(): UseMutationResult<
   ResetPasswordResponse,
   unknown,
-  { id: string; newPassword?: string }
+  { id: string; newPassword: string }
 > {
   return useMutation({
     mutationFn: ({ id, newPassword }) =>
-      apiResetPassword(
-        id,
-        newPassword ? { new_password: newPassword } : undefined,
-      ),
+      apiResetPassword(id, { new_password: newPassword }),
   });
 }
 

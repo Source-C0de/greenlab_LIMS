@@ -471,26 +471,15 @@ export default function UsersAdmin() {
         { id: target.id, newPassword: typedPassword },
         {
           onSuccess: (resp) => {
-            // Discriminate on the server's success shape:
-            //   - mode: "set"  → admin typed the password → show it in the
-            //                    copy-to-clipboard dialog.
-            //   - mode: "link" → server minted a link (legacy, no body)
-            //                    → show the link instead.
-            if (resp.mode === "set") {
-              setTempPassword({
-                username: target.username,
-                password: typedPassword,
-              });
-              toast.success(resp.message || t("Password updated", "تم تحديث كلمة المرور"));
-            } else {
-              setTempPassword({
-                username: target.username,
-                password: resp.resetLink,
-              });
-              toast.success(
-                t("Reset link generated", "تم إنشاء رابط إعادة التعيين"),
-              );
-            }
+            // The admin typed the password and the server set it directly
+            // (`{ ok, message }` — `app/domains/users/schemas.py:148-166`),
+            // so the copy-to-clipboard dialog shows the password that was
+            // just applied.
+            setTempPassword({
+              username: target.username,
+              password: typedPassword,
+            });
+            toast.success(resp.message || t("Password updated", "تم تحديث كلمة المرور"));
             closeResetPassword();
           },
           onError: (e) => {

@@ -17,7 +17,7 @@ and form labels must have a paired EN/AR variant.
 **not** exported from the context.
 
 ```tsx
-import { useAppContext } from "@/context/AppContext";
+import { useAppContext } from "@/presentation/providers/AppContext";
 
 type Label = { en: string; ar: string };
 
@@ -83,10 +83,10 @@ status codes** — `status: "active"` stays "active" in both languages.
 
 ## Reference: existing patterns
 
-- `src/components/layout/Sidebar.tsx` — `getNavItems()` builds bilingual nav with role gating.
-- `src/components/shared/StatusBadge.tsx` — status colors with bilingual labels.
-- `src/pages/login.tsx` — full auth screen with EN/AR strings.
-- `src/context/AppContext.tsx` — toggles `document.documentElement.dir` when `language` changes.
+- `src/presentation/components/layout/Sidebar.tsx` — `getNavItems()` builds bilingual nav with role gating.
+- `src/presentation/components/shared/StatusBadge.tsx` — status colors with bilingual labels.
+- `src/presentation/pages/login.tsx` — full auth screen with EN/AR strings.
+- `src/presentation/providers/AppContext.tsx` — toggles `document.documentElement.dir` when `language` changes.
 
 ## Verification
 

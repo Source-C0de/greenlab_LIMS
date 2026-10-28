@@ -1,5 +1,13 @@
 # Users & Role Permissions API
 
+> ## ⚠️ HISTORICAL — pre-implementation spec, NOT the shipped contract
+>
+> The backend was built to a **different** contract. The backend source is
+> authoritative. See [`../API_CLIENT_AUDIT_REPORT.md`](../API_CLIENT_AUDIT_REPORT.md)
+> for the verified mismatches, and
+> `F:/Project/lims_backend/docs/api_rollout.md` for the real contract.
+> Kept for historical reference only.
+
 > **Lineage.** This document extends the single-tenant contract declared in
 > [`README.md`](./README.md) (and materialised in
 > [`data-model.md`](./data-model.md) §2 — `users` table). It does **not**

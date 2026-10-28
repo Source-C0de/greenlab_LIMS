@@ -8,7 +8,10 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "serve": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint:layers": "node scripts/check-layering.mjs"
+    "lint:layers": "node scripts/check-layering.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:contract": "vitest run src/infrastructure/api/__tests__/contract.test.ts"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
@@ -75,6 +78,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.9.3",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^2.1.9"
   }
 }

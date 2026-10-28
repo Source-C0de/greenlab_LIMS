@@ -1,9 +1,28 @@
+# =============================================================================
+# ⚠️ HISTORICAL — pre-implementation spec, NOT the shipped contract.
+#
+# This file is HAND-AUTHORED and does NOT match the FastAPI backend that was
+# built. The backend is the authority. It differs on ~20 points, including:
+#   - auth is JWT Bearer only (no cookies, no CSRF)
+#   - there is a SECOND, sibling API surface at `/api/superadmin`
+#   - success bodies are enveloped: { data, meta } under X-LIMS-API-Version
+#   - pagination is meta.pagination = { limit, offset, total }
+#   - field casing is snake_case (camelCase accepted only where aliased)
+#   - some routes here do not exist at all (register, otp/resend)
+#
+# The live spec is served by the backend at GET /api/v1/openapi.json.
+# See docs/API_CLIENT_AUDIT_REPORT.md for the verified mismatches.
+# Kept for historical reference only.
+# =============================================================================
 openapi: 3.1.0
 info:
   title: GreenLabLIMS KSA API
   version: 1.0.0
   summary: REST + JSON contract for the GreenLabLIMS KSA single-tenant LIMS backend.
   description: |
+    ⚠️ HISTORICAL — this spec predates the backend and does not match it.
+    The backend source is authoritative. See docs/API_CLIENT_AUDIT_REPORT.md.
+
     Backend API contract for the GreenLabLIMS KSA React SPA.
 
     - All paths are prefixed with `/api/v1`.

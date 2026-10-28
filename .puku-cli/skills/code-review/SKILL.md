@@ -40,12 +40,15 @@ Capture the list of changed files with `git diff --name-only` (or `--cached --na
 **Success criteria**: A non-empty diff (or explicit user confirmation that empty diff is intentional) and a list of changed file paths are available.
 
 ### 2. Run static + style checks
-For each changed file, run the appropriate checks. Run these concurrently where independent:
-- **Lint/format**: `npm run lint` if a script exists; otherwise skip with a note.
-- **Type-check**: `npm run typecheck` or `npx tsc --noEmit` if TypeScript is detected.
-- **Project conventions**: scan for GreenLabLIMS-specific patterns (bilingual component shape, role-gated routes, mock-data barrel exports) using Grep.
+Run these concurrently where independent:
+- **Type-check**: `npm run typecheck`
+- **Layering guard**: `npm run lint:layers` — the one-way dependency rule (`presentation → infrastructure → domain → shared`)
+- **Tests**: `npm test` (Vitest)
+- **Project conventions**: scan for GreenLabLIMS-specific patterns (bilingual component shape, role-gated routes, mock-data barrel exports, `any` in DataTable column render props, `@ts-ignore`, empty `catch {}`) using Grep.
 
-**Success criteria**: Lint, typecheck, and convention scans complete. Their outputs are summarized as a finding list.
+> There is **no** `npm run lint` script in this project — do not invent one.
+
+**Success criteria**: Typecheck, layering guard, tests, and convention scans complete. Their outputs are summarized as a finding list.
 
 ### 3. Security & logic review
 Invoke a sub-agent (`general-purpose`) to read the diff and changed files in full, then evaluate:
