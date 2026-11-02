@@ -24,55 +24,106 @@ import { unwrapData, type SuccessEnvelope } from "@/infrastructure/api/response"
 const TOKEN_KEY = "glims_auth_token";
 const REFRESH_KEY = "glims_auth_refresh";
 
+/**
+ * The superadmin surface has its OWN token family, kept in a SEPARATE slot.
+ *
+ * The backend mints two parallel token families and enforces the distinction
+ * server-side (`app/core/security.py:54-58`):
+ *
+ *   | family     | access type          | refresh type             |
+ *   |------------|----------------------|--------------------------|
+ *   | tenant     | `access`             | `refresh`                |
+ *   | superadmin | `superadmin_access`  | `superadmin_refresh`     |
+ *
+ * `get_current_user` accepts `ACCESS` only; `get_current_superadmin`
+ * accepts `SUPERADMIN_ACCESS` only and rejects anything else with
+ * "Wrong token type" (`app/core/deps.py:53,142-149`). So a superadmin token
+ * written into the shared tenant slot would 401 every tenant endpoint, and a
+ * tenant token in the superadmin slot would 401 every superadmin endpoint.
+ *
+ * They also live in different tables — a `SuperadminUser` id does not resolve
+ * against `User` — so one slot can never hold both.
+ *
+ * THIS IS THE CANONICAL DESCRIPTION of the two token families. The other
+ * places that mention them (`api/repositories/authSession.ts`,
+ * `api/clients/rolesApi.ts`) point here.
+ */
+const SUPERADMIN_TOKEN_KEY = "glims_sa_auth_token";
+const SUPERADMIN_REFRESH_KEY = "glims_sa_auth_refresh";
+
 // ---------------------------------------------------------------------------
 // Token storage
 // ---------------------------------------------------------------------------
 
-export function getToken(): string | null {
+function readKey(key: string): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return window.localStorage.getItem(TOKEN_KEY);
+    return window.localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-export function setToken(token: string): void {
+function writeKey(key: string, token: string): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(TOKEN_KEY, token);
+    window.localStorage.setItem(key, token);
   } catch {
     // localStorage may be unavailable (private mode, quota). The token simply
     // won't survive a refresh in that case — the user will need to log in again.
   }
 }
 
-export function getRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
+function removeKey(key: string): void {
+  if (typeof window === "undefined") return;
   try {
-    return window.localStorage.getItem(REFRESH_KEY);
+    window.localStorage.removeItem(key);
   } catch {
-    return null;
+    // ignore
   }
+}
+
+export function getToken(): string | null {
+  return readKey(TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  writeKey(TOKEN_KEY, token);
+}
+
+export function getRefreshToken(): string | null {
+  return readKey(REFRESH_KEY);
 }
 
 export function setRefreshToken(token: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(REFRESH_KEY, token);
-  } catch {
-    // ignore
-  }
+  writeKey(REFRESH_KEY, token);
 }
 
 export function clearToken(): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(TOKEN_KEY);
-    window.localStorage.removeItem(REFRESH_KEY);
-  } catch {
-    // ignore
-  }
+  removeKey(TOKEN_KEY);
+  removeKey(REFRESH_KEY);
+}
+
+/** The superadmin access token, or null when no superadmin session is stored. */
+export function getSuperadminToken(): string | null {
+  return readKey(SUPERADMIN_TOKEN_KEY);
+}
+
+export function setSuperadminToken(token: string): void {
+  writeKey(SUPERADMIN_TOKEN_KEY, token);
+}
+
+export function getSuperadminRefreshToken(): string | null {
+  return readKey(SUPERADMIN_REFRESH_KEY);
+}
+
+export function setSuperadminRefreshToken(token: string): void {
+  writeKey(SUPERADMIN_REFRESH_KEY, token);
+}
+
+export function clearSuperadminToken(): void {
+  removeKey(SUPERADMIN_TOKEN_KEY);
+  removeKey(SUPERADMIN_REFRESH_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -83,13 +134,24 @@ export function clearToken(): void {
  * The wire shape of the user returned by the **auth** endpoints — six fields
  * (`app/domains/auth/schemas.py:53-61`). The adapter maps this onto the
  * richer domain `AuthUser` (`src/domain/identity/model.ts`).
+ *
+ * The superadmin surface returns a DIFFERENT shape — `SuperadminUserOut`
+ * (`app/domains/superadmin/schemas_auth.py:18-30`) — with `status` and
+ * `mfa_enabled` instead of `is_active`, and a role drawn from the
+ * `SuperadminRole` enum. Both are modelled here so one `normaliseUser` can
+ * absorb either; `status` is what tells us whether the account is active.
  */
 export interface AuthUser {
   id: string;
   email?: string | null;
   full_name?: string;
+  full_name_ar?: string | null;
   role: Role;
   is_active?: boolean;
+  /** Superadmin only — `active` | `suspended` | `disabled`. */
+  status?: "active" | "suspended" | "disabled";
+  /** Superadmin only (`SuperadminUserOut.mfa_enabled`). */
+  mfa_enabled?: boolean;
   created_at?: string;
 }
 
@@ -189,13 +251,53 @@ export const logout = (): Promise<void> => {
 };
 
 export const superadminLogout = (): Promise<void> => {
-  const body = getRefreshToken() ? { refresh_token: getRefreshToken() } : {};
+  // Uses the SUPERADMIN refresh token — the tenant one belongs to a different
+  // token family and the backend would reject it.
+  const refresh = getSuperadminRefreshToken();
+  const body = refresh ? { refresh_token: refresh } : {};
   return unwrap<void>("/auth/logout", {
     method: "POST",
     body,
     baseUrl: getSuperadminBaseUrl(),
+    token: getSuperadminToken(),
   });
 };
+
+/**
+ * The superadmin identity — `GET /api/superadmin/auth/me`.
+ *
+ * This is the superadmin counterpart of `me()`. It MUST be a separate call:
+ * the tenant `/auth/me` resolves the token subject against the `User` table,
+ * and a superadmin's id lives in `SuperadminUser`, so the tenant `/me`
+ * answers "Not found or inactive" for a perfectly valid superadmin token.
+ */
+export const superadminMe = (): Promise<AuthUser> =>
+  unwrap<AuthUser>("/auth/me", {
+    baseUrl: getSuperadminBaseUrl(),
+    token: getSuperadminToken(),
+  });
+
+/**
+ * Exchange a superadmin refresh token for a fresh token pair.
+ *
+ * The superadmin access token lives for 24 hours
+ * (`SUPERADMIN_ACCESS_EXPIRE_MINUTES = 24 * 60`, `app/core/security.py:108`)
+ * — much longer than the tenant's 15 minutes — but it still expires, so the
+ * session has to be renewable across a page reload.
+ *
+ * Like the tenant refresh, the refresh token ROTATES: the response carries a
+ * new `refresh_token` and invalidates the old one, so the caller must
+ * persist the new value.
+ */
+export const superadminRefresh = (body: {
+  refresh_token: string;
+}): Promise<LoginResponse> =>
+  unwrap<LoginResponse>("/auth/refresh", {
+    method: "POST",
+    body,
+    skipAuth: true,
+    baseUrl: getSuperadminBaseUrl(),
+  });
 
 export const me = (): Promise<AuthUser> =>
   unwrap<AuthUser>("/auth/me");

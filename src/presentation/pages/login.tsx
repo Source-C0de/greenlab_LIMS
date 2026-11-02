@@ -5,21 +5,11 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { FlaskConical, ShieldCheck, AlertCircle, Eye, EyeOff } from "lucide-react";
-import { useAppContext, type Role } from "@/presentation/providers/AppContext";
+import { useAppContext } from "@/presentation/providers/AppContext";
 import { useAuth } from "@/presentation/providers/AuthContext";
+import { redirectForRole } from "@/presentation/lib/roleRedirects";
 import { buildLoginPayload } from "@/infrastructure/api/auth";
 import { ApiError, apiFetch, getBaseUrl } from "@/infrastructure/api/api";
-
-/** Where each role lands after a successful login. */
-const ROLE_REDIRECT: Record<Role, string> = {
-  superadmin:   "/admin",
-  admin:        "/dashboard",
-  lab_manager:  "/dashboard",
-  analyst:      "/dashboard",
-  receptionist: "/samples/receiving",
-  accountant:   "/accounting/dashboard",
-  client:       "/client-portal",
-};
 
 // Bilingual label table (Style B per the bilingual-component skill).
 type Label = { en: string; ar: string };
@@ -89,7 +79,7 @@ export default function Login() {
 
     try {
       const user = await submitLogin(buildLoginPayload(username, password));
-      setLocation(ROLE_REDIRECT[user.role] ?? "/dashboard");
+      setLocation(redirectForRole(user.role));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setLoginError(pick(LABELS.invalid));

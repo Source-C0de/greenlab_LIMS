@@ -42,13 +42,26 @@ import type { AuthSession } from "@/domain/identity/ports";
 import { isApiEnabled } from "@/infrastructure/api/api";
 import { mockSampleRepository } from "@/infrastructure/mock/repositories/sampleRepository";
 import { mockClientRepository } from "@/infrastructure/mock/repositories/clientRepository";
-import { mockAuthSession } from "@/infrastructure/mock/repositories/authSession";
-import { httpAuthSession } from "@/infrastructure/api/repositories/authSession";
+import { mockAuthSession, mockSuperadminSession } from "@/infrastructure/mock/repositories/authSession";
+import {
+  httpAuthSession,
+  httpSuperadminSession,
+} from "@/infrastructure/api/repositories/authSession";
 
 export interface Container {
   readonly samples: SampleRepository;
   readonly clients: ClientRepository;
   readonly auth: AuthSession;
+  /**
+   * The **superadmin** session — a separate identity from the tenant one.
+   *
+   * The backend mounts two sibling surfaces with separate token families and
+   * separate identity tables (`app/core/deps.py:49-83,109-183`), so a
+   * superadmin session cannot be represented by the tenant `auth` port. It
+   * gets its own port here for the same reason the HTTP layer has two
+   * adapters.
+   */
+  readonly superadminAuth: AuthSession;
 }
 
 /**
@@ -75,4 +88,5 @@ export const container: Container = {
   samples: mockSampleRepository,
   clients: mockClientRepository,
   auth: API_ENABLED ? httpAuthSession : mockAuthSession,
+  superadminAuth: API_ENABLED ? httpSuperadminSession : mockSuperadminSession,
 };

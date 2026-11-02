@@ -96,6 +96,15 @@ interface ApiFetchInit extends Omit<RequestInit, "body"> {
    * `getSuperadminBaseUrl()` for superadmin routes.
    */
   baseUrl?: string;
+  /**
+   * Attach THIS token instead of the default tenant one.
+   *
+   * The backend enforces two separate token families — a superadmin request
+   * must present the superadmin token, or it is rejected with 401 "Wrong
+   * token type". See `api/auth.ts` for the full description of the two
+   * families.
+   */
+  token?: string | null;
 }
 
 /**
@@ -145,7 +154,7 @@ function warnEnvTokenOnce(): void {
  *  - structured ApiError on non-2xx
  */
 export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promise<T> {
-  const { body, skipAuth, baseUrl, headers: rawHeaders, ...rest } = init;
+  const { body, skipAuth, baseUrl, token: tokenOverride, headers: rawHeaders, ...rest } = init;
   const base = baseUrl ?? getBaseUrl();
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
 
@@ -162,7 +171,10 @@ export async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promis
   // Bearer token: prefer the runtime value (set on login), fall back to the
   // build-time env var for dev convenience. Reading on every call means
   // logout takes effect immediately.
-  const runtimeToken = skipAuth ? null : getToken();
+  //
+  // An explicit `token` overrides the default tenant token — that is how the
+  // superadmin surface presents its own token family.
+  const runtimeToken = skipAuth ? null : (tokenOverride ?? getToken());
   const envToken = skipAuth ? null : import.meta.env.VITE_API_TOKEN?.trim();
   const token = runtimeToken ?? envToken;
   if (token && !headers.has("Authorization")) {

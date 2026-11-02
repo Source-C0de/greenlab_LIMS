@@ -5,20 +5,11 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/shared/ui/input-otp";
 import { FlaskConical, ArrowLeft, AlertCircle } from "lucide-react";
-import { useAppContext, type Role } from "@/presentation/providers/AppContext";
+import { useAppContext } from "@/presentation/providers/AppContext";
 import { useAuth } from "@/presentation/providers/AuthContext";
+import { redirectForRole } from "@/presentation/lib/roleRedirects";
 import { resendOtp, verifyOtp } from "@/infrastructure/api/auth";
 import { ApiError } from "@/infrastructure/api/api";
-
-const ROLE_REDIRECT: Record<Role, string> = {
-  superadmin:   "/admin",
-  admin:        "/dashboard",
-  lab_manager:  "/dashboard",
-  analyst:      "/dashboard",
-  receptionist: "/samples/receiving",
-  accountant:   "/accounting/dashboard",
-  client:       "/client-portal",
-};
 
 export default function OtpVerify() {
   const [, setLocation] = useLocation();
@@ -50,7 +41,7 @@ export default function OtpVerify() {
     try {
       const response = await verifyOtp({ email: email.trim(), code: value });
       const user = applyLoginResponse(response);
-      setLocation(ROLE_REDIRECT[user.role] ?? "/dashboard");
+      setLocation(redirectForRole(user.role));
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError("Invalid or expired code. Please try again.");

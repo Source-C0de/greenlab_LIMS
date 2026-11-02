@@ -25,19 +25,12 @@
 
 import type { AuthSession, Credentials, Session } from "@/domain/identity/ports";
 import type { AuthUser } from "@/domain/identity/model";
-import type { Role } from "@/shared/lib/types";
+import { PLATFORM_ROLES, TENANT_ROLES, type Role } from "@/shared/lib/types";
 
 const ROLE_OVERRIDE_KEY = "glims_role_override";
 
-const ROLES: readonly Role[] = [
-  "superadmin",
-  "admin",
-  "lab_manager",
-  "analyst",
-  "client",
-  "accountant",
-  "receptionist",
-];
+/** Every role the mock role-picker may select. */
+const ROLES: readonly Role[] = [...PLATFORM_ROLES, ...TENANT_ROLES];
 
 function readRoleOverride(): Role | null {
   if (typeof window === "undefined") return null;
@@ -96,92 +89,120 @@ function nextToken(): string {
  * means the two adapters have the same shape and a future async mock (delayed
  * responses, simulated latency) inherits the guard for free.
  */
-let authGeneration = 0;
-function nextGeneration(): number {
-  authGeneration += 1;
-  return authGeneration;
-}
+function createMockAuthSession(): AuthSession & { setRole(role: Role): void } {
+  let authGeneration = 0;
+  function nextGeneration(): number {
+    authGeneration += 1;
+    return authGeneration;
+  }
 
-let currentSession: Session | null = null;
-const listeners = new Set<(session: Session | null) => void>();
+  let currentSession: Session | null = null;
+  const listeners = new Set<(session: Session | null) => void>();
 
-function publish(): void {
-  for (const fn of listeners) fn(currentSession);
-}
+  function publish(): void {
+    for (const fn of listeners) fn(currentSession);
+  }
 
-function sessionFor(role: Role): Session {
+  function sessionFor(role: Role): Session {
+    return {
+      user: mockUserFor(role),
+      token: nextToken(),
+      // No real expiry in mock mode; the far-future date simply stops any
+      // caller that reads it from treating the session as already-expired.
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
+
   return {
-    user: mockUserFor(role),
-    token: nextToken(),
-    // No real expiry in mock mode; the far-future date simply stops any
-    // caller that reads it from treating the session as already-expired.
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    async restore(): Promise<Session | null> {
+      // Mock mode has no persisted session across reloads by design — the app
+      // boots anonymous and the user picks a role. Returning null (rather than
+      // inventing a session) keeps `AuthContext`'s loading → anonymous
+      // transition identical to what it does today when the API is off.
+      currentSession = null;
+      publish();
+      return null;
+    },
+
+    async signIn(_credentials: Credentials): Promise<Session> {
+      // Credentials are ignored on purpose — see the file header.
+      currentSession = sessionFor(currentMockRole());
+      publish();
+      return currentSession;
+    },
+
+    adoptSession(session: Session): void {
+      // Mock mode has no OTP flow, so nothing produces a session to adopt. If
+      // one arrives anyway (e.g. a caller reusing an HTTP-shaped response), take
+      // it at face value rather than dropping the user on the floor.
+      nextGeneration();
+      currentSession = session;
+      publish();
+    },
+
+    async signOut(): Promise<void> {
+      currentSession = null;
+      publish();
+    },
+
+    currentToken(): string | null {
+      return currentSession?.token ?? null;
+    },
+
+    subscribe(listener: (session: Session | null) => void): () => void {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+
+    setRole(role: Role): void {
+      // GUARD AGAINST RECURSION: `publish()` notifies the AuthContext
+      // subscriber, which calls `setCurrentRole` → `setMockRole` → `publish()`
+      // … forever. The subscriber's role is always already the role we are
+      // about to set (it is driven by the same session), so publishing when
+      // the role is unchanged would only feed the loop. Publishing only on an
+      // ACTUAL change breaks the cycle without losing the one notification the
+      // subscriber needs.
+      if (!currentSession) return;
+      if (currentSession.user.role === role) return;
+      currentSession = {
+        ...currentSession,
+        user: mockUserFor(role),
+      };
+      publish();
+    },
   };
 }
 
-export const mockAuthSession: AuthSession = {
-  async restore(): Promise<Session | null> {
-    // Mock mode has no persisted session across reloads by design — the app
-    // boots anonymous and the user picks a role. Returning null (rather than
-    // inventing a session) keeps `AuthContext`'s loading → anonymous
-    // transition identical to what it does today when the API is off.
-    currentSession = null;
-    publish();
-    return null;
-  },
+/**
+ * The tenant mock session.
+ */
+export const mockAuthSession = createMockAuthSession();
 
-  async signIn(_credentials: Credentials): Promise<Session> {
-    // Credentials are ignored on purpose — see the file header.
-    currentSession = sessionFor(currentMockRole());
-    publish();
-    return currentSession;
-  },
-
-  adoptSession(session: Session): void {
-    // Mock mode has no OTP flow, so nothing produces a session to adopt. If
-    // one arrives anyway (e.g. a caller reusing an HTTP-shaped response), take
-    // it at face value rather than dropping the user on the floor.
-    nextGeneration();
-    currentSession = session;
-    publish();
-  },
-
-  async signOut(): Promise<void> {
-    currentSession = null;
-    publish();
-  },
-
-  currentToken(): string | null {
-    return currentSession?.token ?? null;
-  },
-
-  subscribe(listener: (session: Session | null) => void): () => void {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  },
-};
+/**
+ * A SECOND, INDEPENDENT mock session for the superadmin surface.
+ *
+ * WHY THIS IS A SEPARATE INSTANCE AND NOT THE SAME OBJECT: the tenant and
+ * superadmin ports are two distinct identities (separate token families,
+ * separate identity tables — `app/core/deps.py:49-83,109-183`). The mock
+ * adapter keeps its session in per-instance state, so handing the SAME object
+ * to both ports would make the tenant login and the superadmin login overwrite
+ * each other's session — exactly the conflation the two-port split exists to
+ * prevent.
+ *
+ * The behaviour is identical to `mockAuthSession` (the mock has no notion of
+ * "which surface" — the role picker decides), but the STATE is separate.
+ */
+export const mockSuperadminSession = createMockAuthSession();
 
 /**
  * Set the ambient role and, if a session is live, re-issue it so subscribers
  * observe the change. Called by the sandbox role switcher, which previously
  * mutated the AppContext state directly.
- *
- * GUARD AGAINST RECURSION: `publish()` notifies the AuthContext subscriber,
- * which calls `setCurrentRole` → `setMockRole` → `publish()` … forever. The
- * subscriber's role is always already the role we are about to set (it is
- * driven by the same session), so publishing when the role is unchanged
- * would only feed the loop. Publishing only on an ACTUAL change breaks the
- * cycle without losing the one notification the subscriber needs.
  */
 export function setMockRole(role: Role): void {
   writeRoleOverride(role);
-  if (!currentSession) return;
-  if (currentSession.user.role === role) return;
-  currentSession = {
-    ...currentSession,
-    user: mockUserFor(role),
-  };
-  publish();
+  mockAuthSession.setRole(role);
+  mockSuperadminSession.setRole(role);
 }

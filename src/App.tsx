@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/shared/ui/tooltip";
 import { AppProvider } from "@/presentation/providers/AppContext";
 import { AuthProvider, useAuth } from "@/presentation/providers/AuthContext";
 import { NotificationProvider } from "@/presentation/providers/NotificationContext";
+import { PLATFORM_ROLES } from "@/shared/lib/types";
 
 // Layout
 import { AppLayout } from "@/presentation/components/layout/AppLayout";
@@ -126,10 +127,15 @@ function Router() {
       <Route path="/quotations/new"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={NewQuotation} /></ProtectedRoute></Route>
       <Route path="/quotations/:id"><ProtectedRoute roles={["admin","lab_manager"]}><LayoutWrapper component={QuotationDetail} /></ProtectedRoute></Route>
       <Route path="/analytics"><ProtectedRoute><LayoutWrapper component={Analytics} /></ProtectedRoute></Route>
-      <Route path="/admin"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={AdminPanel} /></ProtectedRoute></Route>
-      <Route path="/admin/users"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={UsersAdmin} /></ProtectedRoute></Route>
-      <Route path="/admin/users/:id"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={UserDetail} /></ProtectedRoute></Route>
-      <Route path="/admin/roles"><ProtectedRoute roles={["admin", "superadmin"]}><LayoutWrapper component={RolesAdmin} /></ProtectedRoute></Route>
+      {/*
+        The platform admin console is guarded by the SUPERADMIN session, not
+        the tenant one — a tenant `admin` token must not be able to open these
+        routes. See `ProtectedRoute`'s `platformOnly` prop.
+      */}
+      <Route path="/admin"><ProtectedRoute platformOnly roles={PLATFORM_ROLES}><LayoutWrapper component={AdminPanel} /></ProtectedRoute></Route>
+      <Route path="/admin/users"><ProtectedRoute platformOnly roles={PLATFORM_ROLES}><LayoutWrapper component={UsersAdmin} /></ProtectedRoute></Route>
+      <Route path="/admin/users/:id"><ProtectedRoute platformOnly roles={PLATFORM_ROLES}><LayoutWrapper component={UserDetail} /></ProtectedRoute></Route>
+      <Route path="/admin/roles"><ProtectedRoute platformOnly roles={PLATFORM_ROLES}><LayoutWrapper component={RolesAdmin} /></ProtectedRoute></Route>
       <Route path="/client-portal"><ProtectedRoute roles={["client"]}><LayoutWrapper component={ClientPortal} /></ProtectedRoute></Route>
       <Route path="/settings"><ProtectedRoute><LayoutWrapper component={Settings} /></ProtectedRoute></Route>
 

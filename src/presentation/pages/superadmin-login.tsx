@@ -5,11 +5,12 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { ShieldCheck, ArrowLeft, AlertCircle } from "lucide-react";
 import { useAuth } from "@/presentation/providers/AuthContext";
-import { superadminLogin as superadminLoginRequest, buildLoginPayload } from "@/infrastructure/api/auth";
+import { buildLoginPayload } from "@/infrastructure/api/auth";
 import { ApiError } from "@/infrastructure/api/api";
 
 export default function SuperadminLogin() {
   const [, setLocation] = useLocation();
+  const { superadminLogin: submitLogin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,11 +22,19 @@ export default function SuperadminLogin() {
     setSubmitting(true);
 
     try {
-      await superadminLoginRequest(buildLoginPayload(email, password));
+      // Goes through the `superadminAuth` port, NOT the raw HTTP helper.
+      // The port persists the token and publishes the session; the
+      // AuthContext subscription mirrors that into React state. See the
+      // superadmin adapter's header for why the raw helper was wrong.
+      await submitLogin(buildLoginPayload(email, password));
       setLocation("/admin");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError("Invalid email or password. Please try again.");
+      } else if (err instanceof TypeError) {
+        setError(
+          "Unable to reach the server. Check that the backend is running and that the dev proxy points at it.",
+        );
       } else {
         setError(err instanceof Error ? err.message : "Unable to reach the server.");
       }

@@ -67,6 +67,32 @@ interface AuthContextValue {
   applyLoginResponse: (response: LoginResponse) => AuthUser;
   /** Imperatively log out. Clears token + state. */
   logout: () => Promise<void>;
+  /**
+   * Sign in against the **superadmin** surface.
+   *
+   * Kept separate from `login()` because the two are different identities:
+   * the backend mints a different token family for each and resolves them
+   * against different tables (`app/core/deps.py:49-83,109-183`). The
+   * superadmin session therefore has its own storage slot and its own
+   * restore path — see `infrastructure/api/repositories/authSession.ts`.
+   */
+  superadminLogin: (req: LoginRequest) => Promise<AuthUser>;
+  /** Sign out of the superadmin surface. */
+  superadminLogout: () => Promise<void>;
+  /** True when a superadmin session is active. */
+  isSuperadminAuthenticated: boolean;
+  /**
+   * True while the superadmin session is still being resolved — either the
+   * initial bootstrap (`restore()` against `/api/superadmin/auth/me`) or a
+   * sign-in that has not yet committed its state.
+   *
+   * Route guards MUST consult this before concluding "not authenticated".
+   * See the `pending` flag below for the React 18 scheduling subtlety that
+   * makes this necessary — the same race, on the superadmin surface.
+   */
+  isSuperadminLoading: boolean;
+  /** The authenticated superadmin, or null. */
+  superadminUser: AuthUser | null;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -90,6 +116,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // loading, so a logged-in user sees a blank frame for a moment instead of a
   // wrong-page flash.
   const [state, setState] = useState<AuthState>({ status: "loading" });
+
+  // True from the moment a sign-in STARTS until its state has committed.
+  //
+  // ═══ THE LOGIN→NAVIGATE RACE ═══════════════════════════════════════════
+  // This flag exists because of a React 18 scheduling subtlety that bounced
+  // a successfully-logged-in user straight back to the login screen — on
+  // BOTH the tenant and the superadmin surface:
+  //
+  //   1. `signIn()` resolves in a microtask; the adapter publishes the session.
+  //   2. `setState({authenticated})` is scheduled from that microtask.
+  //   3. The login page calls `setLocation("/dashboard")` — a NAVIGATION, in
+  //      a SEPARATE task.
+  //
+  // React 18 batches updates only within a single synchronous task, so steps 2
+  // and 3 are NOT batched together. Worse, a navigation render is dispatched
+  // on React's SyncLane, which does NOT wait for the provider's pending
+  // DefaultLane update. Wouter can therefore render the target route BEFORE
+  // the provider has re-rendered with the new state. The guard reads the
+  // STALE context value (`isAuthenticated: false`) and redirects back to
+  // `/login` — the user is bounced even though the backend reported success
+  // and the token was stored correctly.
+  //
+  // While this flag is set, `isLoading` stays true, so `ProtectedRoute`
+  // renders NOTHING instead of redirecting on a stale value. The next render
+  // sees the truth.
+  //
+  // `superadminPending` below is the same mechanism for the superadmin
+  // surface, which is a separate identity with its own state.
+  // ═══════════════════════════════════════════════════════════════════════
+  const [pending, setPending] = useState(false);
+
+  // The superadmin session is a SEPARATE identity from the tenant one, so it
+  // gets its own state rather than overloading `state`. A user can be
+  // authenticated against the tenant API and the platform API at once — the
+  // backend issues distinct token families for each — and collapsing them
+  // would mean one login silently signed the other out.
+  const [superadminState, setSuperadminState] = useState<AuthState>({
+    status: "loading",
+  });
+
+  // The superadmin counterpart of `pending` — see the note there.
+  const [superadminPending, setSuperadminPending] = useState(false);
 
   // Guards the one-shot bootstrap network call below against resolving after the
   // provider unmounts. Deliberately NOT used by the subscription effect further
@@ -176,6 +244,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---------------------------------------------------------------------
+  // Superadmin bootstrap — a separate restore, against a separate identity.
+  // ---------------------------------------------------------------------
+  // The tenant bootstrap above probes the TENANT `/auth/me`, which resolves
+  // the token subject against the `User` table (`app/core/deps.py:74-83`) — a
+  // superadmin's id lives in `SuperadminUser`, so the tenant `/me` answers
+  // "Not found or inactive" for a perfectly valid superadmin token. The
+  // superadmin session therefore needs its own probe
+  // (`/api/superadmin/auth/me`).
+  //
+  // The superadmin role is NOT pushed into `AppContext.currentRole` — that
+  // slot drives the tenant sidebar, and a platform operator's menu is a
+  // different thing from a laboratory role's menu.
+  useEffect(() => {
+    let cancelled = false;
+
+    void container.superadminAuth.restore().then((session) => {
+      if (cancelled) return;
+      if (session) {
+        setSuperadminState({ status: "authenticated", user: session.user });
+      } else {
+        setSuperadminState({ status: "anonymous" });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Mirror superadmin adapter-side changes into React state, exactly as the
+  // tenant subscription above does for the tenant session.
+  useEffect(() => {
+    const unsubscribe = container.superadminAuth.subscribe((session) => {
+      if (session) {
+        setSuperadminState({ status: "authenticated", user: session.user });
+      } else {
+        setSuperadminState({ status: "anonymous" });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   const toUser = useCallback(
     (session: Session): AuthUser => {
       setState({ status: "authenticated", user: session.user });
@@ -207,26 +321,100 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // sent as `email`.
       const payload = buildLoginPayload(req.email ?? "", req.password);
 
-      // `signIn` THROWS on failure (rather than returning a Result): the
-      // existing login page distinguishes `instanceof ApiError` (401 / 4xx)
-      // from `instanceof TypeError` (network unreachable), and that
-      // distinction carries UX meaning — wrong password vs backend down. The
-      // HTTP adapter re-throws both unmodified.
-      const session = await container.auth.signIn({
-        email: payload.email,
-        password: payload.password,
-      });
-      return toUser(session);
+      // Mark the session as "in flight" for the whole request, so
+      // `isLoading` stays true and `ProtectedRoute` renders nothing rather
+      // than redirecting on a stale `isAuthenticated: false`. See the note
+      // on the `pending` flag above for why this is necessary.
+      setPending(true);
+
+      try {
+        // `signIn` THROWS on failure (rather than returning a Result): the
+        // existing login page distinguishes `instanceof ApiError` (401 / 4xx)
+        // from `instanceof TypeError` (network unreachable), and that
+        // distinction carries UX meaning — wrong password vs backend down. The
+        // HTTP adapter re-throws both unmodified.
+        const session = await container.auth.signIn({
+          email: payload.email,
+          password: payload.password,
+        });
+        return toUser(session);
+      } finally {
+        // Cleared AFTER the state is set, so React commits both together and
+        // the guard never observes "not loading, not authenticated".
+        setPending(false);
+      }
     },
     [toUser],
   );
 
   const logout = useCallback(async (): Promise<void> => {
-    await container.auth.signOut();
-    setState({ status: "anonymous" });
-    // Don't touch currentRole here — AppContext falls back to "admin" only when
-    // no user is loaded. Keeping the previous role keeps in-flight queries
-    // readable during the brief anonymous flicker.
+    setPending(true);
+    try {
+      await container.auth.signOut();
+      setState({ status: "anonymous" });
+      // Don't touch currentRole here — AppContext falls back to "admin" only when
+      // no user is loaded. Keeping the previous role keeps in-flight queries
+      // readable during the brief anonymous flicker.
+    } finally {
+      setPending(false);
+    }
+  }, []);
+
+  // ---------------------------------------------------------------------
+  // Superadmin sign-in / sign-out
+  // ---------------------------------------------------------------------
+  //
+  // These go through the `superadminAuth` port, NOT the tenant `auth` port.
+  // The old `superadmin-login.tsx` bypassed the port entirely and called the
+  // raw `superadminLogin()` HTTP helper, which is what broke the flow:
+  //
+  //   1. The returned token was discarded — nothing called `setToken()`, so
+  //      every later request went out unauthenticated.
+  //   2. `AuthContext` was never updated, so `state` stayed `anonymous` and
+  //      `ProtectedRoute` redirected straight back to `/login`. The backend
+  //      reported success; the SPA never advanced.
+  //
+  // Routing through the port fixes both: the adapter persists the token and
+  // publishes the session, and the subscription above mirrors that publish
+  // into React state.
+  const superadminLogin = useCallback(
+    async (req: LoginRequest): Promise<AuthUser> => {
+      const payload = buildLoginPayload(req.email ?? "", req.password);
+
+      // Mark the session as "in flight" for the whole duration of the
+      // request — see the `pending` note above for the race this closes.
+      setSuperadminPending(true);
+
+      try {
+        // Throws `ApiError` for 4xx/5xx and `TypeError` for a network
+        // failure — the login page branches on that distinction.
+        const session = await container.superadminAuth.signIn({
+          email: payload.email,
+          password: payload.password,
+        });
+
+        // The adapter's `publish()` already updated `superadminState` via the
+        // subscription; this explicit set keeps the state correct even if the
+        // subscription has not flushed yet in the same tick.
+        setSuperadminState({ status: "authenticated", user: session.user });
+        return session.user;
+      } finally {
+        // Cleared AFTER the state is set, so the guard never observes
+        // "not loading, not authenticated".
+        setSuperadminPending(false);
+      }
+    },
+    [],
+  );
+
+  const superadminLogout = useCallback(async (): Promise<void> => {
+    setSuperadminPending(true);
+    try {
+      await container.superadminAuth.signOut();
+      setSuperadminState({ status: "anonymous" });
+    } finally {
+      setSuperadminPending(false);
+    }
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -234,12 +422,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       state,
       user: state.status === "authenticated" ? state.user : null,
       isAuthenticated: state.status === "authenticated",
-      isLoading: state.status === "loading",
+      // "Loading" covers the initial bootstrap AND an in-flight sign-in. The
+      // guard renders nothing while loading, so it can never redirect on a
+      // stale "not authenticated" value — see the `pending` flag's note.
+      isLoading: state.status === "loading" || pending,
       login,
       applyLoginResponse: applySession,
       logout,
+      superadminLogin,
+      superadminLogout,
+      isSuperadminAuthenticated: superadminState.status === "authenticated",
+      // Loading while the bootstrap is unresolved OR a sign-in is in flight.
+      // The guard renders nothing in that window, so it can never redirect on
+      // a stale "not authenticated" value.
+      isSuperadminLoading:
+        superadminPending || superadminState.status === "loading",
+      superadminUser:
+        superadminState.status === "authenticated" ? superadminState.user : null,
     }),
-    [state, login, applySession, logout],
+    [
+      state,
+      login,
+      applySession,
+      logout,
+      superadminLogin,
+      superadminLogout,
+      superadminState,
+      superadminPending,
+      pending,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

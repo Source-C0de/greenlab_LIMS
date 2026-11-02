@@ -11,13 +11,16 @@ interface RoleAvatarProps {
 }
 
 const ROLE_LABEL: Record<Role, { en: string; ar: string }> = {
-  superadmin:   { en: "Superadmin",          ar: "المشرف العام" },
-  admin:        { en: "Administrator",       ar: "مدير النظام" },
-  lab_manager:  { en: "Lab Manager",         ar: "مدير المختبر" },
-  analyst:      { en: "Analyst",             ar: "محلل" },
-  client:       { en: "Client",              ar: "عميل" },
-  accountant:   { en: "Accountant",          ar: "محاسب" },
-  receptionist: { en: "Receptionist",        ar: "موظف استقبال" },
+  superadmin:         { en: "Superadmin",              ar: "المشرف العام" },
+  platform_support:   { en: "Platform Support",        ar: "دعم المنصة" },
+  platform_billing:   { en: "Platform Billing",        ar: "فوترة المنصة" },
+  platform_readonly:  { en: "Platform Read-only",      ar: "قراءة فقط للمنصة" },
+  admin:              { en: "Administrator",           ar: "مدير النظام" },
+  lab_manager:        { en: "Lab Manager",             ar: "مدير المختبر" },
+  analyst:            { en: "Analyst",                 ar: "محلل" },
+  client:             { en: "Client",                  ar: "عميل" },
+  accountant:         { en: "Accountant",              ar: "محاسب" },
+  receptionist:       { en: "Receptionist",            ar: "موظف استقبال" },
 };
 
 function initialsOf(name: string | undefined | null, fallback: string | undefined | null): string {
