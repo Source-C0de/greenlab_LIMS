@@ -19,10 +19,7 @@ import {
   mockUsers,
   type SaaSUser,
 } from "@/infrastructure/mock/data/users";
-import {
-  getRoleEntry,
-  type ToggleableRole,
-} from "@/infrastructure/mock/data/rolePermissions";
+import { useRoleLabelRecord } from "@/presentation/hooks/useRoleLabels";
 
 export default function UserDetail() {
   const params = useParams<{ id: string }>();
@@ -59,6 +56,14 @@ export default function UserDetail() {
       : null
     : mockUsers.find((u) => u.id === params.id) ?? null;
 
+  // The role registry — the source of the role's display label. Hooks must
+  // be called unconditionally, so this is here (before the early returns
+  // below), not next to the label computation.
+  //
+  // `user` may be null here, so an empty slug is passed; the record is
+  // only *used* after the `!user` early return.
+  const roleRecord = useRoleLabelRecord(user?.role ?? "");
+
   if (api && userQuery.isLoading) {
     return (
       <div className="space-y-4">
@@ -80,15 +85,19 @@ export default function UserDetail() {
     );
   }
 
-  const roleEntry =
-    user.role === "superadmin"
-      ? null
-      : getRoleEntry(user.role as ToggleableRole);
+  // Resolve the role's display label from the SAME registry the Users
+  // page dropdown uses.
+  //
+  // Before this, the label came from the mock registry with **no
+  // fallback**: a user holding a custom role (a slug created on the
+  // Roles page — ADR 0010) produced `undefined`, and the header
+  // rendered **nothing**. `useRoleLabelRecord` degrades to the raw
+  // slug, so the header always shows something.
   const roleLabel = user.role === "superadmin"
     ? (isRtl ? "مدير عام" : "Super Admin")
     : isRtl
-      ? roleEntry?.labelAr
-      : roleEntry?.labelEn;
+      ? roleRecord.labelAr
+      : roleRecord.labelEn;
 
   // Bridges the local override store (mock mode) and the API overrides
   // (api mode) to the prop shape the matrix component expects.
@@ -109,12 +118,26 @@ export default function UserDetail() {
   ) {
     if (api) {
       const current = overridesQuery.data?.overrides ?? [];
+      // The READ model is camelCase (`menuKey`); the WRITE model is
+      // snake_case (`menu_key`) — the documented Phase-B wire format. The
+      // backend also accepts `menuKey` during the rollout window, but
+      // snake_case is what the contract says.
       const next = effect === null
-        ? current.filter((c) => c.menuKey !== menuKey)
+        ? current
+            .filter((c) => c.menuKey !== menuKey)
+            .map((c) => ({ menu_key: c.menuKey, effect: c.effect }))
         : [
-            ...current.filter((c) => c.menuKey !== menuKey),
-            { menuKey, effect },
+            ...current
+              .filter((c) => c.menuKey !== menuKey)
+              .map((c) => ({ menu_key: c.menuKey, effect: c.effect })),
+            { menu_key: menuKey, effect },
           ];
+      // Mirror into the local override store as well. In API mode the
+      // sidebar's authority is the server's resolved set
+      // (`GET /auth/me/menus`), so this mirror is the OFFLINE/ERROR
+      // fallback — but it keeps the admin's own browser consistent with
+      // the server, and it is what the mock-mode path uses.
+      setOverride(user!.id, menuKey as Parameters<typeof setOverride>[1], effect);
       replaceMut.mutate(
         { id: user!.id, body: { overrides: next } },
         {
@@ -131,6 +154,8 @@ export default function UserDetail() {
 
   function clearAllApi() {
     if (api) {
+      // Mirror the clear locally too — see the note in `setOverrideApi`.
+      clearForUser(user!.id);
       clearMut.mutate(user!.id, {
         onError: (e) => {
           const m = describeApiError(e, isRtl ? "ar" : "en");

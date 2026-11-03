@@ -87,6 +87,20 @@ export interface RoleMenuCell {
   enabled: boolean;
 }
 
+/**
+ * The wire shape of a cell in a `PUT /admin/roles/:role/menu-permissions`
+ * body.
+ *
+ * The backend accepts BOTH spellings during the rollout window
+ * (`legacy_field("menu_key")` in `app/domains/roles/schemas.py`), but
+ * snake_case is the documented Phase-B format and the one every other role
+ * route uses — so that is what the client sends.
+ */
+export interface RoleMenuCellPut {
+  menu_key: string;
+  enabled: boolean;
+}
+
 /** The shape the backend actually sends (snake_case). */
 interface RawRoleMenuCell {
   menu_key: string;
@@ -105,7 +119,7 @@ interface RawRoleMenuPermissions {
 }
 
 export interface RoleMenuPermissionsReplace {
-  cells: RoleMenuCell[];
+  cells: RoleMenuCellPut[];
 }
 
 // ---------------------------------------------------------------------------
@@ -199,10 +213,16 @@ function normalizeMenuCell(raw: RawRoleMenuCell): RoleMenuCell {
 // Menu-keys catalogue — spec §2.1
 // ---------------------------------------------------------------------------
 
-/** GET /admin/menu-keys — the 10 admin menu keys (separate from
- * `MENU_REGISTRY`). Re-exported from `@/lib/adminMenuKeys` for proximity. */
-export { SEED_ADMIN_MENU_KEYS, type AdminMenuKey, type AdminMenuKeyGroup } from "@/shared/lib/adminMenuKeys";
-
+/**
+ * GET /admin/menu-keys — the backend's menu-key catalogue.
+ *
+ * The backend now serves the SAME 32 keys the SPA's `MENU_REGISTRY` uses
+ * (`backend/app/domains/roles/menu_catalogue.py` is generated from it), so
+ * there is no longer a second, 10-key vocabulary to reconcile. The old
+ * `SEED_ADMIN_MENU_KEYS` constant in `@/shared/lib/adminMenuKeys` was
+ * removed for exactly that reason — it had become a second, wrong source of
+ * truth.
+ */
 export interface AdminMenuKeyResponse {
   key: string;
   labelEn: string;

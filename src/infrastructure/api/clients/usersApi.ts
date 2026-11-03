@@ -19,13 +19,32 @@ import {
 // Types — mirror docs/api/users.md §5
 // ---------------------------------------------------------------------------
 
+/**
+ * A user's role — a SLUG, not an enum member.
+ *
+ * The backend stores `users.role` as a free-form `VARCHAR` and validates
+ * it against the `roles` registry (ADR 0010), so a tenant-defined custom
+ * role (`qa_reviewer`, …) is a legal value here. The named members are
+ * the built-ins and exist only so an editor autocompletes them.
+ *
+ * The `(string & {})` tail keeps the union from collapsing to `string`,
+ * so `role: UserRole` still autocompletes the known slugs while
+ * accepting any other string.
+ *
+ * NOTE: this is deliberately NOT the same type as
+ * `shared/lib/types.ts::Role`. That one is a closed union driving
+ * exhaustive nav and route guards; this one is only ever an
+ * assignment target or a cast.
+ */
 export type UserRole =
   | "admin"
   | "lab_manager"
   | "analyst"
+  | "reviewer"
   | "client"
   | "accountant"
-  | "receptionist";
+  | "receptionist"
+  | (string & {});
 
 export type UserStatus = "active" | "trial" | "suspended" | "disabled";
 
@@ -124,13 +143,59 @@ export interface UserOverrideCell {
   effect: MenuEffect;
 }
 
+/**
+ * The wire shape of an override cell in a `PUT .../menu-overrides` body.
+ *
+ * The backend accepts both spellings during the rollout window
+ * (`legacy_field("menu_key")` in `app/domains/roles/schemas.py`), but
+ * snake_case is the documented Phase-B format — so that is what is sent.
+ */
+export interface UserOverrideCellPut {
+  menu_key: string;
+  effect: MenuEffect;
+}
+
 export interface UserOverridesResponse {
   userId: string;
   overrides: UserOverrideCell[];
 }
 
 export interface UserOverridesReplace {
-  overrides: UserOverrideCell[];
+  overrides: UserOverrideCellPut[];
+}
+
+/** The shape the backend actually sends (snake_case). */
+interface RawUserOverrideCell {
+  menu_key: string;
+  effect: MenuEffect;
+}
+
+/** The shape the backend actually sends (snake_case). */
+interface RawUserOverridesResponse {
+  user_id: string;
+  overrides: RawUserOverrideCell[];
+}
+
+/**
+ * Bridge the backend's snake_case override payload to this module's
+ * camelCase type.
+ *
+ * Without this the per-user override screen read back
+ * `overrides[].menuKey === undefined` and `userId === undefined` — the
+ * backend never sends the camelCase spellings, and nothing translated
+ * them. Every override therefore looked absent, so the matrix opened
+ * blank and a save wrote an empty list back to the server.
+ */
+function normalizeUserOverrides(
+  raw: RawUserOverridesResponse,
+): UserOverridesResponse {
+  return {
+    userId: raw.user_id,
+    overrides: (raw.overrides ?? []).map((c) => ({
+      menuKey: c.menu_key,
+      effect: c.effect,
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -319,9 +384,9 @@ export function activateUser(id: string, updatedAt?: string): Promise<User> {
 export function getUserMenuOverrides(
   id: string,
 ): Promise<UserOverridesResponse> {
-  return unwrap<UserOverridesResponse>(
+  return unwrap<RawUserOverridesResponse>(
     `/admin/users/${encodeURIComponent(id)}/menu-overrides`,
-  );
+  ).then(normalizeUserOverrides);
 }
 
 /** PUT /admin/users/:id/menu-overrides — atomic replace. */
@@ -329,10 +394,10 @@ export function replaceUserMenuOverrides(
   id: string,
   body: UserOverridesReplace,
 ): Promise<UserOverridesResponse> {
-  return unwrap<UserOverridesResponse>(
+  return unwrap<RawUserOverridesResponse>(
     `/admin/users/${encodeURIComponent(id)}/menu-overrides`,
     { method: "PUT", body },
-  );
+  ).then(normalizeUserOverrides);
 }
 
 /** DELETE /admin/users/:id/menu-overrides — clear all. */

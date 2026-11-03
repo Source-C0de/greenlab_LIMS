@@ -65,6 +65,14 @@ const SEED_REGISTRY: RoleEntry[] = [
     iconName: "FlaskConical",
   },
   {
+    slug: "reviewer",
+    labelEn: "Reviewer",
+    labelAr: "مراجع",
+    descriptionEn: "Reviews and approves technical results before release.",
+    descriptionAr: "يراجع النتائج الفنية ويعتمدها قبل الإصدار.",
+    iconName: "ClipboardList",
+  },
+  {
     slug: "client",
     labelEn: "Client",
     labelAr: "عميل",
@@ -92,13 +100,18 @@ const SEED_REGISTRY: RoleEntry[] = [
 
 /**
  * Slugs the build ships with — used by `useRoleAdmin` to forbid new
- * roles from colliding with the 6 fixed ones. `superadmin` is not in
+ * roles from colliding with the 7 fixed ones. `superadmin` is not in
  * here because it's a separate, non-toggleable role.
+ *
+ * `reviewer` was added with ADR 0010: it was already a role in the
+ * backend's `UserRole` enum, so the mock registry and the backend
+ * registry must both know about it.
  */
 export const FIXED_ROLE_SLUGS = [
   "admin",
   "lab_manager",
   "analyst",
+  "reviewer",
   "client",
   "accountant",
   "receptionist",

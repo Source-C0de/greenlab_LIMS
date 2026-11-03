@@ -1,24 +1,74 @@
+import { isApiEnabled } from "@/infrastructure/api/api";
+import { useMyMenus } from "@/infrastructure/api/tanstack-queries";
 import { type MenuKey } from "@/infrastructure/mock/data/menuPermissions";
-import { type Role } from "@/presentation/providers/AppContext";
+import { type Role } from "@/shared/lib/types";
 import { useMenuPermissions } from "@/presentation/hooks/useMenuPermissions";
 import { useRoleMenuMatrix } from "@/presentation/hooks/useRoleMenuMatrix";
 import { useUserMenuOverrides } from "@/presentation/hooks/useUserMenuOverrides";
+import { resolveVisibility } from "@/presentation/hooks/menuVisibility";
 
 /**
- * Compose the three permission layers for a single (user, menu) decision:
+ * Compose the permission layers for a single (user, menu) decision.
  *
- *   effective = globalKill(key)        — flat kill-switch (superadmin)
- *            && roleEnabled(role, key) — default role × menu matrix
- *            && (override ?? true)     — per-user delta (grant / deny / inherit)
+ * ── Two modes, two authorities ────────────────────────────────────────────
  *
- * Each of the three underlying hooks owns its own module-singleton +
- * `force`-rerender. Calling them in this composite makes us re-render
- * whenever any of them changes. No new context, no new listener set.
+ * **API mode** (`VITE_USE_API=true`) — the SERVER decides.
+ *
+ * The server resolves the whole chain (role matrix + per-user overrides +
+ * the unconfigured-role default) and returns a flat, already-decided list
+ * from `GET /auth/me/menus`. This hook then applies only the global
+ * kill-switch on top of that answer:
+ *
+ *     visible  ⇔  kill-switch ON  ∧  server says enabled
+ *
+ * The per-user override layer is deliberately **not** applied client-side in
+ * API mode. The server already applied it, and re-applying it would let a
+ * stale `localStorage` grant resurrect a menu the server denied — the
+ * opposite of what the admin's "Deny" button promises.
+ *
+ * **Mock mode** — the LOCAL layers decide, exactly as before.
+ *
+ *     visible  ⇔  kill-switch ON ∧ role-matrix cell ∧ per-user override
+ *
+ * This is the three-layer composition in `menuVisibility.ts`, unchanged.
+ *
+ * ── Fallback rule ─────────────────────────────────────────────────────────
+ * In API mode, when the server read is still pending or has failed, the
+ * local mirror is consulted instead, and then the seed. That keeps the
+ * sidebar usable while the server is unreachable. But once the server HAS
+ * decided a key, the local store is never consulted for it.
+ *
+ * This is what resolves the old contradiction: `useRoleMenuMatrixApi` used
+ * to treat the server as fully authoritative on one code path and merge the
+ * server cells over the seed on another, so a role the server had never
+ * configured produced an empty sidebar instead of the seeded defaults.
+ *
+ * ── The `role` argument ───────────────────────────────────────────────────
+ * The role being rendered for. In API mode it is only used for the
+ * superadmin short-circuit and for deciding whether a server answer applies
+ * to this caller — the server has already resolved the role matrix, so the
+ * client does not need the matrix itself.
  */
-export function useEffectiveMenuVisibility() {
+export function useEffectiveMenuVisibility(role?: Role) {
   const menuPerms = useMenuPermissions();
   const roleMatrix = useRoleMenuMatrix();
   const userOverrides = useUserMenuOverrides();
+
+  // `useMyMenus` is always called (hooks cannot be conditional); the query
+  // itself is gated on `isApiEnabled()` inside the hook.
+  const apiEnabled = isApiEnabled();
+  const myMenus = useMyMenus();
+
+  // The server's resolved answer, as a key→enabled map.
+  //
+  // `undefined` means "the server has not decided yet" (pending, failed, or
+  // API mode off). `null` means "the server has decided" — and then the
+  // local store is not consulted for any key.
+  const serverResolved = apiEnabled
+    ? myMenus.data
+      ? new Map(myMenus.data.menus.map((m) => [m.menuKey, m.enabled]))
+      : null
+    : undefined;
 
   return {
     /**
@@ -26,18 +76,48 @@ export function useEffectiveMenuVisibility() {
      * If `userId` is omitted, only the role + global layers are checked
      * (useful for sidebar rendering where the "current user" is implicit).
      */
-    isEnabled: (key: MenuKey, role: Role, userId?: string): boolean => {
-      if (!menuPerms.isEnabled(key)) return false;
-      // `superadmin` bypasses role + override checks — they see everything
-      // (matches the Sidebar's existing early-return at line 84-89).
-      if (role === "superadmin") return true;
-      if (!roleMatrix.isRoleEnabled(role, key)) return false;
-      if (userId) {
-        const override = userOverrides.getOverride(userId, key);
-        if (override === "deny") return false;
-        // "grant" or absent: pass through
+    isEnabled: (key: MenuKey, forRole: Role, userId?: string): boolean => {
+      // The global kill-switch is SPA-owned and stays first in the chain in
+      // BOTH modes — it is a platform-wide "hide this menu everywhere", and
+      // it wins over every other layer.
+      const globalEnabled = menuPerms.isEnabled(key);
+
+      // ── API mode ────────────────────────────────────────────────────────
+      if (serverResolved !== undefined) {
+        // Superadmins see everything; they are the platform operators who
+        // configure the other roles.
+        if (forRole === "superadmin") return globalEnabled;
+
+        if (serverResolved !== null) {
+          // The server has decided. Its answer is final — the local mirror
+          // is NOT consulted, so a stale local grant cannot resurrect a
+          // server-denied menu.
+          //
+          // A key the server never mentioned is treated as denied: the
+          // server's resolved set is exhaustive (it intersects with the
+          // catalogue), so an absent key means "not granted to this user".
+          return globalEnabled && serverResolved.get(key) === true;
+        }
+
+        // The server read is pending or failed — fall back to the local
+        // mirror so the sidebar stays usable offline.
+        const roleEnabled = roleMatrix.isRoleEnabled(forRole, key);
+        return resolveVisibility({
+          role: forRole,
+          globalEnabled,
+          roleEnabled,
+          override: userId ? userOverrides.getOverride(userId, key) : null,
+        });
       }
-      return true;
+
+      // ── Mock mode ───────────────────────────────────────────────────────
+      const roleEnabled = roleMatrix.isRoleEnabled(forRole, key);
+      return resolveVisibility({
+        role: forRole,
+        globalEnabled,
+        roleEnabled,
+        override: userId ? userOverrides.getOverride(userId, key) : null,
+      });
     },
 
     /** Read-only access to the three underlying stores for UI use. */

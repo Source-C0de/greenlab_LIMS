@@ -4,7 +4,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Checkbox } from "@/shared/ui/checkbox";
-import { FlaskConical, ShieldCheck, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { ShieldCheck, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import { useAuth } from "@/presentation/providers/AuthContext";
 import { redirectForRole } from "@/presentation/lib/roleRedirects";
@@ -132,11 +132,22 @@ export default function Login() {
         />
 
         <div className="relative z-10 max-w-md text-center">
-          <FlaskConical className="h-20 w-20 mx-auto mb-8 opacity-90" />
+          {/*
+            The logo artwork is brand-blue (#056db2), so on the brand-blue
+            panel it would be invisible (1.01:1 contrast). `brightness(0)
+            invert(1)` maps every pixel to pure white, which reads clearly
+            against the panel. The filter is applied HERE only — the same
+            asset stays blue-on-white in the quotation preview.
+          */}
+          <img
+            src="/images/GL LOGO_Business Card 1.svg"
+            alt={pick(LABELS.brand)}
+            className="h-20 w-auto mx-auto mb-8 object-contain logo-invert"
+          />
           <h1 className="text-4xl font-bold mb-4 tracking-tight">
             {pick(LABELS.brand)} <span className="font-light">{pick(LABELS.brandAccent)}</span>
           </h1>
-          <p className="text-lg opacity-80 mb-8 leading-relaxed">
+          <p className="text-lg opacity-90 mb-8 leading-relaxed">
             {pick(LABELS.tagline)}
           </p>
           <div className="grid grid-cols-2 gap-4 text-sm font-medium">
@@ -163,8 +174,13 @@ export default function Login() {
           className="w-full max-w-md space-y-8"
         >
           <div className="text-center md:text-start">
-            <div className="md:hidden flex justify-center mb-6 text-primary">
-              <FlaskConical className="h-12 w-12" />
+            {/* Mobile logo sits on the white side — keep the artwork blue (no filter). */}
+            <div className="md:hidden flex justify-center mb-6">
+              <img
+                src="/images/GL LOGO_Business Card 1.svg"
+                alt={pick(LABELS.brand)}
+                className="h-12 w-auto object-contain"
+              />
             </div>
             <h2 className="text-3xl font-bold tracking-tight">{pick(LABELS.welcome)}</h2>
             <p className="text-muted-foreground mt-2">{pick(LABELS.subtitle)}</p>

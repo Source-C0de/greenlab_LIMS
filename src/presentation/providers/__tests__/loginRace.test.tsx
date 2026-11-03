@@ -49,6 +49,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Router, Route, Switch, useLocation } from "wouter";
 import type { ReactNode } from "react";
 
@@ -218,15 +219,24 @@ function SuperadminLoginButton({ target }: { target: string }) {
 }
 
 function renderApp(children: ReactNode) {
+  // `AuthProvider` drops the cached `["api", "auth", …]` query family on
+  // every session change, so it needs a QueryClient. In the real app it is
+  // mounted inside `<QueryClientProvider>` (see `App.tsx`); the harness has
+  // to mirror that.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <AppProvider>
-      <AuthProvider>
-        <Router>
-          <Probe />
-          {children}
-        </Router>
-      </AuthProvider>
-    </AppProvider>,
+    <QueryClientProvider client={queryClient}>
+      <AppProvider>
+        <AuthProvider>
+          <Router>
+            <Probe />
+            {children}
+          </Router>
+        </AuthProvider>
+      </AppProvider>
+    </QueryClientProvider>,
   );
 }
 

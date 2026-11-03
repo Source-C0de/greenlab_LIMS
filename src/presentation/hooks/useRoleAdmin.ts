@@ -1,6 +1,7 @@
 import { useRoleRegistry } from "@/presentation/hooks/useRoleRegistry";
 import { useRolePermissions } from "@/presentation/hooks/useRolePermissions";
 import { useRoleMenuMatrix } from "@/presentation/hooks/useRoleMenuMatrix";
+import { DEFAULT_CUSTOM_ROLE_KEYS } from "@/infrastructure/mock/data/role-menu-permissions";
 import {
   FIXED_ROLE_SLUGS,
   type RoleEntry,
@@ -86,7 +87,11 @@ export function useRoleAdmin() {
     };
     registry.addRole(entry);
     rolePerms.addRole(entry.slug, true);
-    matrix.setRole(entry.slug, []);
+    // Seed the new role with the laboratory-operations set rather than an
+    // empty one. An empty set would leave the role with a blank sidebar
+    // and no way to discover which menu keys exist, so it would look
+    // broken until a superadmin opened "Assign Menus" for it.
+    matrix.setRole(entry.slug, [...DEFAULT_CUSTOM_ROLE_KEYS]);
     return entry;
   }
 

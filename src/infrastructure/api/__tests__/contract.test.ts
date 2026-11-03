@@ -13,6 +13,7 @@ import {
   listTestParameters,
 } from "@/infrastructure/api/clients/testParametersApi";
 import { listTestList } from "@/infrastructure/api/clients/testListApi";
+import { getMyMenus } from "@/infrastructure/api/clients/myMenusApi";
 
 /**
  * Contract test — asserts that **every endpoint path the frontend calls
@@ -42,6 +43,10 @@ const TENANT_AUTH_ROUTES = [
   "POST /api/v1/auth/otp-verify",
   "GET /api/v1/auth/me",
   "PATCH /api/v1/auth/me",
+  // The signed-in user's RESOLVED effective menu set. Guarded by
+  // `get_current_user` (tenant `access` token only) — see
+  // `backend/app/domains/auth/router.py`.
+  "GET /api/v1/auth/me/menus",
 ] as const;
 
 /** `app/domains/superadmin/router_auth.py` — mounted at `/api/superadmin`. */
@@ -219,6 +224,16 @@ describe("the auth client targets real backend routes", () => {
   it("listTestList hits GET /api/v1/test-list", async () => {
     const url = await requestedUrl(() => listTestList());
     expect(url.split("?")[0]).toBe("/api/v1/test-list");
+  });
+
+  it("getMyMenus hits GET /api/v1/auth/me/menus", async () => {
+    // The sidebar's server read path. Before this route existed the
+    // sidebar used `GET /admin/roles/:role/menu-permissions`, which is
+    // superadmin-only — so a tenant user's call 401'd and the sidebar fell
+    // back to its local seed.
+    const url = await requestedUrl(() => getMyMenus());
+    expect(url.split("?")[0]).toBe("/api/v1/auth/me/menus");
+    expect(BACKEND_ROUTES).toContain(`GET ${url.split("?")[0]}`);
   });
 
   it("requestRegister hits a route the backend does not expose", async () => {

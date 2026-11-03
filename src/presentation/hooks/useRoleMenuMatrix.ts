@@ -1,11 +1,26 @@
 import { useEffect, useState } from "react";
-import { type MenuKey } from "@/infrastructure/mock/data/menuPermissions";
 import {
+  MENU_KEY_LIST,
+  isMenuKey,
+  type MenuKey,
+} from "@/infrastructure/mock/data/menuPermissions";
+import {
+  SEED_BY_ROLE,
   mockRoleMenuPermissions,
-  ALL_MENU_KEYS,
 } from "@/infrastructure/mock/data/role-menu-permissions";
+import { ROLE_MENU_MATRIX_STORAGE_KEY } from "@/shared/lib/menuStorageKeys";
 
-const STORAGE_KEY = "glims_role_menu_matrix_v1";
+/**
+ * Storage key version 2.
+ *
+ * v1 stored whatever the "Assign Menus" modal was rendering at the time —
+ * the 10-key admin catalogue (`accounting`, `invoices`, `users`, `roles`,
+ * `test_parameters`) — which is NOT the vocabulary the sidebar reads. Those
+ * rows are not reinterpretable: `accounting` and `accounting_dashboard` are
+ * different menus. So the key is bumped and v1 is left on disk, unread.
+ * A fresh v2 starts from the seed.
+ */
+const STORAGE_KEY = ROLE_MENU_MATRIX_STORAGE_KEY;
 
 /**
  * Map: role → Set of menu keys that role is allowed to see by default.
@@ -31,6 +46,16 @@ function buildDefaultMap(): MatrixMap {
 /** Serialize/deserialize as `Record<role, MenuKey[]>` — JSON-friendly. */
 type Serialized = Record<string, MenuKey[]>;
 
+/**
+ * Drop any key that is not part of the current registry.
+ *
+ * Guards against a persisted row written by an older build (or hand-edited
+ * in DevTools) carrying keys the sidebar will never ask about.
+ */
+function keepKnownKeys(keys: string[]): MenuKey[] {
+  return keys.filter(isMenuKey);
+}
+
 function loadFromStorage(): MatrixMap {
   if (typeof window === "undefined") return buildDefaultMap();
   try {
@@ -42,7 +67,17 @@ function loadFromStorage(): MatrixMap {
     // Custom roles (not in the seed) are preserved as-is.
     for (const role of Object.keys(parsed)) {
       const keys = parsed[role];
-      if (Array.isArray(keys)) defaults[role] = new Set(keys);
+      if (!Array.isArray(keys)) continue;
+      const known = keepKnownKeys(keys);
+      // A row whose keys are all unknown is stale garbage (e.g. a v1-era
+      // 10-key admin row). Fall back to the seed rather than blanking the
+      // role's sidebar.
+      if (known.length === 0 && keys.length > 0) {
+        const seed = SEED_BY_ROLE[role];
+        if (seed) defaults[role] = new Set(seed);
+        continue;
+      }
+      defaults[role] = new Set(known);
     }
     return defaults;
   } catch {
@@ -97,8 +132,21 @@ export function useRoleMenuMatrix() {
   };
 
   return {
-    isRoleEnabled: (role: string, key: MenuKey): boolean =>
-      state[role]?.has(key) ?? false,
+    /**
+     * Is this key enabled for this role?
+     *
+     * A role with no persisted row falls back to its seed set, so a
+     * newly-created custom role is usable before the admin has opened
+     * "Assign Menus" for it. A role with a persisted but EMPTY row is
+     * honoured as-is — that is the "assign no menus" case, and it must
+     * stay empty rather than silently reverting to the seed.
+     */
+    isRoleEnabled: (role: string, key: MenuKey): boolean => {
+      const row = state[role];
+      if (row) return row.has(key);
+      const seed = SEED_BY_ROLE[role];
+      return seed ? seed.includes(key) : false;
+    },
 
     toggle: (role: string, key: MenuKey): void => {
       const next: MatrixMap = { ...state, [role]: new Set(state[role] ?? []) };
@@ -125,11 +173,16 @@ export function useRoleMenuMatrix() {
 
     resetAll: (): void => persist(buildDefaultMap()),
 
-    /** All 32 menu keys in declaration order — convenience for the matrix UI. */
-    allMenuKeys: (): MenuKey[] => [...ALL_MENU_KEYS],
+    /** All menu keys in declaration order — convenience for the matrix UI. */
+    allMenuKeys: (): MenuKey[] => [...MENU_KEY_LIST],
 
     /** Read-only snapshot of one role's enable set (for the matrix UI). */
-    getRoleKeys: (role: string): MenuKey[] => Array.from(state[role] ?? []),
+    getRoleKeys: (role: string): MenuKey[] => {
+      const row = state[role];
+      if (row) return Array.from(row);
+      const seed = SEED_BY_ROLE[role];
+      return seed ? [...seed] : [];
+    },
 
     /** All role slugs that have a row in the matrix (custom + seed). */
     listRoles: (): string[] => Object.keys(state),

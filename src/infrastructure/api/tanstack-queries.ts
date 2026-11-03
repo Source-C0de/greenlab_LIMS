@@ -75,6 +75,10 @@ import {
   putRoleMenuPermissions as apiPutRoleMenuPermissions,
   listMenuKeys as apiListMenuKeys,
 } from "@/infrastructure/api/clients/rolesApi";
+import {
+  type EffectiveMenus,
+  getMyMenus as apiGetMyMenus,
+} from "@/infrastructure/api/clients/myMenusApi";
 
 export interface HealthResponse {
   status: string;
@@ -121,6 +125,49 @@ export function useMe(): UseQueryResult<AuthUser> {
       return failureCount < 1;
     },
     refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// My menus — the current user's RESOLVED effective menu set
+// ---------------------------------------------------------------------------
+
+/**
+ * Query keys for the current user's resolved menu set.
+ *
+ * The family is `["api", "auth", "menus"]` so that the whole thing can be
+ * invalidated as a group when the signed-in user changes
+ * (`AuthContext.tsx`) — the next user must never see the previous user's
+ * menus.
+ */
+export const myMenusKeys = {
+  all: ["api", "auth", "menus"] as const,
+};
+
+/**
+ * GET /auth/me/menus — the current user's resolved menu set.
+ *
+ * The server resolves the whole precedence chain (role matrix + per-user
+ * overrides + the unconfigured-role default) and returns a flat, already
+ * decided list, so the client does not re-implement the rules and cannot
+ * drift from the server.
+ *
+ * `refetchOnWindowFocus` is what makes an admin's change reach a user who
+ * is already logged in on another device: they refocus the window and the
+ * sidebar updates without a manual reload.
+ */
+export function useMyMenus(): UseQueryResult<EffectiveMenus> {
+  return useQuery<EffectiveMenus>({
+    queryKey: myMenusKeys.all,
+    queryFn: () => apiGetMyMenus(),
+    enabled: isApiEnabled(),
+    retry: (failureCount, error) => {
+      // 401 means "no session" — not a transient failure.
+      if (error instanceof ApiError && error.status === 401) return false;
+      return failureCount < 1;
+    },
+    refetchOnWindowFocus: true,
     staleTime: 60_000,
   });
 }
@@ -497,6 +544,10 @@ export function useReplaceUserMenuOverrides(): UseMutationResult<
     mutationFn: ({ id, body }) => apiReplaceUserMenuOverrides(id, body),
     onSuccess: (data, { id }) => {
       qc.setQueryData(userKeys.overrides(id), data);
+      // The affected user's RESOLVED menu set changed on the server.
+      // Invalidate it so any mounted consumer (the admin's own sidebar,
+      // and the target user's session on another device) refetches.
+      qc.invalidateQueries({ queryKey: myMenusKeys.all });
     },
   });
 }
@@ -512,6 +563,8 @@ export function useClearUserMenuOverrides(): UseMutationResult<
     mutationFn: (id: string) => apiClearUserMenuOverrides(id),
     onSuccess: (_void, id) => {
       qc.invalidateQueries({ queryKey: userKeys.overrides(id) });
+      // The affected user's RESOLVED menu set changed on the server.
+      qc.invalidateQueries({ queryKey: myMenusKeys.all });
     },
   });
 }
@@ -639,7 +692,11 @@ export function useRoleMenuPermissionsApi(
     queryKey: roleKeys.matrix(slug ?? ""),
     queryFn: () => apiGetRoleMenuPermissions(slug as string),
     enabled: isApiEnabled() && !!slug,
-    refetchOnWindowFocus: false,
+    // A role's menu assignment can be changed by a superadmin on another
+    // device. Refetching on focus is how that reaches the user whose
+    // sidebar depends on it — without it, the sidebar keeps showing the
+    // menu set it read at mount time.
+    refetchOnWindowFocus: true,
     staleTime: 30_000,
   });
 }
@@ -655,6 +712,16 @@ export function usePutRoleMenuPermissions(): UseMutationResult<
     mutationFn: ({ slug, body }) => apiPutRoleMenuPermissions(slug, body),
     onSuccess: (data, { slug }) => {
       qc.setQueryData(roleKeys.matrix(slug), data);
+      // Drop every other role's matrix too. The PUT is a full replace for
+      // ONE role, but the sidebar reads one role at a time and the
+      // TanStack cache keys each role separately — invalidating the
+      // whole family makes sure no stale matrix survives elsewhere.
+      qc.invalidateQueries({ queryKey: roleKeys.all });
+      // The assignment changed on the server, so the RESOLVED menu set of
+      // every user holding this role changed with it. Invalidate it so the
+      // admin's own sidebar, and any mounted session of an affected user,
+      // refetches.
+      qc.invalidateQueries({ queryKey: myMenusKeys.all });
     },
   });
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useAppContext, type Role } from "@/presentation/providers/AppContext";
+import { useAppContext } from "@/presentation/providers/AppContext";
 import { DataTable } from "@/presentation/components/shared/DataTable";
 import { StatusBadge } from "@/presentation/components/shared/StatusBadge";
 import {
@@ -29,11 +29,7 @@ import {
   type SaaSUser,
   type UserStatus,
 } from "@/infrastructure/mock/data/users";
-import {
-  getRoleEntry,
-  type ToggleableRole,
-} from "@/infrastructure/mock/data/rolePermissions";
-import { useRoleAdmin } from "@/presentation/hooks/useRoleAdmin";
+import { useRoleLabels } from "@/presentation/hooks/useRoleLabels";
 import { isApiEnabled } from "@/infrastructure/api/api";
 import {
   useUsers,
@@ -57,7 +53,11 @@ function apiUserToRow(u: User): SaaSUser {
     username: u.username,
     fullNameEn: u.fullName,
     fullNameAr: u.fullNameAr ?? "",
-    role: u.role as Role,
+    // The backend's role is a SLUG, which may be a custom role
+    // (ADR 0010). `SaaSUser.role` is the SPA's closed `Role` union, so
+    // the cast is a widening — the slug is preserved on the row and the
+    // Role column resolves the label from the registry.
+    role: u.role as SaaSUser["role"],
     status: u.status,
     lastLoginAt: u.lastLoginAt ?? undefined,
     createdAt: u.createdAt,
@@ -85,7 +85,8 @@ interface FormState {
   username: string;
   fullNameEn: string;
   fullNameAr: string;
-  role: Role;
+  /** A role SLUG — may be a custom role (ADR 0010). */
+  role: UserRole;
   status: UserStatus;
 }
 
@@ -112,8 +113,28 @@ export default function UsersAdmin() {
   const { language } = useAppContext();
   const isRtl = language === "ar";
   const [, setLocation] = useLocation();
-  const roleAdmin = useRoleAdmin();
   const t = (en: string, ar: string) => (isRtl ? ar : en);
+
+  // The roles the user can be assigned.
+  //
+  // In API mode this is the SERVER's registry (`GET /admin/roles`), so a
+  // role the admin created on the Roles page appears here immediately.
+  // Previously this read `roleAdmin.list()` — the localStorage store —
+  // which has no api-mode branch, so in API mode the dropdown could only
+  // ever show the 6 fixed seeds and a custom role was unassignable.
+  //
+  // `superadmin` is deliberately NOT an option: it lives in a separate
+  // table with a separate token family (ADR 0007) and has no `roles`
+  // registry row, so assigning it to a tenant user always 422s.
+  const roleLabels = useRoleLabels();
+
+  // Slug → label, for the list's Role column. Built from the same
+  // registry the dropdown uses, so the column and the dropdown can never
+  // disagree about what a role is called.
+  const roleLabelBySlug = useMemo(
+    () => new Map(roleLabels.map((r) => [r.slug, r])),
+    [roleLabels],
+  );
 
   // ---------------------------------------------------------------------
   // Data layer — API or mock, depending on VITE_USE_API.
@@ -206,7 +227,10 @@ export default function UsersAdmin() {
               </span>
             );
           }
-          const entry = getRoleEntry(u.role as ToggleableRole);
+          // Resolve from the same registry the dropdown uses, so a custom
+          // role shows its LABEL rather than its raw slug. Falls back to
+          // the slug when the role is unknown to the registry.
+          const entry = roleLabelBySlug.get(u.role);
           return (
             <span className="text-sm">
               {entry ? (isRtl ? entry.labelAr : entry.labelEn) : u.role}
@@ -297,7 +321,13 @@ export default function UsersAdmin() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isRtl, api],
+    //
+    // `roleLabelBySlug` MUST be a dependency: the roles registry is
+    // fetched asynchronously, so the Role column is first built while
+    // the registry is still empty (and the cell renders the raw slug).
+    // Without this dep the column would never re-create once the roles
+    // query resolved, and a custom role would keep showing its slug.
+    [isRtl, api, roleLabelBySlug],
   );
 
   // ---------------------------------------------------------------------
@@ -319,7 +349,10 @@ export default function UsersAdmin() {
       username: u.username,
       fullNameEn: u.fullNameEn,
       fullNameAr: u.fullNameAr,
-      role: u.role,
+      // `SaaSUser.role` is the SPA's closed `Role` union; the form holds a
+      // role SLUG, which may be a custom role (ADR 0010). The cast is a
+      // widening, so it is safe in that direction.
+      role: u.role as UserRole,
       status: u.status,
     });
     setFormErrors({});
@@ -372,7 +405,7 @@ export default function UsersAdmin() {
                   username: form.username,
                   fullNameEn: form.fullNameEn,
                   fullNameAr: form.fullNameAr,
-                  role: form.role,
+                  role: form.role as SaaSUser["role"],
                   status: form.status,
                 }
               : u,
@@ -417,7 +450,7 @@ export default function UsersAdmin() {
           username: form.username,
           fullNameEn: form.fullNameEn,
           fullNameAr: form.fullNameAr,
-          role: form.role,
+          role: form.role as SaaSUser["role"],
           status: form.status,
           createdAt: new Date().toISOString(),
         };
@@ -718,17 +751,14 @@ export default function UsersAdmin() {
                 <Select
                   value={form.role}
                   onValueChange={(v) =>
-                    setForm((f) => ({ ...f, role: v as Role }))
+                    setForm((f) => ({ ...f, role: v as UserRole }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="user-role-select">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="superadmin">
-                      {t("Super Admin", "مدير عام")}
-                    </SelectItem>
-                    {roleAdmin.list().map((r) => (
+                    {roleLabels.map((r) => (
                       <SelectItem key={r.slug} value={r.slug}>
                         {isRtl ? r.labelAr : r.labelEn}
                       </SelectItem>

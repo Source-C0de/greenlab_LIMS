@@ -28,6 +28,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "@/presentation/providers/AppContext";
 import { currentMockRole } from "@/infrastructure/mock/repositories/authSession";
 import { container } from "@/infrastructure/di/container";
@@ -116,6 +117,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // loading, so a logged-in user sees a blank frame for a moment instead of a
   // wrong-page flash.
   const [state, setState] = useState<AuthState>({ status: "loading" });
+
+  // The TanStack Query cache, used to drop the previous user's cached
+  // `["api", "auth", …]` entries on every session change. The provider is
+  // mounted INSIDE `<QueryClientProvider>` (see `App.tsx`), so the client is
+  // available here.
+  const queryClient = useQueryClient();
 
   // True from the moment a sign-in STARTS until its state has committed.
   //
@@ -235,6 +242,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentRole(DEFAULT_ROLE);
         setState({ status: "anonymous" });
       }
+      // Drop every cached `["api", "auth", …]` entry — including the
+      // resolved menu set (`["api", "auth", "menus"]`). The next user must
+      // never see the previous user's menus: the cached payload is keyed by
+      // nothing but the query key, so without this a sign-out/sign-in on the
+      // same browser would briefly render the previous user's sidebar.
+      queryClient.removeQueries({ queryKey: ["api", "auth"] });
     });
 
     return () => {
@@ -352,13 +365,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await container.auth.signOut();
       setState({ status: "anonymous" });
+      // Drop the cached `["api", "auth", …]` family (including the resolved
+      // menu set). The session subscription below does the same, but the
+      // mock adapter's `signOut` does not publish a session change, so the
+      // cleanup must not depend on the subscription firing.
+      queryClient.removeQueries({ queryKey: ["api", "auth"] });
       // Don't touch currentRole here — AppContext falls back to "admin" only when
       // no user is loaded. Keeping the previous role keeps in-flight queries
       // readable during the brief anonymous flicker.
     } finally {
       setPending(false);
     }
-  }, []);
+  }, [queryClient]);
 
   // ---------------------------------------------------------------------
   // Superadmin sign-in / sign-out

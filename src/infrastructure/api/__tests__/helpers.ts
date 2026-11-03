@@ -16,6 +16,10 @@ import { vi } from "vitest";
  * `localStorage`. The auth module guards every storage access with
  * `typeof window === "undefined"`, so without this shim it would store
  * NOTHING — and any assertion about a stored token would pass vacuously.
+ *
+ * The shim also provides `addEventListener`/`removeEventListener` because
+ * the menu-permission stores register a `storage` listener to pick up
+ * changes made in another tab.
  */
 export function installLocalStorage(): void {
   const store = new Map<string, string>();
@@ -29,7 +33,11 @@ export function installLocalStorage(): void {
       return store.size;
     },
   };
-  vi.stubGlobal("window", { localStorage: shim });
+  vi.stubGlobal("window", {
+    localStorage: shim,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  });
 }
 
 /** The URL and init of the most recent `fetch` call. */

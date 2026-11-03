@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
-import { ShieldCheck, ArrowLeft, AlertCircle } from "lucide-react";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 import { useAuth } from "@/presentation/providers/AuthContext";
 import { buildLoginPayload } from "@/infrastructure/api/auth";
 import { ApiError } from "@/infrastructure/api/api";
@@ -50,11 +50,22 @@ export default function SuperadminLogin() {
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '32px 32px' }}></div>
 
         <div className="relative z-10 max-w-md text-center">
-          <ShieldCheck className="h-20 w-20 mx-auto mb-8 opacity-90" />
+          {/*
+            The logo artwork is brand-blue (#056db2), so on the brand-blue
+            panel it would be invisible (1.01:1 contrast). `brightness(0)
+            invert(1)` maps every pixel to pure white, which reads clearly
+            against the panel. The filter is applied HERE only — the same
+            asset stays blue-on-white in the quotation preview.
+          */}
+          <img
+            src="/images/GL LOGO_Business Card 1.svg"
+            alt="GreenLab"
+            className="h-20 w-auto mx-auto mb-8 object-contain logo-invert"
+          />
           <h1 className="text-4xl font-bold mb-4 tracking-tight">
             Platform <span className="font-light">Administration</span>
           </h1>
-          <p className="text-lg opacity-80 mb-8 leading-relaxed">
+          <p className="text-lg opacity-90 mb-8 leading-relaxed">
             Restricted access. Authorized superadmins manage tenants, pricing, feature flags, and menu permissions for the entire GreenLabLIMS KSA platform.
           </p>
           <div className="bg-black/20 p-4 rounded-lg border border-white/10 backdrop-blur-sm text-start text-sm">
@@ -70,8 +81,13 @@ export default function SuperadminLogin() {
       <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-12 relative">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center md:text-left">
-            <div className="md:hidden flex justify-center mb-6 text-primary">
-              <ShieldCheck className="h-12 w-12" />
+            {/* Mobile logo sits on the white side — keep the artwork blue (no filter). */}
+            <div className="md:hidden flex justify-center mb-6">
+              <img
+                src="/images/GL LOGO_Business Card 1.svg"
+                alt="GreenLab"
+                className="h-12 w-auto object-contain"
+              />
             </div>
             <h2 className="text-3xl font-bold tracking-tight">Superadmin Sign In</h2>
             <p className="text-muted-foreground mt-2">

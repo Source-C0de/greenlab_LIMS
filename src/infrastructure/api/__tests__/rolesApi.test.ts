@@ -238,7 +238,7 @@ describe("rolesApi menu-cell normalization", () => {
     );
 
     const result = await putRoleMenuPermissions("analyst", {
-      cells: [{ menuKey: "samples", enabled: true }],
+      cells: [{ menu_key: "samples", enabled: true }],
     });
 
     expect(result.cells[0]?.menuKey).toBe("samples");

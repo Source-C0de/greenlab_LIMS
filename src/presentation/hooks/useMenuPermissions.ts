@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { MENU_REGISTRY, type MenuKey } from "@/infrastructure/mock/data/menuPermissions";
+import { MENU_PERMISSIONS_STORAGE_KEY } from "@/shared/lib/menuStorageKeys";
 
-const STORAGE_KEY = "glims_menu_permissions_v1";
+const STORAGE_KEY = MENU_PERMISSIONS_STORAGE_KEY;
 
 type PermissionsMap = Record<MenuKey, boolean>;
 

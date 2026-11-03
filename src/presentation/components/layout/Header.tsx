@@ -28,6 +28,7 @@ import { Badge } from "@/shared/ui/badge";
 import { RoleAvatar } from "@/presentation/components/auth/RoleAvatar";
 import { NotificationBell } from "./NotificationBell";
 import { isApiEnabled, ApiError } from "@/infrastructure/api/api";
+import { ALL_MENU_STORAGE_KEYS } from "@/shared/lib/menuStorageKeys";
 import { useHealth } from "@/infrastructure/api/tanstack-queries";
 
 interface HeaderProps {
@@ -106,13 +107,18 @@ export function Header({ toggleSidebar }: HeaderProps) {
    * header. The sandbox-key cleanup below is deliberate and must not be
    * dropped: it stops the next user from inheriting the previous user's
    * permission toggles.
+   *
+   * The menu keys come from `ALL_MENU_STORAGE_KEYS` so the cleanup cannot
+   * drift from the writers. It used to remove `glims_role_menu_matrix_v1`
+   * while the live key is `glims_role_menu_matrix_v2`, so the mirror
+   * survived logout and the next user on the same browser inherited it.
    */
   const handleLogout = async () => {
     try {
       window.localStorage.removeItem("glims_role_permissions_v1");
-      window.localStorage.removeItem("glims_menu_permissions_v1");
-      window.localStorage.removeItem("glims_role_menu_matrix_v1");
-      window.localStorage.removeItem("glims_user_menu_overrides_v1");
+      for (const key of ALL_MENU_STORAGE_KEYS) {
+        window.localStorage.removeItem(key);
+      }
     } catch {
       // ignore — localStorage may be unavailable
     }

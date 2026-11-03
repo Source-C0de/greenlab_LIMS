@@ -49,14 +49,17 @@ import {
   useSetRoleStatus,
   useCreateRole,
   useDeleteRole,
-  useAdminMenuKeys,
   usePutRoleMenuPermissions,
   useRoleMenuPermissionsApi,
 } from "@/infrastructure/api/tanstack-queries";
 import { describeApiError } from "@/infrastructure/api/errors";
-import { SEED_ADMIN_MENU_KEYS, type AdminMenuKey } from "@/shared/lib/adminMenuKeys";
 import type { Role as ApiRole, RoleIconName } from "@/infrastructure/api/clients/rolesApi";
-import type { MenuKey } from "@/infrastructure/mock/data/menuPermissions";
+import {
+  MENU_REGISTRY,
+  MENU_GROUP_LABELS,
+  MENU_GROUP_ORDER,
+  type MenuKey,
+} from "@/infrastructure/mock/data/menuPermissions";
 
 interface EditForm {
   labelEn: string;
@@ -125,7 +128,6 @@ export default function RolesAdmin() {
   const setStatusMut = useSetRoleStatus();
   const createMut = useCreateRole();
   const deleteMut = useDeleteRole();
-  const menuKeysQuery = useAdminMenuKeys();
   const putMatrixMut = usePutRoleMenuPermissions();
 
   // The list of roles to render. In API mode the server is the source of
@@ -194,26 +196,30 @@ export default function RolesAdmin() {
   }
 
   // ---------------------------------------------------------------------
-  // The 10-key admin menu catalogue the "Assign Menus" modal edits.
+  // The menu catalogue the "Assign Menus" modal edits.
   //
-  // Deliberately the ADMIN catalogue (the backend's own model, fetched
-  // from `GET /admin/menu-keys`) rather than the SPA's 32-key
-  // `MENU_REGISTRY`. That keeps the modal contract identical in both
-  // modes and matches what `PUT /admin/roles/:role/menu-permissions`
-  // replaces. Falls back to the seed until the query resolves, so the
-  // modal is never empty.
+  // This is the SPA's own `MENU_REGISTRY` — the 32 `MenuKey` values the
+  // sidebar actually reads. It is ALSO the backend's vocabulary: the
+  // roles contract specifies `GET /admin/menu-keys` as "the 32 MenuKey
+  // values" and caps `PUT .../menu-permissions` at `max_length=32`.
+  //
+  // The modal used to render a 10-key ADMIN catalogue instead
+  // (`SEED_ADMIN_MENU_KEYS`, since deleted), whose keys only overlapped
+  // the sidebar's by 5. Assigning "Accounting" wrote `accounting`, but
+  // the sidebar checks `accounting_dashboard` — so most assignments were
+  // inert and the user's menu never changed. Both admin screens (this
+  // modal and the per-user override matrix) now use the same 32 keys.
   // ---------------------------------------------------------------------
-  const menuKeys: AdminMenuKey[] =
-    menuKeysQuery.data && menuKeysQuery.data.length > 0
-      ? menuKeysQuery.data.map((k) => ({
-          key: k.key,
-          labelEn: k.labelEn,
-          labelAr: k.labelAr,
-          group: k.group,
-          href: k.href,
-          displayOrder: k.displayOrder,
-        }))
-      : SEED_ADMIN_MENU_KEYS;
+  const menuKeyGroups = MENU_GROUP_ORDER.map((group) => ({
+    group,
+    labelEn: MENU_GROUP_LABELS[group].en,
+    labelAr: MENU_GROUP_LABELS[group].ar,
+    keys: (Object.keys(MENU_REGISTRY) as MenuKey[]).filter(
+      (key) => MENU_REGISTRY[key].group === group,
+    ),
+  })).filter((g) => g.keys.length > 0);
+
+  const menuKeys: MenuKey[] = menuKeyGroups.flatMap((g) => g.keys);
 
   // ---------------------------------------------------------------------
   // "Assign Menus" modal — per-role menu assignment.
@@ -223,14 +229,14 @@ export default function RolesAdmin() {
   // ---------------------------------------------------------------------
   const [assignMenusRole, setAssignMenusRole] = useState<ToggleableRole | null>(null);
   // Draft = the keys the user has ticked but not yet saved.
-  const [draftKeys, setDraftKeys] = useState<Set<string>>(new Set());
+  const [draftKeys, setDraftKeys] = useState<Set<MenuKey>>(new Set());
   // Set once the user touches a checkbox. A late GET must not clobber
   // their edits — this is the guard for that.
   const hasEditedDraft = useRef(false);
   // Snapshot of the keys at open time, used to revert the optimistic
   // local mirror if the PUT fails. Reverting to a *fresh read* would be
   // a no-op, because by then the store already holds the new value.
-  const preSaveKeys = useRef<string[]>([]);
+  const preSaveKeys = useRef<MenuKey[]>([]);
 
   // API mode: the server is authoritative for this role's cells. Passing
   // `null` when the modal is closed keeps the query disabled, so no
@@ -523,7 +529,7 @@ export default function RolesAdmin() {
   function openAssignMenus(role: ToggleableRole) {
     // Seed the draft from whichever source is authoritative in this mode:
     // the local store in mock, the GET response (arriving shortly) in API.
-    const seeded = localMatrix.getRoleKeys(role).map(String);
+    const seeded = localMatrix.getRoleKeys(role);
     preSaveKeys.current = seeded;
     hasEditedDraft.current = false;
     setDraftKeys(new Set(seeded));
@@ -536,7 +542,7 @@ export default function RolesAdmin() {
     hasEditedDraft.current = false;
   }
 
-  function toggleDraft(key: string) {
+  function toggleDraft(key: MenuKey) {
     hasEditedDraft.current = true;
     setDraftKeys((prev) => {
       const next = new Set(prev);
@@ -555,23 +561,27 @@ export default function RolesAdmin() {
       // Mirror locally so the table's count badge and any re-open reflect
       // the change immediately, then PUT the full replace. Revert to the
       // pre-save snapshot (not a fresh read) if the server rejects it.
-      localMatrix.setRole(role, keys as MenuKey[]);
+      localMatrix.setRole(role, keys);
       putMatrixMut.mutate(
         {
           slug: role,
-          body: { cells: keys.map((menuKey) => ({ menuKey, enabled: true })) },
+          // `menu_key` (snake_case) is the documented wire format. The
+          // backend also accepts `menuKey` during the rollout window
+          // (`legacy_field`), but snake_case matches the Phase-B contract
+          // and the shape every other role route uses.
+          body: { cells: keys.map((menuKey) => ({ menu_key: menuKey, enabled: true })) },
         },
         {
           onSuccess: () => toast.success(t("Menus updated", "تم تحديث القوائم")),
           onError: (e) => {
             const m = describeApiError(e, isRtl ? "ar" : "en");
             toast.error(isRtl ? m.ar : m.en);
-            localMatrix.setRole(role, preSaveKeys.current as MenuKey[]);
+            localMatrix.setRole(role, preSaveKeys.current);
           },
         },
       );
     } else {
-      localMatrix.setRole(role, keys as MenuKey[]);
+      localMatrix.setRole(role, keys);
       toast.success(t("Menus updated", "تم تحديث القوائم"));
     }
     closeAssignMenus();
@@ -585,7 +595,8 @@ export default function RolesAdmin() {
     if (hasEditedDraft.current) return;
     const fromServer = permissionsQuery.data.cells
       .filter((c) => c.enabled)
-      .map((c) => c.menuKey);
+      .map((c) => c.menuKey)
+      .filter((k): k is MenuKey => k in MENU_REGISTRY);
     hasEditedDraft.current = true; // server state is now the baseline
     setDraftKeys(new Set(fromServer));
     preSaveKeys.current = fromServer;
@@ -820,26 +831,36 @@ export default function RolesAdmin() {
           )}
 
           <div className="max-h-[50vh] overflow-y-auto divide-y rounded-md border">
-            {menuKeys.map((k) => (
-              <label
-                key={k.key}
-                className="flex items-center gap-3 py-2.5 px-3 cursor-pointer hover:bg-muted/40"
-                data-testid={`assign-menus-row-${k.key}`}
-              >
-                <Checkbox
-                  checked={draftKeys.has(k.key)}
-                  onCheckedChange={() => toggleDraft(k.key)}
-                />
-                <span className="flex-1 text-sm">
-                  {isRtl ? k.labelAr : k.labelEn}
-                </span>
-                <span
-                  className="text-xs text-muted-foreground font-mono"
-                  dir="ltr"
-                >
-                  {k.key}
-                </span>
-              </label>
+            {menuKeyGroups.map((g) => (
+              <div key={g.group}>
+                <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/40">
+                  {isRtl ? g.labelAr : g.labelEn}
+                </p>
+                {g.keys.map((key) => {
+                  const entry = MENU_REGISTRY[key];
+                  return (
+                    <label
+                      key={key}
+                      className="flex items-center gap-3 py-2.5 px-3 cursor-pointer hover:bg-muted/40"
+                      data-testid={`assign-menus-row-${key}`}
+                    >
+                      <Checkbox
+                        checked={draftKeys.has(key)}
+                        onCheckedChange={() => toggleDraft(key)}
+                      />
+                      <span className="flex-1 text-sm">
+                        {isRtl ? entry.labelAr : entry.labelEn}
+                      </span>
+                      <span
+                        className="text-xs text-muted-foreground font-mono"
+                        dir="ltr"
+                      >
+                        {key}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             ))}
           </div>
 

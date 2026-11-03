@@ -327,3 +327,21 @@ export const MENU_GROUP_LABELS: Record<MenuGroup, { en: string; ar: string }> = 
   accounting: { en: "Accounting & Finance", ar: "المحاسبة والمالية" },
   admin: { en: "Administration", ar: "الإدارة" },
 };
+
+/** Display order for the four menu groups. */
+export const MENU_GROUP_ORDER: readonly MenuGroup[] = [
+  "lab",
+  "client",
+  "accounting",
+  "admin",
+];
+
+/** Every `MenuKey`, in declaration order. */
+export const MENU_KEY_LIST: readonly MenuKey[] = Object.keys(
+  MENU_REGISTRY,
+) as MenuKey[];
+
+/** Narrow an arbitrary string to a `MenuKey`. */
+export function isMenuKey(value: string): value is MenuKey {
+  return Object.prototype.hasOwnProperty.call(MENU_REGISTRY, value);
+}

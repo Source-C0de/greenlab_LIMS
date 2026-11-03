@@ -4,8 +4,9 @@ import {
   mockUserMenuOverrides,
   type OverrideEffect,
 } from "@/infrastructure/mock/data/user-menu-overrides";
+import { USER_MENU_OVERRIDES_STORAGE_KEY } from "@/shared/lib/menuStorageKeys";
 
-const STORAGE_KEY = "glims_user_menu_overrides_v1";
+const STORAGE_KEY = USER_MENU_OVERRIDES_STORAGE_KEY;
 
 /** Per-user override map. Absent keys = inherit from role default. */
 type OverridesMap = Record<string, Partial<Record<MenuKey, OverrideEffect>>>;
